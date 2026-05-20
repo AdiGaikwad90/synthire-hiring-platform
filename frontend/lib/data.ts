@@ -1,9 +1,9 @@
-// Mock data for TalentScout AI.
+// Mock data for Synthire.
 // Replace each export with API calls when wiring backend.
 
 import type { Job, Candidate, InterviewRound, TeamMember, ActivityItem, FunnelStage } from "./types";
 
-// Rich, plausible mock data for TalentScout AI
+// Rich, plausible mock data for Synthire
 
 const initials = (name) => name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
 

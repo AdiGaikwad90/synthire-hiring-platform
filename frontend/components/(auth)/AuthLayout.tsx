@@ -34,7 +34,7 @@ export function AuthLayout({ children, heading, subtitle }: AuthLayoutProps) {
           <h1 className="tsLogin-h">
             {heading ?? (
               <>
-                Welcome back to <span className="ai-text">TalentScout</span>
+                Welcome back to <span className="ai-text">Synthire</span>
               </>
             )}
           </h1>

@@ -1,4 +1,4 @@
-# CLAUDE.md — TalentScout AI Frontend
+# CLAUDE.md — Synthire Frontend
 
 This file is the orientation document for Claude Code (or any AI/human contributor) joining this repository. It explains what's been built, where it lives, the conventions in play, and the seams where the backend plugs in.
 
@@ -8,7 +8,7 @@ If you only read one section, read **§3 (Folder Structure)** and **§7 (Backend
 
 ## 1. What this is
 
-**TalentScout AI** is an AI-native Applicant Tracking System (ATS) for high-volume hiring. This repository is the **frontend only** — a Next.js 14 (App Router) + TypeScript application that ships the full UI surface for two personas:
+**Synthire** is an AI-native Applicant Tracking System (ATS) for high-volume hiring. This repository is the **frontend only** — a Next.js 14 (App Router) + TypeScript application that ships the full UI surface for two personas:
 
 - **Recruiters** — create jobs, screen candidates, run pipelines, schedule interviews, view analytics.
 - **Interviewers** — see assigned interviews, conduct them, submit feedback.
@@ -200,7 +200,7 @@ The `AIPill` and `Sparkles` icon mark anything AI-generated.
 
 ### 5.4 Tweaks panel
 
-Floating button bottom-right opens a panel for **theme (dark/light)** and **density (comfortable/compact)**. Preferences persist to `localStorage` under key `talentscout-tweaks`. Implemented in `components/shared/TweaksPanel.tsx`.
+Floating button bottom-right opens a panel for **theme (dark/light)** and **density (comfortable/compact)**. Preferences persist to `localStorage` under key `synthire-tweaks`. Implemented in `components/shared/TweaksPanel.tsx`.
 
 ---
 

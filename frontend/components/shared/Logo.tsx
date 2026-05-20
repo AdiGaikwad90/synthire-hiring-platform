@@ -29,8 +29,7 @@ export function Logo({ collapsed }: LogoProps) {
       </div>
       {!collapsed && (
         <span className="tsLogo-name">
-          TalentScout
-          <span style={{ color: "var(--muted)", fontWeight: 400 }}> AI</span>
+          Synthire
         </span>
       )}
     </div>

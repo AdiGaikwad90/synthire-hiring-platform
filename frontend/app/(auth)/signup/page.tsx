@@ -6,7 +6,7 @@ export default function SignupPage() {
     <AuthLayout
       heading={
         <>
-          Get started with <span className="ai-text">TalentScout</span>
+          Get started with <span className="ai-text">Synthire</span>
         </>
       }
       subtitle="Create your workspace and start screening candidates in minutes."

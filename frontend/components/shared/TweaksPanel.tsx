@@ -5,7 +5,7 @@ import { Icon } from "@/lib/icons";
 // Floating tweaks panel — light/dark, density.
 // Persists via localStorage; in a real app you'd wire to a user-preferences API.
 
-const STORAGE_KEY = "talentscout-tweaks";
+const STORAGE_KEY = "synthire-tweaks";
 
 interface Tweaks {
   theme: "dark" | "light";

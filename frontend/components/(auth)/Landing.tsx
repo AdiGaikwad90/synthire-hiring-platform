@@ -42,7 +42,7 @@ function Landing() {
             with AI resume screening
           </h1>
           <p className="tsLanding-sub">
-            Screen 1,000s of candidates in minutes. AI-powered, human-approved — TalentScout reads, scores, and ranks resumes against your role so your team only sees the top of the pile.
+            Screen 1,000s of candidates in minutes. AI-powered, human-approved — Synthire reads, scores, and ranks resumes against your role so your team only sees the top of the pile.
           </p>
 
           <div className="tsLanding-cta">
@@ -96,7 +96,7 @@ function Landing() {
         </div>
         <div>
           <div className="mono" style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.02em", background: "var(--ai-grad)", WebkitBackgroundClip: "text", color: "transparent" }}>500+</div>
-          <div className="small" style={{ color: "var(--muted)" }}>companies hiring with TalentScout</div>
+          <div className="small" style={{ color: "var(--muted)" }}>companies hiring with Synthire</div>
         </div>
         <div>
           <div className="mono" style={{ fontSize: 36, fontWeight: 500, letterSpacing: "-0.02em" }}>2.1M</div>
@@ -181,7 +181,7 @@ function Landing() {
           </div>
         </div>
         <div className="tsLanding-footBottom">
-          <span className="small" style={{ color: "var(--muted)" }}>© 2026 TalentScout AI · SOC 2 Type II · GDPR compliant</span>
+          <span className="small" style={{ color: "var(--muted)" }}>© 2026 Synthire · SOC 2 Type II · GDPR compliant</span>
           <div style={{ display: "flex", gap: 18 }}>
             <a className="small" style={{ color: "var(--muted)" }}>Privacy</a>
             <a className="small" style={{ color: "var(--muted)" }}>Terms</a>

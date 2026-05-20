@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import { TweaksPanel } from "@/components/shared/TweaksPanel";
 
 export const metadata: Metadata = {
-  title: "TalentScout AI — Applicant Tracking",
+  title: "Synthire — Applicant Tracking",
   description: "AI-powered ATS for high-volume hiring",
 };
 

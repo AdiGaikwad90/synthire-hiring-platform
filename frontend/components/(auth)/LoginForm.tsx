@@ -42,7 +42,7 @@ function Login() {
           <div style={{ display: "flex", alignItems: "center", gap: 9, color: "white" }}>
             <Logo/>
           </div>
-          <h1 className="tsLogin-h">Welcome back to <span className="ai-text">TalentScout</span></h1>
+          <h1 className="tsLogin-h">Welcome back to <span className="ai-text">Synthire</span></h1>
           <p className="tsLogin-sub">The applicant tracking system your hiring team has been waiting for. AI-native, calmly designed, ridiculously fast.</p>
 
           <div className="tsLogin-vps">
