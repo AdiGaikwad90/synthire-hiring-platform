@@ -1,8 +1,214 @@
 import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import type { Env } from '../types/bindings'
+import { apiResponse, paginatedResponse, AppError, updateEmailPreferencesSchema } from '../types/api'
+import { authMiddleware } from '../middleware/auth'
+import {
+  updateEmailLogStatus,
+  listEmailLogs,
+  getUserEmailPreferences,
+  updateUserEmailPreferences,
+} from '../db/queries/email'
 
 const router = new Hono<{ Bindings: Env }>()
 
-router.get('/', (c) => c.json({ message: 'TODO: implement' }))
+// POST /api/email/resend-callback — public Resend webhook
+router.post('/resend-callback', async (c) => {
+  const rawBody = await c.req.text()
+
+  const svixId = c.req.header('svix-id') ?? ''
+  const svixTimestamp = c.req.header('svix-timestamp') ?? ''
+  const svixSignature = c.req.header('svix-signature') ?? ''
+
+  const payload = `${svixId}.${svixTimestamp}.${rawBody}`
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(c.env.RESEND_WEBHOOK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
+  const computed = btoa(String.fromCharCode(...new Uint8Array(sig)))
+
+  // svix-signature may contain multiple signatures: "v1,<base64> v1,<base64>"
+  const signatures = svixSignature.split(' ')
+  const valid = signatures.some((s) => {
+    const base64Part = s.startsWith('v1,') ? s.slice(3) : s
+    return base64Part === computed
+  })
+
+  if (!valid) {
+    return c.json({ error: 'Invalid signature' }, 401)
+  }
+
+  interface WebhookPayload {
+    type: string
+    data: {
+      email_id: string
+      to: string[]
+      created_at: string
+    }
+  }
+
+  const body = JSON.parse(rawBody) as WebhookPayload
+  const { type, data } = body
+  const now = new Date().toISOString()
+
+  let status: string
+  let timestampField: Record<string, string> = {}
+
+  switch (type) {
+    case 'email.delivered':
+      status = 'delivered'
+      timestampField = { delivered_at: now }
+      break
+    case 'email.bounced':
+      status = 'bounced'
+      timestampField = { bounced_at: now }
+      break
+    case 'email.complained':
+      status = 'complained'
+      timestampField = { complained_at: now }
+      break
+    default:
+      // Acknowledge but don't process unknown events
+      return c.json({ received: true })
+  }
+
+  await updateEmailLogStatus(c.env.DB, data.email_id, { status, ...timestampField })
+
+  return c.json({ received: true })
+})
+
+// GET /api/email/unsubscribe?token=X — public unsubscribe
+router.get('/unsubscribe', async (c) => {
+  const token = c.req.query('token')
+
+  if (!token) {
+    return c.html(
+      `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
+        <h2>Invalid unsubscribe link</h2>
+        <p>This unsubscribe link is missing a token.</p>
+      </body></html>`,
+      400
+    )
+  }
+
+  const prefs = await c.env.DB.prepare(
+    'SELECT * FROM email_preferences WHERE unsubscribe_token = ?'
+  )
+    .bind(token)
+    .first<{ user_id: string; unsubscribed_at: string | null }>()
+
+  if (!prefs) {
+    return c.html(
+      `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
+        <h2>Invalid unsubscribe link</h2>
+        <p>This unsubscribe link is invalid or has already been used.</p>
+      </body></html>`,
+      404
+    )
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE email_preferences SET unsubscribed_at = datetime('now') WHERE unsubscribe_token = ?"
+  )
+    .bind(token)
+    .run()
+
+  return c.html(
+    `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
+      <h2>You've been unsubscribed</h2>
+      <p>You'll no longer receive email notifications from Synthire.</p>
+    </body></html>`,
+    200
+  )
+})
+
+// Protected routes — auth required
+router.use('/logs', authMiddleware)
+router.use('/preferences', authMiddleware)
+
+// GET /api/email/logs
+router.get(
+  '/logs',
+  zValidator(
+    'query',
+    z.object({
+      type: z.string().optional(),
+      status: z.string().optional(),
+      page: z.coerce.number().default(1),
+      limit: z.coerce.number().default(20),
+    })
+  ),
+  async (c) => {
+    const user = c.get('user')
+
+    if (user.role === 'interviewer') {
+      throw new AppError('Forbidden', 403)
+    }
+
+    const { type, status, page, limit } = c.req.valid('query')
+
+    const result = await listEmailLogs(c.env.DB, user.company_id, {
+      type,
+      status,
+      page,
+      limit,
+    })
+
+    return c.json(paginatedResponse(result.items, result.total, page, limit))
+  }
+)
+
+// GET /api/email/preferences
+router.get('/preferences', async (c) => {
+  const user = c.get('user')
+  const prefs = await getUserEmailPreferences(c.env.DB, user.sub)
+
+  if (!prefs) {
+    return c.json(
+      apiResponse({
+        user_id: user.sub,
+        resume_notifications: true,
+        interview_notifications: true,
+        feedback_notifications: true,
+        reminder_notifications: true,
+        unsubscribe_token: null,
+        unsubscribed_at: null,
+        created_at: null,
+      })
+    )
+  }
+
+  return c.json(apiResponse(prefs))
+})
+
+// PATCH /api/email/preferences
+router.patch(
+  '/preferences',
+  zValidator('json', updateEmailPreferencesSchema),
+  async (c) => {
+    const user = c.get('user')
+    const body = c.req.valid('json')
+
+    const updated = await updateUserEmailPreferences(c.env.DB, user.sub, body)
+    if (!updated) {
+      // Preferences row doesn't exist (edge case) — create it first
+      const { nanoid } = await import('nanoid')
+      await c.env.DB.prepare(`
+        INSERT INTO email_preferences (user_id, unsubscribe_token, created_at)
+        VALUES (?, ?, datetime('now'))
+      `).bind(user.sub, nanoid()).run()
+      const created = await updateUserEmailPreferences(c.env.DB, user.sub, body)
+      return c.json(apiResponse(created))
+    }
+
+    return c.json(apiResponse(updated))
+  }
+)
 
 export default router
