@@ -1,0 +1,7 @@
+# Copy to .dev.vars and fill in real values
+# .dev.vars is gitignored
+
+JWT_SECRET=your-super-secret-jwt-key-min-32-characters-long
+OPENROUTER_API_KEY=sk-or-your-openrouter-key-here
+RESEND_API_KEY=re_your-resend-api-key-here
+RESEND_WEBHOOK_SECRET=whsec_your-resend-webhook-secret-here

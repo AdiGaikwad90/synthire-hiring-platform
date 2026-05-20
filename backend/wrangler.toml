@@ -1,0 +1,50 @@
+name = "synthire-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "development"
+JWT_EXPIRY_SECONDS = "86400"
+FRONTEND_ORIGIN = "http://localhost:3000"
+MAX_UPLOAD_BYTES = "10485760"
+RESEND_FROM_EMAIL = "noreply@synthire.io"
+RESEND_FROM_NAME = "Synthire"
+EMAIL_QUEUE_INTERVAL_SECONDS = "30"
+EMAIL_MAX_RETRIES = "3"
+
+# After running: wrangler d1 create synthire-prod
+# Replace REPLACE_WITH_YOUR_DATABASE_ID with the output database_id
+[[d1_databases]]
+binding = "DB"
+database_name = "synthire-prod"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+
+# After running: wrangler r2 bucket create synthire-resumes
+[[r2_buckets]]
+binding = "RESUME_BUCKET"
+bucket_name = "synthire-resumes"
+
+# After running: wrangler kv:namespace create KV_CACHE
+# Replace REPLACE_WITH_YOUR_KV_ID with the output id
+[[kv_namespaces]]
+binding = "KV_CACHE"
+id = "REPLACE_WITH_YOUR_KV_ID"
+preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_ID"
+
+# After running: wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "synthire-embeddings"
+
+# Workers AI (built-in, no setup needed)
+[ai]
+binding = "AI"
+
+# Scheduled worker for email queue processor (runs every minute)
+[triggers]
+crons = ["* * * * *"]
+
+[env.production.vars]
+ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://synthire.vercel.app"
