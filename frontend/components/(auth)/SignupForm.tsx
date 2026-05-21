@@ -3,27 +3,35 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Button, Input, Checkbox } from "@/components/ui";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
 
 /**
- * Signup form — stub. Replace the submit handler with your real signup endpoint.
+ * Signup form — wired to POST /api/auth/signup via AuthContext.
  */
 export function SignupForm() {
   const router = useRouter();
+  const { signup } = useAuth();
   const [email, setEmail] = React.useState("");
+  const [name, setName] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [agree, setAgree] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [apiError, setApiError] = React.useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.includes("@") || password.length < 6 || !agree) return;
+    if (!email.includes('@') || password.length < 8 || !company || !name || !agree) return;
     setLoading(true);
-    // TODO: POST /auth/signup
-    setTimeout(() => {
+    setApiError(null);
+    try {
+      await signup(email, password, name, company);
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : 'Signup failed');
+    } finally {
       setLoading(false);
-      router.push("/dashboard");
-    }, 700);
+    }
   };
 
   return (
@@ -39,6 +47,14 @@ export function SignupForm() {
           icon={<Icon.Mail size={14} />}
           placeholder="you@company.com"
           type="email"
+          required
+        />
+        <Input
+          label="Full name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          icon={<Icon.Users size={14} />}
+          placeholder="Jane Smith"
           required
         />
         <Input
@@ -79,6 +95,10 @@ export function SignupForm() {
         >
           Create workspace
         </Button>
+
+        {apiError && (
+          <div style={{ color: 'var(--danger)', fontSize: 13, marginTop: 4 }}>{apiError}</div>
+        )}
       </div>
 
       <div className="tsLogin-foot">

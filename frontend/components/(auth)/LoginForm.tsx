@@ -1,36 +1,48 @@
 "use client";
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Button, Input, Checkbox, Avatar } from "@/components/ui";
 import { Logo } from "@/components/shared/Logo";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 // Login page
 const { useState: useS_lg } = React;
 
 function Login() {
   const router = useRouter();
-    const [email, setEmail] = useS_lg("sarah@acme.co");
+  const { login } = useAuth();
+  const [email, setEmail] = useS_lg("sarah@acme.co");
   const [password, setPassword] = useS_lg("••••••••••");
   const [remember, setRemember] = useS_lg(true);
   const [showPw, setShowPw] = useS_lg(false);
   const [loading, setLoading] = useS_lg(false);
-  const [errors, setErrors] = useS_lg({});
+  const [errors, setErrors] = useS_lg<Record<string, string | null>>({});
+  const [apiError, setApiError] = useS_lg<string | null>(null);
 
   const validate = () => {
-    const e = {};
+    const e: Record<string, string> = {};
     if (!email.includes("@")) e.email = "Please enter a valid email address";
     if (password.length < 6) e.password = "Password must be at least 6 characters";
     return e;
   };
 
-  const submit = (e) => {
+  const submit = async (e: React.FormEvent) => {
     e?.preventDefault();
     const errs = validate();
     setErrors(errs);
     if (Object.keys(errs).length) return;
     setLoading(true);
-    setTimeout(() => { setLoading(false); router.push("/dashboard"); }, 800);
+    setApiError(null);
+    try {
+      await login(email, password);
+      // login() calls router.push('/dashboard') on success
+    } catch (err) {
+      setApiError(err instanceof ApiError ? err.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -105,21 +117,26 @@ function Login() {
               )}
             </div>
 
-            <Input label={
-              <span style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                <span>Password</span>
-                <a style={{ color: "var(--primary-3)", fontSize: 11.5, cursor: "pointer" }}>Forgot?</a>
-              </span>
-            }
-              value={password} onChange={e => setPassword(e.target.value)}
-              icon={<Icon.Lock size={14}/>}
-              type={showPw ? "text" : "password"}
-              error={errors.password}
-              suffix={
-                <button type="button" onClick={() => setShowPw(s => !s)} style={{ color: "var(--muted)" }}>
-                  {showPw ? <Icon.EyeOff size={14}/> : <Icon.Eye size={14}/>}
-                </button>
-              }/>
+            <div>
+              <Input label={
+                <span style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                  <span>Password</span>
+                  <a style={{ color: "var(--primary-3)", fontSize: 11.5, cursor: "pointer" }}>Forgot?</a>
+                </span>
+              }
+                value={password} onChange={e => setPassword(e.target.value)}
+                icon={<Icon.Lock size={14}/>}
+                type={showPw ? "text" : "password"}
+                error={errors.password}
+                suffix={
+                  <button type="button" onClick={() => setShowPw(s => !s)} style={{ color: "var(--muted)" }}>
+                    {showPw ? <Icon.EyeOff size={14}/> : <Icon.Eye size={14}/>}
+                  </button>
+                }/>
+              {apiError && (
+                <div style={{ color: 'var(--danger)', fontSize: 13, marginTop: 4 }}>{apiError}</div>
+              )}
+            </div>
 
             <Checkbox checked={remember} onChange={setRemember} label="Remember me for 30 days"/>
 
@@ -134,7 +151,7 @@ function Login() {
           </div>
 
           <div className="tsLogin-foot">
-            Don't have an account? <a onClick={() => router.push("/dashboard")}>Sign up free</a>
+            Don't have an account? <a onClick={() => router.push("/signup")} style={{ cursor: "pointer", color: "var(--primary-3)" }}>Sign up free</a>
             <div style={{ marginTop: 12, color: "var(--faint)", fontSize: 11 }}>
               By signing in you agree to our <a>Terms of Service</a> and <a>Privacy Policy</a>.
             </div>
@@ -143,7 +160,7 @@ function Login() {
       </div>
     </div>
   );
-};
+}
 
 
 export { Login as LoginForm };

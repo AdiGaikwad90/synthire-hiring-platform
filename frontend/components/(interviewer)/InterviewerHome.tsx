@@ -123,8 +123,8 @@ function Interviewer() {
 };
 
 function TodayCard({ iv, idx }: any) {
-  const router = useRouter(); {
-    const urgent = iv.inMin < 60;
+  const router = useRouter();
+  const urgent = iv.inMin < 60;
   return (
     <Card className="tsIvr-card tsIvr-cardLarge" style={{ animationDelay: `${idx * 60}ms` }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
