@@ -268,15 +268,12 @@ function FeedbackForm({ c, interviewId, initialScores, onClose }: any) {
   const [strengths, setStrengths] = useS_ic("");
   const [gaps, setGaps] = useS_ic("");
   const [impact, setImpact] = useS_ic("");
-  const [aiGenerating, setAiGenerating] = useS_ic(false);
+  const [aiGenerating] = useS_ic(false);
   const [aiSummary, setAiSummary] = useS_ic(null);
 
   const generate = () => {
-    setAiGenerating(true);
-    setTimeout(() => {
-      setAiGenerating(false);
-      setAiSummary("Priya demonstrated senior-level technical depth in distributed systems with clear examples from her Stripe scaling work. Communication is excellent and structured. Some surface-level gaps on K8s operational details but compensated by strong fundamentals. Recommend moving forward to onsite.");
-    }, 1400);
+    // AI summary generation requires a dedicated backend endpoint (coming soon)
+    setAiSummary("AI summary generation is available after the interview is submitted.");
   };
 
   const recOptions = [
