@@ -3,8 +3,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Avatar } from "@/components/ui";
-import { CANDIDATES, JOBS } from "@/lib/data";
 import { NAV_ITEMS } from "./Sidebar";
+import { useJobs } from "@/hooks/queries/useJobs";
+import { useCandidates } from "@/hooks/queries/useCandidates";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -14,6 +15,8 @@ interface CommandPaletteProps {
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const router = useRouter();
   const [q, setQ] = React.useState("");
+  const { data: jobsData } = useJobs();
+  const { data: candidatesData } = useCandidates();
 
   const allItems = [
     ...NAV_ITEMS.map((n) => ({
@@ -46,22 +49,22 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         onClose();
       },
     },
-    ...CANDIDATES.slice(0, 5).map((c) => ({
+    ...(candidatesData?.items ?? []).slice(0, 5).map((c) => ({
       id: c.id,
       label: c.name,
       type: "Candidate",
-      subtitle: c.title,
-      icon: <Avatar name={c.name} color={c.avatar} size={20} />,
+      subtitle: c.status,
+      icon: <Avatar name={c.name} color="#6366F1" size={20} />,
       action: () => {
         router.push(`/candidates/${c.id}`);
         onClose();
       },
     })),
-    ...JOBS.slice(0, 3).map((j) => ({
+    ...(jobsData?.items ?? []).slice(0, 3).map((j) => ({
       id: j.id,
       label: j.title,
       type: "Job",
-      subtitle: j.department,
+      subtitle: j.department ?? '',
       icon: <Icon.Briefcase size={16} />,
       action: () => {
         router.push(`/jobs/${j.id}`);

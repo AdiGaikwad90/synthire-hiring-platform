@@ -3,7 +3,8 @@ import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Badge, AIPill, useToast } from "@/components/ui";
 import { Dropzone, FileRow } from "./Dropzone";
-import { JOBS, CANDIDATES, NAMES } from "@/lib/data";
+import { useJobs } from "@/hooks/queries/useJobs";
+import { getToken } from "@/lib/auth";
 
 interface BatchFile {
   id: string;
@@ -21,46 +22,85 @@ interface ResumeBatchModalProps {
   defaultJobId?: string;
 }
 
-export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "j1" }: ResumeBatchModalProps) {
+export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "" }: ResumeBatchModalProps) {
   const [stage, setStage] = React.useState<"drop" | "processing" | "done">("drop");
   const [files, setFiles] = React.useState<BatchFile[]>([]);
   const [job, setJob] = React.useState(defaultJobId);
   const toast = useToast();
+  const { data: jobsData } = useJobs();
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
-  const handleFiles = (fileList: any[]) => {
-    const seedNames = NAMES.slice(0, fileList.length).map((n) => `${n.replace(" ", "_")}_resume.pdf`);
-    const initial: BatchFile[] = fileList.map((f: any, i: number) => ({
+  const handleFiles = (fileList: File[]) => {
+    const initial: BatchFile[] = fileList.map((f, i) => ({
       id: "f" + i,
-      name: f.name && f.name !== "untitled" ? f.name : seedNames[i] || `resume_${i + 1}.pdf`,
-      size: ((40 + Math.random() * 240) | 0) + " KB",
+      name: f.name || `resume_${i + 1}.pdf`,
+      size: ((f.size / 1024) | 0) + " KB",
       status: "queued",
       score: null,
       cand: null,
-    }));
+      _file: f,
+    } as BatchFile & { _file: File }));
     setFiles(initial);
     setStage("processing");
 
-    // Animate per-file. Replace with real parse + score API calls.
-    initial.forEach((f, i) => {
-      setTimeout(() => setFiles((arr) => arr.map((x) => (x.id === f.id ? { ...x, status: "parsing" } : x))), 200 + i * 90);
-      setTimeout(() => setFiles((arr) => arr.map((x) => (x.id === f.id ? { ...x, status: "scoring" } : x))), 700 + i * 90);
-      setTimeout(() => {
-        const c = CANDIDATES[i % CANDIDATES.length];
-        setFiles((arr) =>
-          arr.map((x) =>
-            x.id === f.id
-              ? { ...x, status: "done", score: c.score, cand: c, sub: `Matched to ${c.name}` }
-              : x
-          )
-        );
-      }, 1200 + i * 110);
+    // Upload each file via SSE stream
+    initial.forEach((entry) => {
+      const file = (entry as BatchFile & { _file: File })._file;
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("jobId", job);
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      fetch(`${apiUrl}/api/candidates/upload`, { method: "POST", headers, body: fd })
+        .then(async (res) => {
+          const reader = res.body?.getReader();
+          if (!reader) return;
+          const decoder = new TextDecoder();
+          let buf = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const events = buf.split("\n\n");
+            buf = events.pop() ?? "";
+            for (const event of events) {
+              const dataLine = event.replace(/^data: /, "").trim();
+              if (!dataLine) continue;
+              try {
+                const msg = JSON.parse(dataLine);
+                setFiles((arr) =>
+                  arr.map((x) =>
+                    x.id === entry.id
+                      ? {
+                          ...x,
+                          status: msg.status === "complete" ? "done" : msg.status,
+                          score: msg.score ?? x.score,
+                          sub: msg.status === "complete" ? `Score: ${msg.score}%` : undefined,
+                          cand: msg.candidate ?? x.cand,
+                        }
+                      : x
+                  )
+                );
+              } catch { /* ignore malformed */ }
+            }
+          }
+        })
+        .catch(() => {
+          setFiles((arr) =>
+            arr.map((x) => (x.id === entry.id ? { ...x, status: "error" } : x))
+          );
+        });
     });
-    setTimeout(() => setStage("done"), 1300 + initial.length * 110);
   };
 
-  const seedDemo = () => {
-    handleFiles(Array.from({ length: 12 }, () => ({ name: "" })));
-  };
+  // Watch for all done/error to advance stage
+  React.useEffect(() => {
+    if (stage !== "processing" || files.length === 0) return;
+    const allSettled = files.every((f) => f.status === "done" || f.status === "error");
+    if (allSettled) setStage("done");
+  }, [files, stage]);
 
   const sortedFiles = [...files].sort((a, b) => (b.score || 0) - (a.score || 0));
   const highMatches = sortedFiles.filter((f) => (f.score || 0) >= 80).length;
@@ -94,7 +134,8 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "j1" }: Re
               variant="primary"
               icon={<Icon.ArrowRight size={13} />}
               onClick={() => {
-                toast({ message: `${highMatches} candidates added to ${JOBS.find((j) => j.id === job)?.title}` });
+                const jobTitle = jobsData?.items.find((j) => j.id === job)?.title ?? "pipeline";
+                toast({ message: `${highMatches} candidates added to ${jobTitle}` });
                 onMatched?.(sortedFiles);
                 onClose();
               }}
@@ -107,9 +148,6 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "j1" }: Re
         ) : (
           <>
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button variant="secondary" onClick={seedDemo} icon={<Icon.Sparkles size={13} />}>
-              Try with sample batch
-            </Button>
           </>
         )
       }
@@ -124,9 +162,10 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "j1" }: Re
               onChange={(e) => setJob(e.target.value)}
               style={{ width: "100%", padding: 10 }}
             >
-              {JOBS.map((j) => (
+              <option value="">Select a job…</option>
+              {(jobsData?.items ?? []).map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.title} · {j.department}
+                  {j.title} · {j.department ?? ""}
                 </option>
               ))}
             </select>
