@@ -3,20 +3,29 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, Avatar, AIPill, ScorePill } from "@/components/ui";
-import { ACTIVITY, FUNNEL, TIME_TRENDS, CANDIDATES, TODAY_INTERVIEWS } from "@/lib/data";
+import { useFunnel, useTimeToHire, useAnalyticsSummary, useActivity } from "@/hooks/queries/useAnalytics";
+import { useInterviews } from "@/hooks/queries/useInterviews";
+import { useCandidates } from "@/hooks/queries/useCandidates";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 
 // Dashboard screen
 function Dashboard() {
   const router = useRouter();
-      const [showUpload, setShowUpload] = React.useState(false);
+  const [showUpload, setShowUpload] = React.useState(false);
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
+  const { data: summaryData } = useAnalyticsSummary();
+  const { data: funnelData } = useFunnel();
+  const { data: trendData } = useTimeToHire();
+  const { data: activityData } = useActivity();
+  const { data: interviewsData } = useInterviews();
+  const { data: candidatesData } = useCandidates();
+
   const stats = [
-    { label: "Active Jobs", value: 12, delta: "+12%", deltaColor: "success", icon: <Icon.Briefcase size={16}/>, sub: "vs last week", spark: [8, 9, 10, 9, 11, 12, 12] },
-    { label: "Pending Review", value: 47, delta: "+8%", deltaColor: "success", icon: <Icon.Users size={16}/>, sub: "needs action", spark: [38, 40, 36, 42, 44, 45, 47] },
-    { label: "Interviews Today", value: 5, delta: "0%", deltaColor: "neutral", icon: <Icon.Calendar size={16}/>, sub: "across 3 jobs", spark: [4, 6, 5, 7, 5, 6, 5] },
-    { label: "Offers Out", value: 3, delta: "+2%", deltaColor: "success", icon: <Icon.Award size={16}/>, sub: "awaiting response", spark: [1, 2, 2, 1, 3, 3, 3] },
+    { label: "Active Jobs", value: summaryData?.active_jobs ?? '—', delta: "+12%", deltaColor: "success", icon: <Icon.Briefcase size={16}/>, sub: "vs last week", spark: [8, 9, 10, 9, 11, 12, 12] },
+    { label: "Pending Review", value: summaryData?.total_candidates ?? '—', delta: "+8%", deltaColor: "success", icon: <Icon.Users size={16}/>, sub: "needs action", spark: [38, 40, 36, 42, 44, 45, 47] },
+    { label: "Interviews Today", value: interviewsData?.pagination?.total ?? '—', delta: "0%", deltaColor: "neutral", icon: <Icon.Calendar size={16}/>, sub: "across 3 jobs", spark: [4, 6, 5, 7, 5, 6, 5] },
+    { label: "Offers Out", value: summaryData?.total_hired ?? '—', delta: "+2%", deltaColor: "success", icon: <Icon.Award size={16}/>, sub: "awaiting response", spark: [1, 2, 2, 1, 3, 3, 3] },
   ];
 
   return (
@@ -58,7 +67,7 @@ function Dashboard() {
               </div>
             </div>
             <div style={{ padding: "0 24px 24px" }}>
-              <FunnelChart data={FUNNEL}/>
+              <FunnelChart data={(funnelData ?? []).map(f => ({ stage: f.status, count: f.count, color: 'var(--primary)' }))}/>
             </div>
           </Card>
 
@@ -69,7 +78,7 @@ function Dashboard() {
               <button className="tsBtn tsBtn-ghost tsBtn-sm">View all <Icon.ArrowRight size={13}/></button>
             </div>
             <div className="tsTimeline">
-              {ACTIVITY.map(a => <ActivityRow key={a.id} a={a}/>)}
+              {(activityData ?? []).map(a => <ActivityRow key={a.candidateId} a={{ id: a.candidateId, who: a.candidateName, action: `moved to ${a.status}`, target: a.jobTitle, time: a.updatedAt, type: 'move' }}/>)}
             </div>
           </Card>
         </div>
@@ -92,7 +101,7 @@ function Dashboard() {
               </div>
             </div>
             <div style={{ padding: "0 24px 24px" }}>
-              <LineChart data={TIME_TRENDS}/>
+              <LineChart data={(trendData ?? []).map(t => ({ month: t.month, days: t.avg_days }))}/>
             </div>
           </Card>
 
@@ -103,20 +112,10 @@ function Dashboard() {
               <Badge variant="warning">5 scheduled</Badge>
             </div>
             <div style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-              {TODAY_INTERVIEWS.map((iv) => (
-                <div key={iv.id} className="tsIntvRow" onClick={() => router.push("/interviews/i1")}>
-                  <Avatar name={iv.candidate.name} color={iv.candidate.avatar} size={32}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 13.5 }}>{iv.candidate.name}</div>
-                    <div className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span>{iv.round}</span>
-                      <span style={{ color: "var(--faint)" }}>·</span>
-                      <span>{iv.time}</span>
-                    </div>
-                  </div>
-                  <Badge variant={iv.inMin < 60 ? "warning" : "neutral"}>
-                    <Icon.Clock size={10}/> in {iv.inMin < 60 ? `${iv.inMin}m` : `${Math.floor(iv.inMin/60)}h ${iv.inMin%60}m`}
-                  </Badge>
+              {(interviewsData?.items ?? []).slice(0,5).map(iv => (
+                <div key={iv.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                  <div style={{fontWeight:500}}>{new Date(iv.scheduled_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+                  <div style={{fontSize:12,color:'var(--muted)'}}>{iv.status}</div>
                 </div>
               ))}
             </div>
@@ -129,14 +128,14 @@ function Dashboard() {
               <button className="tsBtn tsBtn-ghost tsBtn-sm" onClick={() => router.push("/candidates")}>See all <Icon.ArrowRight size={13}/></button>
             </div>
             <div style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 4 }}>
-              {CANDIDATES.slice(0, 5).map(c => (
-                <div key={c.id} className="tsCandRow" onClick={() => router.push("/candidates/c1")}>
-                  <Avatar name={c.name} color={c.avatar} size={28}/>
+              {(candidatesData?.items ?? []).slice(0, 5).map(c => (
+                <div key={c.id} className="tsCandRow" onClick={() => router.push(`/candidates/${c.id}`)}>
+                  <Avatar name={c.name} size={28}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 13.5 }}>{c.name}</div>
-                    <div className="small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div>
+                    <div className="small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.status}</div>
                   </div>
-                  <ScorePill score={c.score}/>
+                  <ScorePill score={c.overall_score ?? 0}/>
                 </div>
               ))}
             </div>
@@ -298,15 +297,6 @@ const ActivityRow = ({ a }: any) => {
   );
 };
 
-// ----- Score pill -----
-const ScorePill = ({ score }: any) => {
-  const tone = score >= 80 ? "success" : score >= 60 ? "warning" : "danger";
-  return (
-    <span className={`tsScorePill tsScorePill-${tone}`}>
-      <span className="mono">{score}</span>
-    </span>
-  );
-};
 
 
 

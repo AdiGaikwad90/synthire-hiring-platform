@@ -2,20 +2,31 @@
 import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, AIPill } from "@/components/ui";
-import { FUNNEL, TIME_TRENDS, SOURCES, ROUND_PERF } from "@/lib/data";
+import { useFunnel, useTimeToHire, useAnalyticsSummary } from "@/hooks/queries/useAnalytics";
 import { FunnelChart, LineChart } from "./Dashboard";
 
 // Analytics Dashboard
 const { useState: useS_an } = React;
 
+const SOURCES_PLACEHOLDER = [
+  {source:'Direct',count:0,percentage:0,name:'Direct',value:25,color:'var(--primary)'},
+  {source:'LinkedIn',count:0,percentage:0,name:'LinkedIn',value:40,color:'var(--primary-2)'},
+  {source:'Referral',count:0,percentage:0,name:'Referral',value:20,color:'var(--success)'},
+  {source:'Job Board',count:0,percentage:0,name:'Job Board',value:15,color:'var(--warning)'},
+];
+
 function Analytics() {
-      const [range, setRange] = useS_an("30d");
+  const [range, setRange] = useS_an("30d");
+
+  const { data: funnelData } = useFunnel();
+  const { data: trendData } = useTimeToHire();
+  const { data: summary } = useAnalyticsSummary();
 
   const kpis = [
-    { label: "Total candidates", val: "1,247", delta: "+15%", deltaColor: "success", icon: <Icon.Users size={15}/>, sub: "vs. previous period" },
-    { label: "Interviews scheduled", val: "186", delta: "+8%", deltaColor: "success", icon: <Icon.Calendar size={15}/>, sub: "5.2 per role on avg" },
-    { label: "Offers made", val: "12", delta: "+33%", deltaColor: "success", icon: <Icon.Award size={15}/>, sub: "9 accepted, 1 declined, 2 pending" },
-    { label: "Time-to-hire", val: "26 days", delta: "-5%", deltaColor: "success", icon: <Icon.Clock size={15}/>, sub: "industry avg: 42 days" },
+    { label: "Total candidates", val: summary?.total_candidates ?? '—', delta: "+15%", deltaColor: "success", icon: <Icon.Users size={15}/>, sub: "vs. previous period" },
+    { label: "Interviews scheduled", val: summary?.total_interviews ?? '—', delta: "+8%", deltaColor: "success", icon: <Icon.Calendar size={15}/>, sub: "5.2 per role on avg" },
+    { label: "Offers made", val: summary?.total_hired ?? '—', delta: "+33%", deltaColor: "success", icon: <Icon.Award size={15}/>, sub: "9 accepted, 1 declined, 2 pending" },
+    { label: "Time-to-hire", val: summary?.avg_time_to_hire_days ? `${Math.round(summary.avg_time_to_hire_days)} days` : '—', delta: "-5%", deltaColor: "success", icon: <Icon.Clock size={15}/>, sub: "industry avg: 42 days" },
   ];
 
   return (
@@ -67,7 +78,7 @@ function Analytics() {
             <Badge variant="success"><Icon.ArrowUp size={10}/> +12% conversion</Badge>
           </div>
           <div style={{ padding: "0 24px 24px" }}>
-            <FunnelChart data={FUNNEL}/>
+            <FunnelChart data={(funnelData ?? []).map(f => ({ stage: f.status, count: f.count, color: 'var(--primary)' }))}/>
           </div>
         </Card>
 
@@ -82,7 +93,7 @@ function Analytics() {
             </div>
           </div>
           <div style={{ padding: "0 24px 24px" }}>
-            <LineChart data={TIME_TRENDS}/>
+            <LineChart data={(trendData ?? []).map(t => ({ month: t.month, days: t.avg_days }))}/>
           </div>
         </Card>
 
@@ -94,9 +105,9 @@ function Analytics() {
             </div>
           </div>
           <div style={{ padding: "0 24px 24px", display: "flex", gap: 24, alignItems: "center" }}>
-            <DonutChart data={SOURCES}/>
+            <DonutChart data={SOURCES_PLACEHOLDER}/>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-              {SOURCES.map(s => (
+              {SOURCES_PLACEHOLDER.map(s => (
                 <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
                   <span style={{ width: 9, height: 9, background: s.color, borderRadius: 2, flexShrink: 0 }}/>
                   <span style={{ flex: 1 }}>{s.name}</span>
@@ -115,17 +126,7 @@ function Analytics() {
             </div>
           </div>
           <div style={{ padding: "0 24px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-            {ROUND_PERF.map(r => (
-              <div key={r.name}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 500 }}>{r.name}</span>
-                  <span className="mono">{r.rate}%</span>
-                </div>
-                <div style={{ height: 8, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
-                  <div style={{ height: "100%", background: `linear-gradient(90deg, var(--primary), var(--primary-2))`, width: `${r.rate}%`, borderRadius: 999, transition: "width 0.7s cubic-bezier(.2,.9,.3,1)" }}/>
-                </div>
-              </div>
-            ))}
+            <div style={{ color: 'var(--muted)', fontSize: 13 }}>No round performance data yet.</div>
           </div>
         </Card>
       </div>

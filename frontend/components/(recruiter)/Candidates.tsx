@@ -3,16 +3,20 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Card, Badge, Avatar, ScoreRing, ScoreBar, ScorePill, StagePill, Slider, Toggle, Checkbox, SearchInput, AIPill } from "@/components/ui";
-import { JOBS, CANDIDATES } from "@/lib/data";
+import { useCandidates } from "@/hooks/queries/useCandidates";
+import { useJob } from "@/hooks/queries/useJobs";
+import { useParams } from "next/navigation";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 
 // Candidate list — Job detail view with filters + candidate cards
 const { useState: useS_c, useMemo: useM_c } = React;
 
-function Candidates() {
+function Candidates({ jobId }: { jobId?: string }) {
   const router = useRouter();
-    
-  const job = JOBS[0];
+  const { jobId: paramId } = useParams() as { jobId?: string };
+  const actualJobId = jobId ?? paramId;
+
+  const { data: job } = useJob(actualJobId ?? '');
   const [view, setView] = useS_c("grid"); // grid | list | pipeline
   const [tab, setTab] = useS_c("overview");
   const [filters, setFilters] = useS_c({
@@ -27,14 +31,14 @@ function Candidates() {
   const [detailCand, setDetailCand] = useS_c(null);
   const [showUpload, setShowUpload] = useS_c(false);
 
-  const filtered = useM_c(() => CANDIDATES.filter(c =>
-    c.score >= filters.minOverall &&
-    c.skillsScore >= filters.minSkills &&
-    c.expScore >= filters.minExp &&
-    c.eduScore >= filters.minEdu &&
-    c.achScore >= filters.minAch &&
-    c.years >= filters.minYears
-  ), [filters]);
+  const candidateParams = Object.fromEntries(
+    Object.entries({
+      job_id: actualJobId,
+      min_score: filters.minOverall > 0 ? String(filters.minOverall) : undefined,
+    }).filter(([, v]) => v !== undefined) as [string, string][]
+  );
+  const { data: candidateData, isLoading: candidatesLoading } = useCandidates(candidateParams);
+  const filtered = candidateData?.items ?? [];
 
   if (view === "pipeline") { setView("grid"); router.push("/pipeline"); return null; }
 
@@ -48,8 +52,8 @@ function Candidates() {
           <div style={{ marginBottom: 8 }}>
             <Badge variant="success" dot>Active</Badge>
           </div>
-          <div className="h2" style={{ marginBottom: 6 }}>{job.title}</div>
-          <div className="small" style={{ color: "var(--muted)", marginBottom: 18 }}>{job.department} · {job.location}</div>
+          <div className="h2" style={{ marginBottom: 6 }}>{job?.title ?? 'All Jobs'}</div>
+          <div className="small" style={{ color: "var(--muted)", marginBottom: 18 }}>{job?.department ?? ''} · {job?.location ?? ''}</div>
 
           <div className="tsTabs" style={{ marginBottom: 16 }}>
             <button className={`tsTab ${tab === "overview" ? "tsTab-active" : ""}`} onClick={() => setTab("overview")}>Overview</button>
@@ -59,11 +63,11 @@ function Candidates() {
 
           {tab === "overview" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <MetaRow label="Posted" val={job.posted}/>
+              <MetaRow label="Posted" val={job ? new Date(job.created_at).toLocaleDateString() : '—'}/>
               <MetaRow label="Updated" val="Today, 11:42 AM"/>
               <MetaRow label="Hiring manager" val={<div style={{ display: "flex", alignItems: "center", gap: 6 }}><Avatar name="Mike Johnson" size={18}/> Mike Johnson</div>}/>
-              <MetaRow label="Compensation" val={job.salary}/>
-              <MetaRow label="Type" val={`${job.type} · ${job.level}`}/>
+              <MetaRow label="Compensation" val={job?.salary_range ?? '—'}/>
+              <MetaRow label="Type" val={`${job?.employment_type ?? ''} · ${job?.experience_level ?? ''}`}/>
               <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }}/>
               <div>
                 <div className="tiny" style={{ marginBottom: 8 }}>Pipeline overview</div>
@@ -95,8 +99,8 @@ function Candidates() {
             {/* Toolbar */}
             <div className="tsCands-toolbar">
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{filtered.length} candidates</div>
-                <div className="small" style={{ color: "var(--muted)" }}>Sorted by overall score · {CANDIDATES.length - filtered.length} hidden by filters</div>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{candidatesLoading ? '...' : filtered.length} candidates</div>
+                <div className="small" style={{ color: "var(--muted)" }}>Sorted by overall score</div>
               </div>
               <div style={{ flex: 1 }}/>
               <Button variant="secondary" icon={<Icon.Upload size={13}/>} size="sm" onClick={() => setShowUpload(true)}>Upload resumes</Button>
@@ -114,12 +118,14 @@ function Candidates() {
             </div>
 
             {/* Cards */}
+            {candidatesLoading && <div style={{padding:32,color:'var(--muted)'}}>Loading candidates...</div>}
             <div className={view === "grid" ? "tsCands-grid" : "tsCands-listView"}>
-              {filtered.slice(0, 12).map((c, i) => (
-                view === "grid"
-                  ? <CandidateCard key={c.id} c={c} idx={i} onView={() => setDetailCand(c)} onProfile={() => router.push("/candidates/c1")}/>
-                  : <CandidateListRow key={c.id} c={c} onClick={() => router.push("/candidates/c1")}/>
-              ))}
+              {filtered.slice(0, 12).map((c, i) => {
+                const mapped = { ...c, score: c.overall_score ?? 0, skillsScore: c.skills_score ?? 0, expScore: c.experience_score ?? 0, eduScore: c.education_score ?? 0, achScore: c.achievements_score ?? 0, skills: c.technical_skills ?? [], stage: c.status, strengths: [], concerns: [], avatar: '', title: '', years: 0 };
+                return view === "grid"
+                  ? <CandidateCard key={c.id} c={mapped} idx={i} onView={() => setDetailCand(mapped)} onProfile={() => router.push(`/candidates/${c.id}`)}/>
+                  : <CandidateListRow key={c.id} c={mapped} onClick={() => router.push(`/candidates/${c.id}`)}/>;
+              })}
             </div>
           </div>
         </main>

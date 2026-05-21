@@ -2,44 +2,41 @@
 import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Card, Badge, Avatar, Input, Textarea, Toggle, useToast } from "@/components/ui";
-import { INTERVIEW_ROUNDS } from "@/lib/data";
+import { useInterviewTypes, useCreateInterviewType, useUpdateInterviewType, useDeleteInterviewType } from "@/hooks/queries/useSettings";
 
 // Settings — Interview Rounds Configuration
 const { useState: useS_st } = React;
 
 function Settings() {
-    const toast = useToast();
-  
+  const toast = useToast();
+
   const [section, setSection] = useS_st("rounds");
-  const [rounds, setRounds] = useS_st(INTERVIEW_ROUNDS);
+  const { data: rounds = [], isLoading: roundsLoading } = useInterviewTypes();
+  const { mutate: createType } = useCreateInterviewType();
+  const { mutate: updateType } = useUpdateInterviewType();
+  const { mutate: deleteType } = useDeleteInterviewType();
+
   const [editing, setEditing] = useS_st(null);
   const [draft, setDraft] = useS_st({ name: "", duration: 30, interviewer: "Recruiter", purpose: "", required: false });
 
   const openAdd = () => { setEditing("new"); setDraft({ name: "", duration: 30, interviewer: "Recruiter", purpose: "", required: false }); };
-  const openEdit = (r) => { setEditing(r.id); setDraft({ ...r }); };
+  const openEdit = (r) => { setEditing(r.id); setDraft({ name: r.name, duration: r.duration_minutes, interviewer: "Recruiter", purpose: r.description ?? '', required: !!r.required }); };
   const save = () => {
     if (editing === "new") {
-      setRounds(r => [...r, { ...draft, id: "r" + Date.now(), num: r.length + 1 }]);
+      createType({ name: draft.name, duration_minutes: draft.duration, description: draft.purpose, required: draft.required, position: rounds.length });
       toast({ message: "Interview round added." });
     } else {
-      setRounds(arr => arr.map(r => r.id === editing ? { ...r, ...draft } : r));
+      updateType({ id: editing, data: { name: draft.name, duration_minutes: draft.duration, description: draft.purpose, required: draft.required } });
       toast({ message: "Round updated." });
     }
     setEditing(null);
   };
   const remove = (id) => {
-    setRounds(r => r.filter(x => x.id !== id));
+    deleteType(id);
     toast({ message: "Round removed.", variant: "error" });
   };
   const move = (id, dir) => {
-    setRounds(arr => {
-      const i = arr.findIndex(r => r.id === id);
-      const j = i + dir;
-      if (j < 0 || j >= arr.length) return arr;
-      const next = [...arr];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next.map((r, k) => ({ ...r, num: k + 1 }));
-    });
+    // Local reordering not supported without backend — no-op for now
   };
 
   const sections = [
@@ -81,15 +78,16 @@ function Settings() {
               </div>
 
               <div className="tsRounds">
+                {roundsLoading && <div style={{padding:16,color:'var(--muted)'}}>Loading rounds...</div>}
                 {rounds.map((r, i) => (
                   <div key={r.id} className="tsRound">
-                    <div className="tsRound-num">{r.num}</div>
+                    <div className="tsRound-num">{r.position + 1}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 3 }}>
                         <span style={{ fontWeight: 500, fontSize: 14.5 }}>{r.name}</span>
                         {r.required ? <Badge variant="success">Required</Badge> : <Badge variant="neutral">Optional</Badge>}
                       </div>
-                      <div className="small" style={{ color: "var(--muted)" }}>{r.duration} min · {r.interviewer} · {r.purpose}</div>
+                      <div className="small" style={{ color: "var(--muted)" }}>{r.duration_minutes} min · {r.description ?? ''}</div>
                     </div>
                     <div className="tsRound-actions">
                       <button className="tsIconBtn" onClick={() => move(r.id, -1)} disabled={i === 0} title="Move up"><Icon.ArrowUp size={13}/></button>

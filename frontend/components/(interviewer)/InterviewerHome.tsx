@@ -3,29 +3,29 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, Avatar } from "@/components/ui";
-import { CANDIDATES, TODAY_INTERVIEWS } from "@/lib/data";
+import { useInterviews } from "@/hooks/queries/useInterviews";
 
 // Interviewer Portal (minimalist)
 const { useState: useS_iv } = React;
 
 function Interviewer() {
   const router = useRouter();
-      const [tab, setTab] = useS_iv("today");
+  const [tab, setTab] = useS_iv("today");
+
+  const { data: interviewsData, isLoading } = useInterviews();
+  const allInterviews = interviewsData?.items ?? [];
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayInterviews = allInterviews.filter(iv => iv.scheduled_at.startsWith(todayStr));
+  const upcoming = allInterviews.filter(iv => iv.scheduled_at > new Date().toISOString() && iv.status === 'scheduled');
+  const pendingFeedback = allInterviews.filter(iv => iv.status === 'scheduled' && iv.scheduled_at < new Date().toISOString());
+  const past = allInterviews.filter(iv => iv.status === 'completed');
 
   const stats = [
-    { label: "Today", val: 3, sub: "interviews" },
-    { label: "This week", val: 8, sub: "interviews" },
-    { label: "Completed", val: 24, sub: "this month" },
-    { label: "Pending", val: 2, sub: "feedbacks" },
+    { label: "Today", val: todayInterviews.length, sub: "interviews" },
+    { label: "This week", val: upcoming.length, sub: "interviews" },
+    { label: "Completed", val: past.length, sub: "this month" },
+    { label: "Pending", val: pendingFeedback.length, sub: "feedbacks" },
   ];
-
-  const pending = CANDIDATES.slice(7, 9).map(c => ({ ...c, completedAt: "2 hours ago", round: "Technical Round" }));
-  const upcoming = [
-    { id: "u1", candidate: CANDIDATES[5], time: "Tomorrow at 10:00 AM", round: "Culture Fit Round" },
-    { id: "u2", candidate: CANDIDATES[6], time: "Tomorrow at 2:30 PM", round: "Technical Round" },
-    { id: "u3", candidate: CANDIDATES[10], time: "Thursday at 11:00 AM", round: "Screening" },
-  ];
-  const past = CANDIDATES.slice(11, 14).map(c => ({ ...c, time: "2 days ago", round: "Technical Round", recommendation: "Yes" }));
 
   return (
     <div className="tsIvr">
@@ -51,16 +51,39 @@ function Interviewer() {
 
       <div className="tsIvr-tabs">
         <div className="tsTabs">
-          <button className={`tsTab ${tab === "today" ? "tsTab-active" : ""}`} onClick={() => setTab("today")}>Today <span className="tsTab-count">3</span></button>
-          <button className={`tsTab ${tab === "upcoming" ? "tsTab-active" : ""}`} onClick={() => setTab("upcoming")}>Upcoming <span className="tsTab-count">5</span></button>
-          <button className={`tsTab ${tab === "pending" ? "tsTab-active" : ""}`} onClick={() => setTab("pending")}>Pending feedback <span className="tsTab-count">2</span></button>
+          <button className={`tsTab ${tab === "today" ? "tsTab-active" : ""}`} onClick={() => setTab("today")}>Today <span className="tsTab-count">{todayInterviews.length}</span></button>
+          <button className={`tsTab ${tab === "upcoming" ? "tsTab-active" : ""}`} onClick={() => setTab("upcoming")}>Upcoming <span className="tsTab-count">{upcoming.length}</span></button>
+          <button className={`tsTab ${tab === "pending" ? "tsTab-active" : ""}`} onClick={() => setTab("pending")}>Pending feedback <span className="tsTab-count">{pendingFeedback.length}</span></button>
           <button className={`tsTab ${tab === "past" ? "tsTab-active" : ""}`} onClick={() => setTab("past")}>Past</button>
         </div>
       </div>
 
+      {isLoading && <div style={{padding:32,color:'var(--muted)'}}>Loading interviews...</div>}
+
       {tab === "today" && (
         <div className="tsIvr-list">
-          {TODAY_INTERVIEWS.map((iv, i) => <TodayCard key={iv.id} iv={iv} idx={i}/>)}
+          {todayInterviews.map((iv, i) => (
+            <Card key={iv.id} className="tsIvr-card tsIvr-cardLarge" style={{ animationDelay: `${i * 60}ms` }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <Avatar name={iv.candidate_id} size={56}/>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                    <span className="h3" style={{ fontWeight: 500 }}>{iv.candidate_id}</span>
+                    <Badge variant="warning"><Icon.Clock size={11}/> {new Date(iv.scheduled_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</Badge>
+                  </div>
+                  <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>{iv.status}</div>
+                  <div className="tsIvr-meta">
+                    <span><Icon.Calendar size={12}/> {new Date(iv.scheduled_at).toLocaleString()}</span>
+                    <span><Icon.Clock size={12}/> {iv.duration_minutes} min</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 160 }}>
+                  {iv.video_link && <Button variant="primary" icon={<Icon.Video size={14}/>} onClick={() => window.open(iv.video_link!, '_blank')}>Join interview</Button>}
+                  <Button variant="secondary" icon={<Icon.FileText size={14}/>} onClick={() => router.push(`/interviews/${iv.id}`)}>Prep & conduct</Button>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
       {tab === "upcoming" && (
@@ -68,16 +91,16 @@ function Interviewer() {
           {upcoming.map(iv => (
             <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={iv.candidate.name} color={iv.candidate.avatar} size={44}/>
+                <Avatar name={iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate.name}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>{iv.candidate.title} · {iv.round}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div className="small" style={{ color: "var(--muted)" }}>{iv.status}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div className="mono" style={{ fontSize: 13 }}>{iv.time}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>via Zoom</div>
+                  <div className="mono" style={{ fontSize: 13 }}>{new Date(iv.scheduled_at).toLocaleString()}</div>
+                  <div className="small" style={{ color: "var(--muted)" }}>{iv.duration_minutes} min</div>
                 </div>
-                <Button variant="secondary" icon={<Icon.Eye size={13}/>} onClick={() => router.push("/candidates/c1")}>View</Button>
+                <Button variant="secondary" icon={<Icon.Eye size={13}/>} onClick={() => router.push(`/interviews/${iv.id}`)}>View</Button>
               </div>
             </Card>
           ))}
@@ -85,17 +108,16 @@ function Interviewer() {
       )}
       {tab === "pending" && (
         <div className="tsIvr-list">
-          {pending.map(c => (
-            <Card key={c.id} className="tsIvr-card">
+          {pendingFeedback.map(iv => (
+            <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={c.name} color={c.avatar} size={44}/>
+                <Avatar name={iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{c.name}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>{c.round} · completed {c.completedAt}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div className="small" style={{ color: "var(--muted)" }}>{new Date(iv.scheduled_at).toLocaleString()} · awaiting feedback</div>
                 </div>
                 <Badge variant="warning"><Icon.Clock size={11}/> Awaiting feedback</Badge>
-                <Button variant="secondary" onClick={() => router.push("/candidates/c1")}>View</Button>
-                <Button variant="primary" icon={<Icon.Pencil size={13}/>} onClick={() => router.push("/interviews/i1")}>Complete feedback</Button>
+                <Button variant="primary" icon={<Icon.Pencil size={13}/>} onClick={() => router.push(`/interviews/${iv.id}`)}>Complete feedback</Button>
               </div>
             </Card>
           ))}
@@ -103,16 +125,16 @@ function Interviewer() {
       )}
       {tab === "past" && (
         <div className="tsIvr-list">
-          {past.map(c => (
-            <Card key={c.id} className="tsIvr-card">
+          {past.map(iv => (
+            <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={c.name} color={c.avatar} size={44}/>
+                <Avatar name={iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{c.name}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>{c.round} · {c.time}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div className="small" style={{ color: "var(--muted)" }}>{new Date(iv.scheduled_at).toLocaleString()}</div>
                 </div>
-                <Badge variant="success"><Icon.Check size={11} stroke={3}/> {c.recommendation}</Badge>
-                <Button variant="ghost" onClick={() => router.push("/candidates/c1")}>View feedback</Button>
+                <Badge variant="success"><Icon.Check size={11} stroke={3}/> Completed</Badge>
+                <Button variant="ghost" onClick={() => router.push(`/interviews/${iv.id}`)}>View feedback</Button>
               </div>
             </Card>
           ))}
@@ -122,33 +144,6 @@ function Interviewer() {
   );
 };
 
-function TodayCard({ iv, idx }: any) {
-  const router = useRouter();
-  const urgent = iv.inMin < 60;
-  return (
-    <Card className="tsIvr-card tsIvr-cardLarge" style={{ animationDelay: `${idx * 60}ms` }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-        <Avatar name={iv.candidate.name} color={iv.candidate.avatar} size={56}/>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <span className="h3" style={{ fontWeight: 500 }}>{iv.candidate.name}</span>
-            {urgent && <Badge variant="warning"><Icon.Clock size={11}/> in {iv.inMin}m</Badge>}
-          </div>
-          <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>{iv.candidate.title}</div>
-          <div className="tsIvr-meta">
-            <span><Icon.Calendar size={12}/> {iv.time}</span>
-            <span><Icon.Briefcase size={12}/> {iv.round}</span>
-            <span><Icon.Video size={12}/> Zoom call</span>
-          </div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 160 }}>
-          <Button variant="primary" icon={<Icon.Video size={14}/>}>Join interview</Button>
-          <Button variant="secondary" icon={<Icon.FileText size={14}/>} onClick={() => router.push("/interviews/i1")}>Prep & conduct</Button>
-        </div>
-      </div>
-    </Card>
-  );
-};
 
 
 export { Interviewer as InterviewerHome };

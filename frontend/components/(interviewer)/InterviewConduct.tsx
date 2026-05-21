@@ -2,15 +2,20 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Avatar, Badge, AIPill, Textarea, useToast } from "@/components/ui";
-import { CANDIDATES } from "@/lib/data";
+import { Modal, Button, Avatar, Badge, AIPill, Textarea, useToast, ScorePill } from "@/components/ui";
+import { useInterview, useSubmitFeedback } from "@/hooks/queries/useInterviews";
+import { useParams } from "next/navigation";
 
 // Interview Conduct page + Feedback form modal
 const { useState: useS_ic, useEffect: useE_ic, useRef: useR_ic } = React;
 
-function InterviewConduct() {
+function InterviewConduct({ interviewId }: { interviewId?: string }) {
   const router = useRouter();
-    const c = CANDIDATES[0];
+  const { interviewId: paramId } = useParams() as { interviewId?: string };
+  const actualId = interviewId ?? paramId ?? '';
+
+  const { data: interview, isLoading } = useInterview(actualId);
+
   const [tab, setTab] = useS_ic("ai");
   const [seconds, setSeconds] = useS_ic(33 * 60 + 47); // 33:47 elapsed of 60-min
   const [feedbackOpen, setFeedbackOpen] = useS_ic(false);
@@ -30,6 +35,20 @@ function InterviewConduct() {
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
+
+  if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading interview...</div>;
+  if (!interview) return <div style={{padding:32,color:'var(--danger)'}}>Interview not found</div>;
+
+  // Use interview data; candidate name will show as ID until candidate lookup is added
+  const c = {
+    id: interview.candidate_id,
+    name: interview.candidate_id,
+    email: '',
+    avatar: '',
+    title: '',
+    score: 0,
+    stage: interview.status,
+  };
 
   return (
     <div className="tsConduct">
@@ -124,7 +143,7 @@ function InterviewConduct() {
         </div>
       </div>
 
-      {feedbackOpen && <FeedbackForm c={c} initialScores={scores} onClose={() => setFeedbackOpen(false)}/>}
+      {feedbackOpen && <FeedbackForm c={c} interviewId={actualId} initialScores={scores} onClose={() => setFeedbackOpen(false)}/>}
     </div>
   );
 };
@@ -241,8 +260,9 @@ const Stars = ({ value, onChange, max = 5 }: any) => (
 );
 
 // ===== Feedback Form Modal =====
-function FeedbackForm({ c, initialScores, onClose }: any) {
-    const toast = useToast();
+function FeedbackForm({ c, interviewId, initialScores, onClose }: any) {
+  const toast = useToast();
+  const { mutate: submitFeedback } = useSubmitFeedback(interviewId ?? '');
   const [scores, setScores] = useS_ic(initialScores);
   const [rec, setRec] = useS_ic(null);
   const [strengths, setStrengths] = useS_ic("");
@@ -274,7 +294,11 @@ function FeedbackForm({ c, initialScores, onClose }: any) {
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="secondary" icon={<Icon.Save size={13}/>}>Save draft</Button>
-          <Button variant="primary" icon={<Icon.Send size={13}/>} disabled={!rec} onClick={() => { toast({ message: "Feedback submitted. Candidate moved to next stage." }); onClose(); }}>Submit feedback</Button>
+          <Button variant="primary" icon={<Icon.Send size={13}/>} disabled={!rec} onClick={() => {
+            submitFeedback({ scores, strengths, gaps, impact, recommendation: rec, ai_summary: aiSummary });
+            toast({ message: "Feedback submitted. Candidate moved to next stage." });
+            onClose();
+          }}>Submit feedback</Button>
         </>
       }>
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>

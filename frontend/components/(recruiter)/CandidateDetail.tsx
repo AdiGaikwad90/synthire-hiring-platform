@@ -3,19 +3,46 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Card, Badge, Avatar, ScoreRing, ScoreBar, ScorePill, StagePill, AIPill } from "@/components/ui";
-import { CANDIDATES } from "@/lib/data";
+import { useCandidate } from "@/hooks/queries/useCandidates";
+import { useParams } from "next/navigation";
 import { ScheduleModal } from "./ScheduleModal";
 import { ActivityRow } from "./Dashboard";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd } = React;
 
-function CandidateDetail() {
+function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const router = useRouter();
-    const c = CANDIDATES[0]; // Priya Sharma
+  const { candidateId: paramId } = useParams() as { candidateId?: string };
+  const actualId = candidateId ?? paramId ?? '';
+
+  const { data: apiCandidate, isLoading } = useCandidate(actualId);
+
   const [tab, setTab] = useS_cd("overview");
   const [zoom, setZoom] = useS_cd(100);
   const [showSchedule, setShowSchedule] = useS_cd(false);
+
+  if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading candidate...</div>;
+  if (!apiCandidate) return <div style={{padding:32,color:'var(--danger)'}}>Candidate not found</div>;
+
+  // Map API fields to the shape the UI expects
+  const c = {
+    ...apiCandidate,
+    score: apiCandidate.overall_score ?? 0,
+    skillsScore: apiCandidate.skills_score ?? 0,
+    expScore: apiCandidate.experience_score ?? 0,
+    eduScore: apiCandidate.education_score ?? 0,
+    achScore: apiCandidate.achievements_score ?? 0,
+    stage: apiCandidate.status as any,
+    skills: apiCandidate.technical_skills ?? [],
+    experience: (apiCandidate.professional_experience as any[]) ?? [],
+    education: (apiCandidate.education_details as any[]) ?? [],
+    strengths: [],
+    concerns: [],
+    avatar: '',
+    title: '',
+    years: 0,
+  };
 
   return (
     <div className="tsCD">

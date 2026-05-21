@@ -3,7 +3,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, SearchInput } from "@/components/ui";
-import { JOBS } from "@/lib/data";
+import { useJobs } from "@/hooks/queries/useJobs";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 
 // Jobs list screen
@@ -11,22 +11,26 @@ const { useState: useS_jobs, useMemo: useM_jobs } = React;
 
 function Jobs() {
   const router = useRouter();
-      const [filter, setFilter] = useS_jobs("all");
+  const [filter, setFilter] = useS_jobs("all");
   const [search, setSearch] = useS_jobs("");
   const [view, setView] = useS_jobs("table");
   const [showUpload, setShowUpload] = useS_jobs(false);
 
-  const filtered = JOBS.filter(j =>
+  const { data, isLoading } = useJobs();
+
+  const filtered = (data?.items ?? []).filter(j =>
     (filter === "all" || j.status === filter) &&
     (!search || j.title.toLowerCase().includes(search.toLowerCase()))
   );
+
+  if (isLoading) return <div className="tsPage"><div style={{padding:32,color:'var(--muted)'}}>Loading jobs...</div></div>;
 
   return (
     <div className="tsPage">
       <div className="tsPage-head">
         <div className="tsPage-headMain">
           <div className="h1">Jobs</div>
-          <div className="small" style={{ color: "var(--muted)" }}>{JOBS.length} positions · 1,247 total applicants this quarter</div>
+          <div className="small" style={{ color: "var(--muted)" }}>{data?.pagination?.total ?? 0} positions · 1,247 total applicants this quarter</div>
         </div>
         <div className="tsPage-actions">
           <Button variant="secondary" icon={<Icon.Upload size={14}/>} onClick={() => setShowUpload(true)}>Upload resumes</Button>
@@ -38,9 +42,9 @@ function Jobs() {
       {/* Filter bar */}
       <div className="tsFilterBar">
         <div className="tsTabs tsTabs-pill">
-          <button className={`tsTab ${filter === "all" ? "tsTab-active" : ""}`} onClick={() => setFilter("all")}>All <span className="tsTab-count">{JOBS.length}</span></button>
-          <button className={`tsTab ${filter === "active" ? "tsTab-active" : ""}`} onClick={() => setFilter("active")}>Active <span className="tsTab-count">{JOBS.filter(j => j.status === "active").length}</span></button>
-          <button className={`tsTab ${filter === "paused" ? "tsTab-active" : ""}`} onClick={() => setFilter("paused")}>Paused <span className="tsTab-count">{JOBS.filter(j => j.status === "paused").length}</span></button>
+          <button className={`tsTab ${filter === "all" ? "tsTab-active" : ""}`} onClick={() => setFilter("all")}>All <span className="tsTab-count">{data?.pagination?.total ?? 0}</span></button>
+          <button className={`tsTab ${filter === "active" ? "tsTab-active" : ""}`} onClick={() => setFilter("active")}>Active <span className="tsTab-count">{(data?.items ?? []).filter(j => j.status === "active").length}</span></button>
+          <button className={`tsTab ${filter === "paused" ? "tsTab-active" : ""}`} onClick={() => setFilter("paused")}>Paused <span className="tsTab-count">{(data?.items ?? []).filter(j => j.status === "paused").length}</span></button>
           <button className={`tsTab ${filter === "closed" ? "tsTab-active" : ""}`} onClick={() => setFilter("closed")}>Closed <span className="tsTab-count">0</span></button>
         </div>
         <div style={{ flex: 1 }}/>
@@ -64,21 +68,21 @@ function Jobs() {
               <div></div>
             </div>
             {filtered.map((j, i) => (
-              <div key={j.id} className="tsJobsTable-row" onClick={() => router.push("/jobs/j1")} style={{ animationDelay: `${i * 30}ms` }}>
+              <div key={j.id} className="tsJobsTable-row" onClick={() => router.push(`/jobs/${j.id}`)} style={{ animationDelay: `${i * 30}ms` }}>
                 <div>
                   <div className="tsJobsTable-title">{j.title}</div>
                   <div className="small">
                     <Badge variant={j.status === "active" ? "success" : "warning"} dot>{j.status === "active" ? "Active" : "Paused"}</Badge>
-                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>Posted {j.posted}</span>
+                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>Posted {new Date(j.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
-                <div>{j.department}</div>
-                <div className="small">{j.location}</div>
+                <div>{j.department ?? ''}</div>
+                <div className="small">{j.location ?? ''}</div>
                 <div style={{ textAlign: "right" }}>
-                  <div className="mono" style={{ fontWeight: 600 }}>{j.applicants}</div>
-                  <div className="small">{j.shortlisted} shortlisted</div>
+                  <div className="mono" style={{ fontWeight: 600 }}>—</div>
+                  <div className="small">applicants</div>
                 </div>
-                <div><JobPipelineBar job={j}/></div>
+                <div><div className="tsPipeBar"/></div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button className="tsIconBtn"><Icon.MoreH size={16}/></button>
                 </div>
@@ -88,7 +92,7 @@ function Jobs() {
         </Card>
       ) : (
         <div className="tsGrid tsGrid-3">
-          {filtered.map(j => <JobCard key={j.id} job={j} onClick={() => router.push("/jobs/j1")}/>)}
+          {filtered.map(j => <JobCard key={j.id} job={{ ...j, department: j.department ?? '', location: j.location ?? '', applicants: 0, shortlisted: 0, interviewing: 0, hired: 0, posted: new Date(j.created_at).toLocaleDateString(), salary: j.salary_range ?? '' }} onClick={() => router.push(`/jobs/${j.id}`)}/>)}
         </div>
       )}
       {showUpload && <ResumeBatchModal onClose={() => setShowUpload(false)}/>}

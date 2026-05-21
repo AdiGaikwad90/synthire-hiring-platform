@@ -1,28 +1,35 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Badge, Avatar, Input, Textarea, SearchInput, useToast } from "@/components/ui";
-import { INTERVIEW_ROUNDS, TEAM } from "@/lib/data";
-import type { Candidate } from "@/lib/types";
+import { Modal, Button, Badge, Input, Textarea, useToast } from "@/components/ui";
+import { useInterviewTypes } from "@/hooks/queries/useSettings";
+import { useScheduleInterview } from "@/hooks/queries/useInterviews";
 
 interface ScheduleModalProps {
-  candidate: Candidate;
+  c?: { name: string; email: string | null; id?: string; job_id?: string };
+  candidateId?: string;
+  jobId?: string;
   onClose: () => void;
 }
 
-export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
+export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalProps) {
   const toast = useToast();
-  const [round, setRound] = React.useState(INTERVIEW_ROUNDS[1].id);
-  const [interviewers, setInterviewers] = React.useState<string[]>(["u2"]);
+  const { data: interviewTypes = [] } = useInterviewTypes();
+  const { mutate: scheduleInterview } = useScheduleInterview();
+
+  const [round, setRound] = React.useState('');
+  const [interviewerEmail, setInterviewerEmail] = React.useState('');
   const [date, setDate] = React.useState(15);
   const [hour, setHour] = React.useState(14);
   const [minute, setMinute] = React.useState(0);
-  const [link, setLink] = React.useState("https://zoom.us/j/847-291-6634");
+  const [link, setLink] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [showPreview, setShowPreview] = React.useState(false);
 
-  const selRound = INTERVIEW_ROUNDS.find((r) => r.id === round);
+  const selRound = interviewTypes.find(r => r.id === round);
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  const actualCandidateId = candidateId ?? c?.id ?? '';
+  const actualJobId = jobId ?? c?.job_id ?? '';
   const disabledDays = new Set([1, 2, 8, 9, 10, 16, 17, 23, 24, 30]);
 
   return (
@@ -32,7 +39,7 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
       side
       width={460}
       title="Schedule interview"
-      subtitle={<>Round, interviewers, and time for <b style={{ color: "var(--text)" }}>{c.name}</b></>}
+      subtitle={<>Round, interviewers, and time for <b style={{ color: "var(--text)" }}>{c?.name ?? 'candidate'}</b></>}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -41,7 +48,17 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
             variant="primary"
             icon={<Icon.Send size={13} />}
             onClick={() => {
-              toast({ message: `Interview scheduled with ${c.name}` });
+              scheduleInterview({
+                candidate_id: actualCandidateId,
+                job_id: actualJobId,
+                interviewer_id: interviewerEmail,
+                interview_type_id: round || undefined,
+                scheduled_at: new Date(`2026-05-${String(date).padStart(2,'0')}T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00`).toISOString(),
+                duration_minutes: selRound?.duration_minutes ?? 60,
+                video_link: link || undefined,
+                meeting_notes: notes || undefined,
+              });
+              toast({ message: `Interview scheduled with ${c?.name ?? 'candidate'}` });
               onClose();
             }}
           >
@@ -57,12 +74,12 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
             <span>Which round?</span>
           </div>
           <div className="tsSched-rounds">
-            {INTERVIEW_ROUNDS.map((r) => (
+            {interviewTypes.map((r) => (
               <button key={r.id} className={`tsSched-round ${round === r.id ? "active" : ""}`} onClick={() => setRound(r.id)}>
-                <div className="tsSched-roundIcon">{r.num}</div>
+                <div className="tsSched-roundIcon">{r.position + 1}</div>
                 <div style={{ flex: 1, textAlign: "left" }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{r.name}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>{r.duration} min · {r.interviewer}</div>
+                  <div className="small" style={{ color: "var(--muted)" }}>{r.duration_minutes} min</div>
                 </div>
                 {r.required ? <Badge variant="primary">Required</Badge> : <Badge variant="neutral">Optional</Badge>}
               </button>
@@ -70,7 +87,7 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
           </div>
           {selRound && (
             <div className="small" style={{ marginTop: 10, color: "var(--text-2)", padding: "8px 12px", background: "var(--surface-2)", borderRadius: 8, borderLeft: "2px solid var(--primary)" }}>
-              {selRound.purpose}
+              {selRound.description}
             </div>
           )}
         </div>
@@ -79,28 +96,14 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
           <div className="tsSched-stepHead">
             <span className="tsSched-stepNum">2</span>
             <span>Who will interview?</span>
-            {interviewers.length > 0 && <Badge variant="primary">{interviewers.length} selected</Badge>}
+            {interviewerEmail && <Badge variant="primary">1 selected</Badge>}
           </div>
-          <SearchInput value="" onChange={() => {}} placeholder="Find team members…" kbd="" />
-          <div className="tsSched-team">
-            {TEAM.map((u) => (
-              <label key={u.id} className={`tsSched-mem ${interviewers.includes(u.id) ? "active" : ""}`}>
-                <input
-                  type="checkbox"
-                  checked={interviewers.includes(u.id)}
-                  onChange={(e) =>
-                    setInterviewers((arr) => (e.target.checked ? [...arr, u.id] : arr.filter((x) => x !== u.id)))
-                  }
-                />
-                <Avatar name={u.name} color={u.avatar} size={28} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{u.name}</div>
-                  <div className="small" style={{ color: "var(--muted)" }}>{u.role}</div>
-                </div>
-                <Badge variant="success">{u.trained[0]} trained</Badge>
-              </label>
-            ))}
-          </div>
+          <Input
+            label="Interviewer email or ID"
+            value={interviewerEmail}
+            onChange={(e) => setInterviewerEmail(e.target.value)}
+            placeholder="e.g. john.smith@company.com"
+          />
         </div>
 
         <div className="tsSched-step">
@@ -193,13 +196,13 @@ export function ScheduleModal({ candidate: c, onClose }: ScheduleModalProps) {
         {showPreview && (
           <div className="tsEmailPreview">
             <div className="small" style={{ color: "var(--muted)", marginBottom: 8 }}>
-              <b style={{ color: "var(--text)" }}>To:</b> {c.email}
+              <b style={{ color: "var(--text)" }}>To:</b> {c?.email ?? ''}
             </div>
             <div className="small" style={{ color: "var(--muted)", marginBottom: 14 }}>
               <b style={{ color: "var(--text)" }}>Subject:</b> Interview with Acme · {selRound?.name}
             </div>
             <div className="small" style={{ lineHeight: 1.5, color: "var(--text-2)" }}>
-              Hi {c.name.split(" ")[0]},<br />
+              Hi {(c?.name ?? 'there').split(" ")[0]},<br />
               <br />
               We'd like to invite you to the next stage for the <b>Senior Software Engineer</b> role. Please join us on{" "}
               <b>
