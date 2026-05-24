@@ -2,45 +2,45 @@ import { nanoid } from 'nanoid'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { JobRow } from '../../types/db'
 import { AppError } from '../../types/api'
+import {
+  normalizeScoringDimensions,
+  DEFAULT_SCORING_DIMENSIONS,
+  type ScoringDimensions,
+} from '../../services/scoring/dimensions'
 
 // ── Deserialization helpers ───────────────────────────────────────────────────
 
-type ScoringWeights = {
-  skills: number
-  experience: number
-  education: number
-  achievements: number
-}
-
 type ParsedJobRow = Omit<JobRow, 'scoring_weights' | 'required_skills' | 'nice_to_have_skills'> & {
-  scoring_weights: ScoringWeights
+  scoring_dimensions: ScoringDimensions
   required_skills: string[]
   nice_to_have_skills: string[]
 }
 
 export function toJob(row: JobRow): ParsedJobRow {
-  const parsed: ParsedJobRow = {
-    ...row,
-    scoring_weights: { skills: 40, experience: 30, education: 20, achievements: 10 },
-    required_skills: [],
-    nice_to_have_skills: [],
-  }
+  let scoring_dimensions = DEFAULT_SCORING_DIMENSIONS
   try {
-    parsed.scoring_weights = JSON.parse(row.scoring_weights) as ScoringWeights
+    scoring_dimensions = normalizeScoringDimensions(JSON.parse(row.scoring_weights))
   } catch {
-    parsed.scoring_weights = { skills: 40, experience: 30, education: 20, achievements: 10 }
+    // fall through to default
   }
+
+  let required_skills: string[] = []
   try {
-    parsed.required_skills = JSON.parse(row.required_skills) as string[]
-  } catch {
-    parsed.required_skills = []
-  }
+    const parsed = JSON.parse(row.required_skills)
+    if (Array.isArray(parsed)) required_skills = parsed
+  } catch {}
+
+  let nice_to_have_skills: string[] = []
   try {
-    parsed.nice_to_have_skills = JSON.parse(row.nice_to_have_skills) as string[]
-  } catch {
-    parsed.nice_to_have_skills = []
-  }
-  return parsed
+    const parsed = JSON.parse(row.nice_to_have_skills)
+    if (Array.isArray(parsed)) nice_to_have_skills = parsed
+  } catch {}
+
+  // Strip the legacy `scoring_weights` JSON string from the response; expose
+  // only the parsed `scoring_dimensions` field.
+  const { scoring_weights: _legacy, ...rest } = row
+  void _legacy
+  return { ...rest, scoring_dimensions, required_skills, nice_to_have_skills }
 }
 
 // ── List jobs ─────────────────────────────────────────────────────────────────
@@ -50,19 +50,20 @@ export async function listJobs(
   companyId: string,
   opts: { status?: string; search?: string; page: number; limit: number }
 ): Promise<{ items: ReturnType<typeof toJob>[]; total: number }> {
-  const { status, search, page, limit } = opts
+  const { status, page, limit } = opts
+  const search = opts.search && opts.search.length > 500 ? opts.search.slice(0, 500) : opts.search
   const offset = (page - 1) * limit
 
-  const conditions: string[] = ['company_id = ?']
+  const conditions: string[] = ['j.company_id = ?']
   const params: unknown[] = [companyId]
 
   if (status) {
-    conditions.push('status = ?')
+    conditions.push('j.status = ?')
     params.push(status)
   }
 
   if (search) {
-    conditions.push('(title LIKE ? OR department LIKE ? OR location LIKE ?)')
+    conditions.push('(j.title LIKE ? OR j.department LIKE ? OR j.location LIKE ?)')
     const pattern = `%${search}%`
     params.push(pattern, pattern, pattern)
   }
@@ -70,18 +71,25 @@ export async function listJobs(
   const where = conditions.join(' AND ')
 
   const countResult = await db
-    .prepare(`SELECT COUNT(*) as total FROM jobs WHERE ${where}`)
+    .prepare(`SELECT COUNT(*) as total FROM jobs j WHERE ${where}`)
     .bind(...params)
     .first<{ total: number }>()
 
   const total = countResult?.total ?? 0
 
   const rows = await db
-    .prepare(`SELECT * FROM jobs WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .prepare(
+      `SELECT j.*, COUNT(c.id) as candidate_count
+       FROM jobs j
+       LEFT JOIN candidates c ON c.job_id = j.id
+       WHERE ${where}
+       GROUP BY j.id
+       ORDER BY j.created_at DESC LIMIT ? OFFSET ?`
+    )
     .bind(...params, limit, offset)
-    .all<JobRow>()
+    .all<JobRow & { candidate_count: number }>()
 
-  const items = (rows.results ?? []).map(toJob)
+  const items = (rows.results ?? []).map(r => ({ ...toJob(r), candidate_count: r.candidate_count ?? 0 }))
 
   return { items, total }
 }
@@ -102,7 +110,8 @@ type CreateJobData = {
   nice_to_have_skills: string[]
   min_years_experience: number
   education_requirement?: string
-  scoring_weights: ScoringWeights
+  scoring_dimensions: ScoringDimensions
+  status?: string
 }
 
 export async function createJob(
@@ -132,7 +141,7 @@ export async function createJob(
       data.employment_type,
       data.experience_level,
       data.salary_range ?? null,
-      JSON.stringify(data.scoring_weights),
+      JSON.stringify(data.scoring_dimensions),
       JSON.stringify(data.required_skills),
       JSON.stringify(data.nice_to_have_skills),
       data.min_years_experience,
@@ -188,7 +197,8 @@ export async function updateJob(
   if (data.nice_to_have_skills !== undefined) { setClauses.push('nice_to_have_skills = ?'); params.push(JSON.stringify(data.nice_to_have_skills)) }
   if (data.min_years_experience !== undefined) { setClauses.push('min_years_experience = ?'); params.push(data.min_years_experience) }
   if (data.education_requirement !== undefined) { setClauses.push('education_requirement = ?'); params.push(data.education_requirement) }
-  if (data.scoring_weights !== undefined) { setClauses.push('scoring_weights = ?'); params.push(JSON.stringify(data.scoring_weights)) }
+  if (data.scoring_dimensions !== undefined) { setClauses.push('scoring_weights = ?'); params.push(JSON.stringify(data.scoring_dimensions)) }
+  if (data.status !== undefined) { setClauses.push('status = ?'); params.push(data.status) }
 
   if (setClauses.length === 0) {
     return getJob(db, id, companyId)

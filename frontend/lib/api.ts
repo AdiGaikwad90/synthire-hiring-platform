@@ -5,13 +5,26 @@ export interface PaginatedData<T> {
   pagination: { total: number; page: number; limit: number; pages: number; has_more: boolean }
 }
 
+export interface DimensionConfig {
+  importance: number
+  sub_dimensions: Record<string, number>
+}
+
+export interface ScoringDimensions {
+  skills: DimensionConfig
+  experience: DimensionConfig
+  education: DimensionConfig
+  achievements: DimensionConfig
+}
+
 export interface ApiJob {
   id: string; company_id: string; recruiter_id: string; title: string
   description: string | null; department: string | null; location: string | null
   employment_type: string; experience_level: string; salary_range: string | null
-  status: string; scoring_weights: { skills: number; experience: number; education: number; achievements: number }
+  status: string; scoring_dimensions: ScoringDimensions; scoring_weights: Record<string, number> | null
   required_skills: string[]; nice_to_have_skills: string[]; min_years_experience: number
   education_requirement: string | null; created_at: string; updated_at: string
+  candidate_count?: number
 }
 
 export interface ApiCandidate {
@@ -28,7 +41,7 @@ export interface ApiInterview {
   id: string; candidate_id: string; job_id: string; company_id: string
   interviewer_id: string; interview_type_id: string | null; scheduled_at: string
   duration_minutes: number; video_link: string | null; meeting_notes: string | null
-  status: string; created_at: string
+  status: string; created_at: string; candidate_name?: string | null
 }
 
 export interface ApiInterviewType {
@@ -143,6 +156,7 @@ export const candidatesApi = {
   update: (id: string, data: { status?: string }) =>
     apiFetch<ApiCandidate>(`/api/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch<{ deleted: boolean }>(`/api/candidates/${id}`, { method: 'DELETE' }),
+  generateQuestions: (id: string) => apiFetch<{ questions: { q: string; why: string }[] }>(`/api/candidates/${id}/questions`, { method: 'POST' }),
 }
 
 // Group: Interviews

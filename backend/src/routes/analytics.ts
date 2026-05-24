@@ -9,11 +9,12 @@ import {
   getRecentActivity,
   getEmailStats,
 } from '../db/queries/analytics'
+import { getR2Usage } from '../services/storage/r2-limits'
 
 const router = new Hono<{ Bindings: Env }>()
 
 // All analytics routes require authentication
-router.use('/*', authMiddleware)
+router.use('*', authMiddleware)
 
 // GET /api/analytics/funnel
 router.get('/funnel', async (c) => {
@@ -63,6 +64,24 @@ router.get('/sources', async (c) => {
       { source: 'Job Board', count: 0, percentage: 0 },
     ])
   )
+})
+
+// GET /api/analytics/r2-usage  (recruiter/admin only — shows R2 storage + op counts)
+router.get('/r2-usage', async (c) => {
+  const user = c.get('user')
+  if (user.role === 'interviewer') {
+    throw new AppError('Forbidden: insufficient permissions', 403)
+  }
+
+  const config = {
+    enabled: (c.env.R2_LIMITS_ENABLED ?? 'true') === 'true',
+    maxStorageBytes: parseInt(c.env.R2_MAX_STORAGE_BYTES ?? '10737418240', 10),
+    maxClassAOpsMonthly: parseInt(c.env.R2_MAX_CLASS_A_OPS_MONTHLY ?? '900000', 10),
+    maxClassBOpsMonthly: parseInt(c.env.R2_MAX_CLASS_B_OPS_MONTHLY ?? '9000000', 10),
+  }
+
+  const usage = await getR2Usage(c.env.KV_CACHE, config)
+  return c.json(apiResponse(usage))
 })
 
 export default router

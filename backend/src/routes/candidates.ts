@@ -11,11 +11,12 @@ import {
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
-import { uploadToR2, deleteFromR2, r2Key } from '../services/storage/r2'
+import { uploadToR2, deleteFromR2, getFromR2, r2Key } from '../services/storage/r2'
 import {
   buildResumeParseMessages,
   validateParsedResume,
 } from '../services/ai/prompts/parse-resume'
+import { buildQuestionMessages, validateQuestions } from '../services/ai/prompts/generate-questions'
 import { callWithFallback } from '../services/ai/fallback'
 import { runScoringPipeline } from '../services/scoring/pipeline'
 import {
@@ -30,13 +31,16 @@ import {
 } from '../db/queries/candidates'
 import { getJob } from '../db/queries/jobs'
 import type { ParsedResume } from '../services/ai/prompts/parse-resume'
+import { authMiddleware } from '../middleware/auth'
 
-const router = new Hono<{ Bindings: Env; Variables: { jwtPayload: import('../types/auth').JWTPayload } }>()
+const router = new Hono<{ Bindings: Env }>()
+
+router.use('*', authMiddleware)
 
 // ── POST /upload — SSE streaming candidate processing ─────────────────────────
 
 router.post('/upload', async (c) => {
-  const payload = c.get('jwtPayload')
+  const payload = c.get('user')
   const companyId = payload.company_id
 
   const maxUploadBytes = parseInt(c.env.MAX_UPLOAD_BYTES ?? '10485760', 10)
@@ -87,16 +91,16 @@ router.post('/upload', async (c) => {
     processing_status: 'parsing',
   })
 
+  const env = c.env
   const candidateId = candidate.id
   const ext = getExtension(fileType)
   const contentType = getContentType(fileType)
   const key = r2Key(companyId, jobId, candidateId, ext)
 
   // Upload to R2
-  await uploadToR2(c.env.RESUME_BUCKET, key, buffer, contentType)
+  await uploadToR2(env, key, buffer, contentType)
 
   // SSE streaming response
-  const env = c.env
   const stream = new ReadableStream({
     async start(controller) {
       const encoder = new TextEncoder()
@@ -140,7 +144,7 @@ router.post('/upload', async (c) => {
           requiredSkills: job.required_skills,
           niceToHaveSkills: job.nice_to_have_skills,
           minYearsExperience: job.min_years_experience,
-          scoringWeights: job.scoring_weights,
+          scoringWeights: job.scoring_dimensions,
           parsedResume,
         })
 
@@ -171,11 +175,18 @@ router.post('/upload', async (c) => {
     },
   })
 
+  const origin = c.req.header('Origin') || ''
+  const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
+    ? origin
+    : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
+
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Vary': 'Origin',
     },
   })
 })
@@ -183,7 +194,7 @@ router.post('/upload', async (c) => {
 // ── GET / — list candidates ───────────────────────────────────────────────────
 
 router.get('/', zValidator('query', listCandidatesSchema), async (c) => {
-  const payload = c.get('jwtPayload')
+  const payload = c.get('user')
   const { job_id, status, min_score, page, limit } = c.req.valid('query')
 
   const { items, total } = await listCandidates(c.env.DB, payload.company_id, {
@@ -200,7 +211,7 @@ router.get('/', zValidator('query', listCandidatesSchema), async (c) => {
 // ── GET /:id — get candidate ──────────────────────────────────────────────────
 
 router.get('/:id', async (c) => {
-  const payload = c.get('jwtPayload')
+  const payload = c.get('user')
   const id = c.req.param('id')
 
   const candidate = await getCandidate(c.env.DB, id, payload.company_id)
@@ -214,7 +225,7 @@ router.get('/:id', async (c) => {
 // ── PATCH /:id — update candidate status ──────────────────────────────────────
 
 router.patch('/:id', zValidator('json', updateCandidateSchema), async (c) => {
-  const payload = c.get('jwtPayload')
+  const payload = c.get('user')
   const id = c.req.param('id')
   const { status } = c.req.valid('json')
 
@@ -230,10 +241,93 @@ router.patch('/:id', zValidator('json', updateCandidateSchema), async (c) => {
   return c.json(apiResponse(candidate))
 })
 
+// ── GET /:id/resume — stream original file from R2 ────────────────────────────
+
+router.get('/:id/resume', async (c) => {
+  const payload = c.get('user')
+  const id = c.req.param('id')
+
+  const candidate = await getCandidate(c.env.DB, id, payload.company_id)
+  if (!candidate || !candidate.resume_url) {
+    return c.json({ success: false, error: 'Resume not found' }, 404)
+  }
+
+  const object = await getFromR2(c.env, candidate.resume_url)
+  if (!object) {
+    return c.json({ success: false, error: 'Resume file not found in storage' }, 404)
+  }
+
+  const ext = candidate.resume_url.endsWith('.docx') ? 'docx' : 'pdf'
+  const contentType = ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const filename = `${candidate.name.replace(/[^a-zA-Z0-9_\-]/g, '_')}_Resume.${ext}`
+
+  const origin = c.req.header('Origin') || ''
+  const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
+    ? origin
+    : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'private, max-age=3600',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Vary': 'Origin',
+    },
+  })
+})
+
+// ── POST /:id/questions — generate AI interview questions ─────────────────────
+
+router.post('/:id/questions', async (c) => {
+  const payload = c.get('user')
+  const id = c.req.param('id')
+
+  const candidate = await getCandidate(c.env.DB, id, payload.company_id)
+  if (!candidate) {
+    return c.json({ success: false, error: 'Candidate not found' }, 404)
+  }
+
+  // Check KV cache first
+  const cacheKey = `questions:${id}`
+  const cached = await c.env.KV_CACHE.get(cacheKey)
+  if (cached) {
+    return c.json(apiResponse(JSON.parse(cached)))
+  }
+
+  const job = candidate.job_id ? await getJob(c.env.DB, candidate.job_id, payload.company_id) : null
+
+  const messages = buildQuestionMessages(
+    candidate.name,
+    job?.title ?? 'this role',
+    candidate.technical_skills ?? [],
+    candidate.professional_experience ?? []
+  )
+
+  const result = await callWithFallback(
+    c.env.OPENROUTER_API_KEY,
+    messages,
+    validateQuestions
+  ) as { questions: Array<string | { q: string; why: string }> }
+
+  // Normalize to {q, why} format regardless of model output shape
+  const questions = result.questions.map((item) => {
+    if (typeof item === 'string') {
+      return { q: item, why: '' }
+    }
+    return item
+  })
+
+  const payload_out = { questions }
+  await c.env.KV_CACHE.put(cacheKey, JSON.stringify(payload_out), { expirationTtl: 604800 }) // 7 days
+
+  return c.json(apiResponse(payload_out))
+})
+
 // ── DELETE /:id — delete candidate + R2 ──────────────────────────────────────
 
 router.delete('/:id', async (c) => {
-  const payload = c.get('jwtPayload')
+  const payload = c.get('user')
   const id = c.req.param('id')
 
   const result = await deleteCandidate(c.env.DB, id, payload.company_id)
@@ -244,7 +338,7 @@ router.delete('/:id', async (c) => {
   // Delete from R2 if resume exists
   if (result.resumeUrl) {
     try {
-      await deleteFromR2(c.env.RESUME_BUCKET, result.resumeUrl)
+      await deleteFromR2(c.env, result.resumeUrl)
     } catch {
       // best-effort — don't fail the request if R2 delete fails
     }

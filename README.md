@@ -1,0 +1,449 @@
+# Synthire — AI-Powered Applicant Tracking System
+
+Synthire (Synthetic + Hire) is a production-grade ATS built on Cloudflare's developer platform. It uses AI to parse resumes, score candidates against job requirements, and automate recruiter communications.
+
+---
+
+## Architecture
+
+```
+TS_CF_Hackathon/
+├── backend/        Cloudflare Workers API (Hono framework)
+└── frontend/       Next.js 14 App Router UI
+```
+
+| Layer | Technology |
+|---|---|
+| Backend runtime | Cloudflare Workers (Hono) |
+| Database | Cloudflare D1 (SQLite) |
+| File storage | Cloudflare R2 |
+| Caching | Cloudflare KV |
+| Vector search | Cloudflare Vectorize |
+| Embeddings | Workers AI (`@cf/baai/bge-large-en-v1.5`) |
+| AI / LLM | OpenRouter (configurable model chain, defaults to free models) |
+| Email | Resend or SendGrid (switchable via `EMAIL_PROVIDER`) |
+| Frontend | Next.js 14, React Query v5, TypeScript |
+
+---
+
+## Prerequisites
+
+- Node.js 20+
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) — `npm i -g wrangler`
+- Cloudflare account (free tier works)
+- [OpenRouter](https://openrouter.ai/) API key (free models available)
+- [Resend](https://resend.com/) or [SendGrid](https://sendgrid.com/) API key
+
+---
+
+## Local Development Setup
+
+### Step 1 — Provision Cloudflare resources (one-time)
+
+```bash
+wrangler login
+
+# D1 database → copy the printed database_id
+wrangler d1 create synthire-prod
+
+# KV namespace → copy id and preview_id
+wrangler kv:namespace create KV_CACHE
+wrangler kv:namespace create KV_CACHE --preview
+
+# R2 bucket (no ID needed, name already in wrangler.toml)
+wrangler r2 bucket create synthire-resumes
+
+# Vectorize index (no ID needed)
+wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
+```
+
+> Workers AI is a built-in binding — no provisioning needed.
+
+### Step 2 — Fill in `backend/wrangler.toml`
+
+Replace the three placeholders with IDs from Step 1:
+
+```toml
+[[d1_databases]]
+database_id = "paste-your-d1-id-here"
+
+[[kv_namespaces]]
+id = "paste-your-kv-id-here"
+preview_id = "paste-your-kv-preview-id-here"
+```
+
+### Step 3 — Create `backend/.dev.vars`
+
+```bash
+cp backend/.dev.vars.example backend/.dev.vars
+```
+
+Fill in all values:
+
+```ini
+JWT_SECRET=          # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+OPENROUTER_API_KEY=  # sk-or-... from openrouter.ai → Dashboard → API Keys
+RESEND_API_KEY=      # re_... from resend.com → API Keys (leave blank if using SendGrid)
+RESEND_WEBHOOK_SECRET=  # leave blank for local dev
+SENDGRID_API_KEY=    # SG.xxx... from sendgrid.com (leave blank if using Resend)
+```
+
+**Email provider choice** — set in `backend/wrangler.toml`:
+```toml
+EMAIL_PROVIDER = "sendgrid"   # or "resend"
+```
+
+> **Resend note:** `onboarding@resend.dev` only delivers to the Resend account owner's email. To send to any address, verify a domain at resend.com/domains or use SendGrid.
+>
+> **SendGrid note:** Go to app.sendgrid.com → Settings → Sender Authentication → Single Sender Verification → verify your from-address before sending.
+
+### Step 4 — Create `frontend/.env.local`
+
+```bash
+echo "NEXT_PUBLIC_API_URL=http://localhost:8787" > frontend/.env.local
+```
+
+### Step 5 — Apply database schema locally
+
+```bash
+cd backend
+wrangler d1 migrations apply synthire-prod --local
+```
+
+### Step 6 — Install dependencies and run
+
+```bash
+cd backend && npm install
+cd ../frontend && npm install
+```
+
+Open two terminals:
+
+```bash
+# Terminal 1 — backend on http://localhost:8787
+cd backend && npm run dev
+
+# Terminal 2 — frontend on http://localhost:3001
+cd frontend && npm run dev
+```
+
+Health check: `curl http://localhost:8787/health`
+
+Open http://localhost:3001, sign up, and start using the app.
+
+---
+
+## Production Deployment
+
+### Step 1 — Provision Cloudflare resources (skip if already done for local)
+
+```bash
+wrangler login
+
+wrangler d1 create synthire-prod
+wrangler kv:namespace create KV_CACHE
+wrangler kv:namespace create KV_CACHE --preview
+wrangler r2 bucket create synthire-resumes
+wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
+```
+
+Fill the IDs into `backend/wrangler.toml` as described in local setup Step 2.
+
+### Step 2 — Apply database migrations to production
+
+```bash
+cd backend
+wrangler d1 migrations apply synthire-prod --remote
+```
+
+> Always use `--remote` for production. Without this flag, migrations only apply to your local SQLite copy.
+
+### Step 3 — Set production secrets
+
+```bash
+cd backend
+
+wrangler secret put JWT_SECRET
+# paste a 64-char random string
+
+wrangler secret put OPENROUTER_API_KEY
+# paste your sk-or-... key
+
+wrangler secret put RESEND_API_KEY
+# paste your re_... key (or press Enter to skip if using SendGrid)
+
+wrangler secret put RESEND_WEBHOOK_SECRET
+# paste whsec_... or press Enter to skip
+
+wrangler secret put SENDGRID_API_KEY
+# paste your SG.xxx... key (or press Enter to skip if using Resend)
+```
+
+Verify secrets were saved:
+```bash
+wrangler secret list
+```
+
+### Step 4 — Deploy the backend
+
+```bash
+cd backend
+wrangler deploy
+```
+
+Output will show your worker URL:
+```
+https://synthire-backend.<your-subdomain>.workers.dev
+```
+
+Save this URL — you need it in Step 6.
+
+### Step 5 — Deploy the frontend to Vercel
+
+```bash
+cd frontend
+npx vercel
+```
+
+When prompted:
+- **Set up and deploy?** → Y
+- **Link to existing project?** → N (first time)
+- **Project name?** → synthire (or anything)
+- **Directory?** → `./`
+
+Set the backend URL as an environment variable:
+```bash
+npx vercel env add NEXT_PUBLIC_API_URL production
+# paste: https://synthire-backend.<your-subdomain>.workers.dev
+```
+
+Deploy to production:
+```bash
+npx vercel --prod
+```
+
+Vercel outputs your frontend URL, e.g. `https://synthire.vercel.app`
+
+### Step 6 — Wire frontend URL back to backend
+
+Update `backend/wrangler.toml`:
+
+```toml
+[env.production.vars]
+ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← your real Vercel URL
+```
+
+Redeploy the backend to pick up the new CORS origin:
+```bash
+cd backend
+wrangler deploy
+```
+
+### Step 7 — Verify production
+
+```bash
+curl https://synthire-backend.<your-subdomain>.workers.dev/health
+# → {"status":"ok"}
+```
+
+Open your Vercel URL, sign up, and test the full flow.
+
+---
+
+## Common Deployment Issues
+
+| Problem | Fix |
+|---|---|
+| CORS errors in browser | `FRONTEND_ORIGIN` in `wrangler.toml` doesn't exactly match your Vercel URL |
+| D1 errors on first load | Migrations not applied to remote — run `wrangler d1 migrations apply synthire-prod --remote` |
+| Resume upload fails | R2 bucket name must be exactly `synthire-resumes` |
+| Emails not sending | Run `wrangler secret list` to verify secrets; check email_queue in D1 for error messages |
+| Vectorize errors on first deploy | Index takes ~2 min to become available after creation |
+| Workers AI returns errors locally | Workers AI requires a live Cloudflare connection — embeddings/scoring degrade gracefully in local dev |
+
+---
+
+## Runtime Configuration
+
+All non-secret configuration lives in `backend/wrangler.toml` under `[vars]`. Change any value without touching code — just update and redeploy.
+
+### LLM Models
+
+```toml
+OPENROUTER_MODEL_PRIMARY   = "qwen/qwen3-235b-a22b:free"
+OPENROUTER_MODEL_FALLBACK1 = "google/gemma-3-27b-it:free"
+OPENROUTER_MODEL_FALLBACK2 = "openai/gpt-4o-mini"
+LLM_TEMPERATURE = "0.1"
+LLM_MAX_TOKENS  = "2000"
+```
+
+### Scoring
+
+```toml
+SCORE_LLM_WEIGHT       = "0.70"
+SCORE_SEMANTIC_WEIGHT  = "0.30"
+SCORE_HIGH_THRESHOLD   = "80"
+SCORE_MEDIUM_THRESHOLD = "60"
+```
+
+### Email
+
+```toml
+EMAIL_PROVIDER          = "resend"            # "resend" or "sendgrid"
+RESEND_FROM_EMAIL       = "noreply@synthire.io"
+RESEND_FROM_NAME        = "Synthire"
+SENDGRID_FROM_EMAIL     = ""                  # only needed when EMAIL_PROVIDER = "sendgrid"
+EMAIL_QUEUE_BATCH_SIZE  = "10"
+EMAIL_MAX_RETRIES       = "3"
+EMAIL_RETRY_BACKOFF_SECONDS = "60"
+```
+
+### Rate Limiting
+
+```toml
+RATE_LIMIT_ENABLED        = "true"
+RATE_LIMIT_REQUESTS       = "100"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+```
+
+---
+
+## First Use Flow
+
+1. **Sign up** at `/signup` — creates your company workspace
+2. **Create a job** at `/jobs/new` — set title, requirements, and scoring weights
+3. **Upload resumes** — open a job → click "Upload resumes" → drop PDFs/DOCX
+4. Backend parses each file, scores against the job with AI, streams progress via SSE
+5. **View scored candidates** in the job's candidate list, sorted by AI score
+6. **Drag candidates** on `/pipeline` to move through hiring stages
+7. **Schedule interviews** from a candidate's detail page — emails send automatically
+8. Check `/analytics` for funnel data and hiring metrics
+
+---
+
+## API Endpoints
+
+All protected endpoints require `Authorization: Bearer <token>` header.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/signup` | — | Create account + company |
+| POST | `/api/auth/login` | — | Login, returns JWT |
+| GET | `/api/auth/me` | ✓ | Current user info |
+| GET | `/api/jobs` | ✓ | List company jobs |
+| POST | `/api/jobs` | ✓ | Create job |
+| GET | `/api/jobs/:id` | ✓ | Get job |
+| PATCH | `/api/jobs/:id` | ✓ | Update job |
+| DELETE | `/api/jobs/:id` | ✓ | Soft-delete job |
+| POST | `/api/candidates/upload` | ✓ | Upload resume (SSE stream) |
+| GET | `/api/candidates` | ✓ | List candidates |
+| GET | `/api/candidates/:id` | ✓ | Get candidate |
+| PATCH | `/api/candidates/:id` | ✓ | Update candidate stage |
+| GET | `/api/candidates/:id/resume` | ✓ | Stream original resume from R2 |
+| POST | `/api/candidates/:id/questions` | ✓ | Generate AI interview questions |
+| GET | `/api/interviews` | ✓ | List interviews (role-scoped) |
+| POST | `/api/interviews` | ✓ | Schedule interview + queue emails |
+| PATCH | `/api/interviews/:id` | ✓ | Update interview |
+| POST | `/api/interviews/:id/feedback` | ✓ | Submit feedback |
+| GET | `/api/interview-types` | ✓ | List interview rounds |
+| POST | `/api/interview-types` | ✓ | Create interview round |
+| PATCH | `/api/interview-types/:id` | ✓ | Update interview round |
+| DELETE | `/api/interview-types/:id` | ✓ | Delete interview round |
+| GET | `/api/analytics/summary` | ✓ | Dashboard KPIs |
+| GET | `/api/analytics/funnel` | ✓ | Stage funnel counts |
+| GET | `/api/analytics/time-to-hire` | ✓ | Time-to-hire by month |
+| GET | `/api/analytics/activity` | ✓ | Recent stage changes |
+| GET | `/api/analytics/email-stats` | ✓ recruiter | Email delivery stats |
+| GET | `/api/email/logs` | ✓ recruiter | Email delivery logs |
+| GET | `/api/email/preferences` | ✓ | Notification preferences |
+| PATCH | `/api/email/preferences` | ✓ | Update preferences |
+| POST | `/api/email/resend-callback` | webhook | Resend delivery webhook |
+| GET | `/api/email/unsubscribe` | token | One-click unsubscribe |
+| GET | `/health` | — | Health check |
+
+---
+
+## Email Service
+
+Five transactional email templates triggered automatically:
+
+| Template | Trigger | Recipient |
+|---|---|---|
+| Magic link | Interview scheduled | Interviewer |
+| Resume uploaded | Candidate scored | Recruiter |
+| Interview scheduled | Interview scheduled | Candidate |
+| Feedback reminder | 24 h after interview, no feedback | Interviewer |
+| Interview reminder | 24 h before interview | Interviewer + Candidate |
+
+Emails queue in D1 and process every minute via Wrangler cron. For Resend webhook delivery tracking, point your endpoint to:
+```
+https://<your-worker>.workers.dev/api/email/resend-callback
+```
+
+---
+
+## Project Structure
+
+```
+backend/src/
+├── index.ts                    # Hono app entry + scheduled handler
+├── middleware/
+│   ├── auth.ts                 # JWT verification (jose)
+│   ├── cors.ts                 # CORS + preflight
+│   ├── error.ts                # Global error handler
+│   └── rate-limit.ts           # KV-backed IP rate limiter
+├── routes/
+│   ├── auth.ts                 # /api/auth/*
+│   ├── jobs.ts                 # /api/jobs/*
+│   ├── candidates.ts           # /api/candidates/* + SSE upload
+│   ├── interviews.ts           # /api/interviews/*
+│   ├── interview-types.ts      # /api/interview-types/*
+│   ├── analytics.ts            # /api/analytics/*
+│   ├── email.ts                # /api/email/*
+│   └── settings.ts             # /api/settings/*
+├── services/
+│   ├── ai/                     # OpenRouter client + configurable fallback chain
+│   ├── embeddings/             # Workers AI + Vectorize helpers
+│   ├── email/                  # Resend + SendGrid clients, templates, queue processor
+│   ├── parsing/                # PDF + DOCX text extraction
+│   ├── scoring/                # Skill matcher + score aggregator + pipeline
+│   └── storage/                # R2 helpers
+├── db/
+│   ├── migrations/             # D1 SQL schema (9 tables)
+│   └── queries/                # Typed D1 query helpers
+└── types/                      # TypeScript interfaces (Env, DB rows, API, email)
+
+frontend/
+├── app/                        # Next.js App Router pages
+├── components/
+│   ├── (auth)/                 # Login, Signup, Landing
+│   ├── (recruiter)/            # All recruiter screens
+│   ├── (interviewer)/          # Interviewer screens
+│   ├── shared/                 # Sidebar, Navigation, CommandPalette
+│   └── ui/                     # Design system primitives
+├── context/AuthContext.tsx     # JWT auth state
+├── hooks/queries/              # React Query hooks (6 files)
+├── lib/
+│   ├── api.ts                  # Typed API client
+│   ├── auth.ts                 # Token storage helpers (localStorage + cookie)
+│   ├── types.ts                # Domain types
+│   └── utils.ts                # cn(), initials(), formatDate()
+└── middleware.ts               # Route protection (reads synthire_token cookie)
+```
+
+---
+
+## Key Design Decisions
+
+| Decision | Reason |
+|---|---|
+| Raw D1 queries (no ORM) | Drizzle adds ~50 KB bundle; 9 tables doesn't justify it |
+| `bcryptjs` not `bcrypt` | `bcrypt` uses native bindings that crash in Workers |
+| Workers AI for embeddings | Built-in binding, no API round-trip, no rate limits |
+| Async email queue | Keeps API responses fast; emails process in background cron |
+| JWT in localStorage + cookie | localStorage for API calls; cookie for Next.js middleware |
+| SSE for resume upload | Streams real-time parse/score progress to the UI |
+| All config in wrangler.toml | Model names, thresholds, TTLs — tunable without code changes |
+| KV-backed rate limiting | Works on free tier; self-cleaning keys via TTL |
+| Native fetch for Resend/SendGrid | Avoids Node.js npm dependencies that don't run in Workers |

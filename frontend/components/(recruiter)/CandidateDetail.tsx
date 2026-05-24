@@ -3,13 +3,33 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Card, Badge, Avatar, ScoreRing, ScoreBar, ScorePill, StagePill, AIPill } from "@/components/ui";
-import { useCandidate } from "@/hooks/queries/useCandidates";
+import { useCandidate, useUpdateCandidateStage, useGenerateQuestions } from "@/hooks/queries/useCandidates";
 import { useParams } from "next/navigation";
 import { ScheduleModal } from "./ScheduleModal";
 import { ActivityRow } from "./Dashboard";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/components/ui";
 
 // Candidate Detail — Resume + AI Analysis
-const { useState: useS_cd } = React;
+const { useState: useS_cd, useEffect: useE_cd } = React;
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
+
+async function downloadResume(candidateId: string, filename: string) {
+  const { getToken } = await import('@/lib/auth')
+  const token = getToken()
+  const res = await fetch(`${API_URL}/api/candidates/${candidateId}/resume`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) return
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const router = useRouter();
@@ -17,10 +37,35 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const actualId = candidateId ?? paramId ?? '';
 
   const { data: apiCandidate, isLoading } = useCandidate(actualId);
+  const { mutate: updateStage } = useUpdateCandidateStage();
+  const { user } = useAuth();
+  const toast = useToast();
 
   const [tab, setTab] = useS_cd("overview");
   const [zoom, setZoom] = useS_cd(100);
   const [showSchedule, setShowSchedule] = useS_cd(false);
+  const [resumeBlobUrl, setResumeBlobUrl] = useS_cd<string | null>(null);
+
+  useE_cd(() => {
+    if (!actualId) return;
+    let revoked = false;
+    (async () => {
+      try {
+        const { getToken } = await import('@/lib/auth');
+        const token = getToken();
+        const res = await fetch(`${API_URL}/api/candidates/${actualId}/resume`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok || revoked) return;
+        const blob = await res.blob();
+        if (!revoked) setResumeBlobUrl(URL.createObjectURL(blob));
+      } catch {}
+    })();
+    return () => {
+      revoked = true;
+      setResumeBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+    };
+  }, [actualId]);
 
   if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading candidate...</div>;
   if (!apiCandidate) return <div style={{padding:32,color:'var(--danger)'}}>Candidate not found</div>;
@@ -37,8 +82,20 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
     skills: apiCandidate.technical_skills ?? [],
     experience: (apiCandidate.professional_experience as any[]) ?? [],
     education: (apiCandidate.education_details as any[]) ?? [],
-    strengths: [],
-    concerns: [],
+    ...(() => {
+      let summary = apiCandidate.ai_analysis ?? '';
+      let strengths: string[] = [];
+      let concerns: string[] = [];
+      try {
+        const parsed = JSON.parse(apiCandidate.ai_analysis ?? '');
+        if (parsed && typeof parsed === 'object' && parsed.summary) {
+          summary = parsed.summary;
+          strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
+          concerns = Array.isArray(parsed.concerns) ? parsed.concerns : [];
+        }
+      } catch {}
+      return { ai_analysis: summary, strengths, concerns };
+    })(),
     avatar: '',
     title: '',
     years: 0,
@@ -68,9 +125,19 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
             <div className="tiny">Overall</div>
           </div>
           <div className="tsCD-divider"/>
-          <Button variant="ghost" icon={<Icon.X size={14}/>}>Reject</Button>
-          <Button variant="secondary" icon={<Icon.Check size={14} stroke={3}/>}>Shortlist</Button>
-          <Button variant="primary" icon={<Icon.Calendar size={14}/>} onClick={() => setShowSchedule(true)}>Schedule interview</Button>
+          {user?.role === 'recruiter' && (
+            <>
+              <Button variant="ghost" icon={<Icon.X size={14}/>} onClick={() => updateStage({ id: actualId, status: 'rejected' }, {
+                onSuccess: () => toast({ message: 'Candidate rejected', variant: 'info' }),
+                onError: () => toast({ message: 'Failed to update status', variant: 'error' }),
+              })}>Reject</Button>
+              <Button variant="secondary" icon={<Icon.Check size={14} stroke={3}/>} onClick={() => updateStage({ id: actualId, status: 'shortlisted' }, {
+                onSuccess: () => toast({ message: 'Candidate shortlisted' }),
+                onError: () => toast({ message: 'Failed to update status', variant: 'error' }),
+              })}>Shortlist</Button>
+              <Button variant="primary" icon={<Icon.Calendar size={14}/>} onClick={() => setShowSchedule(true)}>Schedule interview</Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -81,20 +148,27 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
           <div className="tsCD-resumeBar">
             <div className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Icon.FileText size={14}/>
-              <span>Priya_Sharma_Resume.pdf</span>
-              <span style={{ color: "var(--muted)" }}>· 2 pages · 142 KB</span>
+              <span>{c.name.replace(/\s+/g, '_')}_Resume.pdf</span>
             </div>
             <div className="tsZoom">
               <button className="tsIconBtn" onClick={() => setZoom(z => Math.max(50, z - 10))}><Icon.ChevronDown size={14}/></button>
               <span className="mono small" style={{ width: 40, textAlign: "center" }}>{zoom}%</span>
               <button className="tsIconBtn" onClick={() => setZoom(z => Math.min(200, z + 10))}><Icon.ChevronUp size={14}/></button>
-              <button className="tsIconBtn"><Icon.Download size={14}/></button>
+              <button className="tsIconBtn" title="Download resume" onClick={() => downloadResume(actualId, `${c.name.replace(/\s+/g, '_')}_Resume.pdf`)}><Icon.Download size={14}/></button>
             </div>
           </div>
           <div className="tsCD-resumeView">
-            <div className="tsResume" style={{ transform: `scale(${zoom/100})`, transformOrigin: "top center" }}>
-              <ResumePreview c={c}/>
-            </div>
+            {resumeBlobUrl ? (
+              <iframe
+                src={resumeBlobUrl}
+                style={{ width: `${zoom}%`, height: '100%', border: 'none', display: 'block', margin: '0 auto' }}
+                title="Resume"
+              />
+            ) : (
+              <div className="tsResume" style={{ transform: `scale(${zoom/100})`, transformOrigin: "top center" }}>
+                <ResumePreview c={c}/>
+              </div>
+            )}
           </div>
         </div>
 
@@ -126,61 +200,56 @@ const ResumePreview = ({ c }: any) => (
   <div className="tsResume-doc">
     <div className="tsResume-name">{c.name}</div>
     <div className="tsResume-contact">
-      <span>{c.email}</span><span>· {c.location}</span><span>· linkedin.com/in/priya-sharma</span><span>· github.com/priyasharma</span>
+      <span>{c.email}</span>{c.location && <span>· {c.location}</span>}
     </div>
-    <div className="tsResume-section">
-      <div className="tsResume-h">Summary</div>
-      <div className="tsResume-p">Senior software engineer with {c.years}+ years building payment infrastructure at Stripe and Plaid. Specialized in distributed systems, event-driven architectures, and high-throughput APIs. Led teams of 3-7 engineers shipping customer-critical features at scale.</div>
-    </div>
-    <div className="tsResume-section">
-      <div className="tsResume-h">Experience</div>
-      {c.experience.map((e, i) => (
-        <div key={i} className="tsResume-exp">
-          <div className="tsResume-expHead">
-            <span className="tsResume-expRole">{e.role}</span>
-            <span className="tsResume-expDates">{e.from} – {e.to}</span>
-          </div>
-          <div className="tsResume-expCo">{e.company}</div>
-          <div className="tsResume-p">{e.desc}</div>
-          <ul className="tsResume-bullets">
-            <li>Scaled core payment API from 5M to 80M daily requests with 99.99% uptime SLA</li>
-            <li>Led migration to event-driven architecture, reducing p99 latency by 38%</li>
-            <li>Mentored 4 engineers; 2 promoted to senior under tenure</li>
-          </ul>
-        </div>
-      ))}
-    </div>
-    <div className="tsResume-section">
-      <div className="tsResume-h">Education</div>
-      {c.education.map((e, i) => (
-        <div key={i} className="tsResume-edu">
-          <span><b>{e.degree}</b>, {e.school}</span>
-          <span className="tsResume-dates">{e.year}</span>
-        </div>
-      ))}
-    </div>
-    <div className="tsResume-section">
-      <div className="tsResume-h">Technical skills</div>
-      <div className="tsResume-p">
-        <b>Languages:</b> TypeScript, Python, Go, Rust, SQL<br/>
-        <b>Frameworks:</b> React, Next.js, Node.js, FastAPI, gRPC<br/>
-        <b>Infrastructure:</b> AWS, Terraform, Docker, Kafka, Postgres, Redis, DynamoDB
+    {c.ai_analysis && (
+      <div className="tsResume-section">
+        <div className="tsResume-h">Summary</div>
+        <div className="tsResume-p">{c.ai_analysis}</div>
       </div>
-    </div>
+    )}
+    {c.experience.length > 0 && (
+      <div className="tsResume-section">
+        <div className="tsResume-h">Experience</div>
+        {c.experience.map((e: any, i: number) => (
+          <div key={i} className="tsResume-exp">
+            <div className="tsResume-expHead">
+              <span className="tsResume-expRole">{e.role}</span>
+              <span className="tsResume-expDates">{e.from}{e.to ? ` – ${e.to}` : ''}</span>
+            </div>
+            <div className="tsResume-expCo">{e.company}</div>
+            {e.description && <div className="tsResume-p">{e.description}</div>}
+          </div>
+        ))}
+      </div>
+    )}
+    {c.education.length > 0 && (
+      <div className="tsResume-section">
+        <div className="tsResume-h">Education</div>
+        {c.education.map((e: any, i: number) => (
+          <div key={i} className="tsResume-edu">
+            <span><b>{e.degree}</b>{(e.institution ?? e.school) ? `, ${e.institution ?? e.school}` : ''}</span>
+            <span className="tsResume-dates">{e.from ? `${e.from}${e.to ? ` – ${e.to}` : ''}` : (e.year ?? '')}</span>
+          </div>
+        ))}
+      </div>
+    )}
+    {c.skills.length > 0 && (
+      <div className="tsResume-section">
+        <div className="tsResume-h">Technical skills</div>
+        <div className="tsResume-p">{c.skills.join(', ')}</div>
+      </div>
+    )}
   </div>
 );
 
 // ===== Overview tab =====
 function OverviewTab({ c }: any) {
-    const skillsTable = [
-    { name: "TypeScript", required: true, level: "Senior", years: 6, status: "met" },
-    { name: "React", required: true, level: "Senior", years: 7, status: "met" },
-    { name: "Python", required: true, level: "Mid", years: 4, status: "met" },
-    { name: "AWS", required: true, level: "Senior", years: 5, status: "met" },
-    { name: "Distributed systems", required: true, level: "Senior", years: 4, status: "met" },
-    { name: "Kubernetes", required: false, level: "Mid", years: 2, status: "partial" },
-    { name: "Rust", required: false, level: "—", years: 0, status: "missing" },
-  ];
+    const skillsTable = c.skills.map((skill: string) => ({
+    name: skill,
+    required: true,
+    status: 'met' as const,
+  }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -189,7 +258,7 @@ function OverviewTab({ c }: any) {
         <div style={{ padding: 22, position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <AIPill>AI score breakdown</AIPill>
-            <span className="small" style={{ color: "var(--muted)" }}>Last scored 2 hr ago</span>
+            <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${new Date(c.updated_at).toLocaleDateString()}` : 'Scored recently'}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
             <ScoreRing score={c.score} size={132} stroke={9} label="Match"/>
@@ -207,26 +276,20 @@ function OverviewTab({ c }: any) {
       <Card padded={false}>
         <div className="tsCardHead" style={{ paddingBottom: 8 }}>
           <div className="h3">Skills match</div>
-          <span className="small" style={{ color: "var(--muted)" }}>5 of 5 required met</span>
+          <span className="small" style={{ color: "var(--muted)" }}>{c.skills.length} skills detected</span>
         </div>
         <div className="tsSkillTable">
           <div className="tsSkillTable-head">
             <div>Skill</div>
             <div>Required</div>
-            <div>Level</div>
-            <div style={{ textAlign: "right" }}>Years</div>
             <div></div>
           </div>
           {skillsTable.map(s => (
             <div key={s.name} className="tsSkillTable-row">
               <div style={{ fontWeight: 500 }}>{s.name}</div>
               <div>{s.required ? <Badge variant="primary">Required</Badge> : <span className="small" style={{ color: "var(--muted)" }}>Nice-to-have</span>}</div>
-              <div className="small">{s.level}</div>
-              <div className="mono" style={{ textAlign: "right", fontSize: 12 }}>{s.years || "—"}</div>
               <div>
                 {s.status === "met" && <span className="tsSkillStatus tsSkillStatus-met"><Icon.Check size={11} stroke={3}/></span>}
-                {s.status === "partial" && <span className="tsSkillStatus tsSkillStatus-partial"><Icon.AlertTriangle size={11}/></span>}
-                {s.status === "missing" && <span className="tsSkillStatus tsSkillStatus-missing"><Icon.X size={11} stroke={3}/></span>}
               </div>
             </div>
           ))}
@@ -245,9 +308,9 @@ function OverviewTab({ c }: any) {
                   <div style={{ fontWeight: 500 }}>{e.role} <span style={{ color: "var(--muted)", fontWeight: 400 }}>· {e.company}</span></div>
                   <div className="mono small" style={{ color: "var(--muted)" }}>{e.from} – {e.to}</div>
                 </div>
-                <div className="small" style={{ color: "var(--text-2)", margin: "4px 0 8px", lineHeight: 1.5 }}>{e.desc}</div>
+                <div className="small" style={{ color: "var(--text-2)", margin: "4px 0 8px", lineHeight: 1.5 }}>{e.description}</div>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {e.stack.map(s => <span key={s} className="tsChip" style={{ fontSize: 10.5 }}>{s}</span>)}
+                  {(e.stack ?? e.technologies ?? []).map((s: string) => <span key={s} className="tsChip" style={{ fontSize: 10.5 }}>{s}</span>)}
                 </div>
               </div>
             </div>
@@ -264,7 +327,7 @@ function OverviewTab({ c }: any) {
               <Icon.Book size={20} style={{ color: "var(--primary-3)" }}/>
               <div>
                 <div style={{ fontWeight: 500, fontSize: 13.5 }}>{e.degree}</div>
-                <div className="small" style={{ color: "var(--muted)" }}>{e.school} · <span className="mono">{e.year}</span></div>
+                <div className="small" style={{ color: "var(--muted)" }}>{e.institution ?? e.school ?? ''} · <span className="mono">{e.from ? `${e.from}${e.to ? ' – ' + e.to : ''}` : (e.year ?? '')}</span></div>
               </div>
             </div>
           ))}
@@ -293,62 +356,24 @@ function OverviewTab({ c }: any) {
 
 // ===== Resume breakdown tab =====
 function BreakdownTab({ c }: any) {
+  const skills: string[] = c.skills ?? [];
+  const certs: string[] = (c as any).certifications ?? [];
+  const achievements: string[] = (c as any).achievements ?? [];
   const sections = [
-    { id: "skills", title: "Technical skills", count: 18, icon: <Icon.Code size={14}/>,
+    skills.length > 0 && { id: "skills", title: "Technical skills", count: skills.length, icon: <Icon.Code size={14}/>,
       groups: [
-        { name: "Languages", items: [
-          { v: "TypeScript", years: 6, match: "met" },
-          { v: "Python", years: 4, match: "met" },
-          { v: "Go", years: 2, match: "partial" },
-          { v: "Rust", years: 0, match: "missing" },
-        ]},
-        { name: "Frameworks", items: [
-          { v: "React / Next.js", years: 7, match: "met" },
-          { v: "Node.js / FastAPI", years: 5, match: "met" },
-          { v: "gRPC", years: 3, match: "partial" },
-        ]},
-        { name: "Infrastructure", items: [
-          { v: "AWS (Lambda, ECS, RDS)", years: 5, match: "met" },
-          { v: "Terraform", years: 4, match: "met" },
-          { v: "Kafka", years: 3, match: "met" },
-          { v: "Kubernetes", years: 2, match: "partial" },
-        ]},
-        { name: "Databases", items: [
-          { v: "Postgres", years: 6, match: "met" },
-          { v: "Redis", years: 5, match: "met" },
-          { v: "DynamoDB", years: 3, match: "met" },
-        ]},
+        { name: "Detected skills", items: skills.map(s => ({ v: s, years: 0, match: "met" })) },
       ]},
-    { id: "exp", title: "Professional experience", count: 2, icon: <Icon.Briefcase size={14}/>, content: "expanded" },
-    { id: "edu", title: "Education", count: 2, icon: <Icon.Book size={14}/> },
-    { id: "certs", title: "Certifications", count: 3, icon: <Icon.ShieldCheck size={14}/>,
-      certs: [
-        { name: "AWS Solutions Architect Professional", issuer: "Amazon Web Services", date: "Mar 2024", match: "met" },
-        { name: "Certified Kubernetes Administrator", issuer: "CNCF", date: "Sep 2023", match: "partial" },
-        { name: "PostgreSQL Database Administration", issuer: "EnterpriseDB", date: "Jan 2023", match: "neutral" },
-      ]},
-    { id: "ach", title: "Achievements", count: 5, icon: <Icon.Award size={14}/>,
-      items: [
-        "Scaled payment API from 5M → 80M daily requests at Stripe",
-        "Reduced p99 latency by 38% via event-driven refactor",
-        "Led team of 5 engineers on Plaid Link integration",
-        "Open-sourced 3 internal libraries (5,200+ GitHub stars combined)",
-        "Speaker at React Summit 2024 — 'State management at scale'",
-      ]},
-    { id: "lang", title: "Languages", count: 3, icon: <Icon.Globe size={14}/>,
-      items: [
-        { v: "English — Native" },
-        { v: "Hindi — Native" },
-        { v: "Spanish — Conversational" },
-      ]},
-    { id: "os", title: "Open-source contributions", count: 4, icon: <Icon.Github size={14}/>,
-      items: [
-        { v: "vercel/next.js — 12 PRs merged (perf optimizations)" },
-        { v: "stripe/stripe-node — Maintainer, 2022–2024" },
-        { v: "tanstack/query — 4 PRs (cache invalidation fix)" },
-        { v: "rust-lang/rust — 1 PR (docs)" },
-      ]},
-  ];
+    c.experience?.length > 0 && { id: "exp", title: "Professional experience", count: c.experience.length, icon: <Icon.Briefcase size={14}/>, experience: c.experience },
+    c.education?.length > 0 && { id: "edu", title: "Education", count: c.education.length, icon: <Icon.Book size={14}/>, education: c.education },
+    certs.length > 0 && { id: "certs", title: "Certifications", count: certs.length, icon: <Icon.ShieldCheck size={14}/>,
+      certs: certs.map(name => ({ name, issuer: '', date: '', match: 'met' })) },
+    achievements.length > 0 && { id: "ach", title: "Achievements", count: achievements.length, icon: <Icon.Award size={14}/>,
+      items: achievements },
+  ].filter(Boolean) as any[];
+  if (sections.length === 0) {
+    return <div style={{ padding: 24, color: 'var(--muted)', fontSize: 13 }}>No detailed breakdown available yet.</div>;
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {sections.map(s => <BreakdownSection key={s.id} s={s}/>)}
@@ -416,6 +441,33 @@ function BreakdownSection({ s }: any) {
               ))}
             </div>
           )}
+          {s.experience && Array.isArray(s.experience) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 0' }}>
+              {s.experience.map((e: any, i: number) => (
+                <div key={i} style={{ borderLeft: '2px solid var(--border)', paddingLeft: 14 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{e.role} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· {e.company}</span></div>
+                  <div className="small mono" style={{ color: 'var(--muted)', marginBottom: 4 }}>{e.from ?? ''}{e.to ? ' – ' + e.to : ''}</div>
+                  {e.description && <div className="small" style={{ color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 6 }}>{e.description}</div>}
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {(e.stack ?? e.technologies ?? []).map((t: string) => <span key={t} className="tsChip" style={{ fontSize: 10.5 }}>{t}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {s.education && Array.isArray(s.education) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {s.education.map((e: any, i: number) => (
+                <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8 }}>
+                  <Icon.Book size={18} style={{ color: 'var(--primary-3)', flexShrink: 0, marginTop: 2 }}/>
+                  <div>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{e.degree}{e.field ? ` · ${e.field}` : ''}</div>
+                    <div className="small" style={{ color: 'var(--muted)' }}>{e.institution ?? e.school ?? ''}{(e.from || e.year) ? ` · ${e.from ?? e.year ?? ''}${e.to ? ' – ' + e.to : ''}` : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -424,16 +476,26 @@ function BreakdownSection({ s }: any) {
 
 // ===== AI tab =====
 function AITab({ c }: any) {
-    return (
+  const [questions, setQuestions] = React.useState<{ q: string; why: string }[]>([]);
+  const { mutate: generateQs, isPending } = useGenerateQuestions(c.id);
+
+  const handleGenerate = () => {
+    generateQs(undefined, {
+      onSuccess: (data) => setQuestions(data.questions ?? []),
+    });
+  };
+
+  return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <Card padded={false} className="ai-border">
         <div style={{ padding: 22, position: "relative" }}>
           <AIPill>AI summary</AIPill>
           <div style={{ marginTop: 14, fontSize: 14, lineHeight: 1.65 }}>
-            <span className="ai-text">Strong technical match.</span> Priya brings deep payment-infrastructure experience from Stripe and Plaid that aligns directly with the role's distributed-systems requirements. Her React + Python + AWS skills are at senior level (5-7 years each). The only meaningful gap is Rust (listed as nice-to-have).
-          </div>
-          <div style={{ marginTop: 14, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            <b style={{ color: "var(--text)" }}>Recommendation:</b> Proceed to technical interview. Focus questions on system design at 80M+ rps scale, cache invalidation patterns, and her gRPC migration experience.
+            {c.ai_analysis ? (
+              <span style={{ color: 'var(--text-2)' }}>{c.ai_analysis}</span>
+            ) : (
+              <span className="small" style={{ color: 'var(--muted)' }}>AI analysis will appear here once the resume is scored.</span>
+            )}
           </div>
         </div>
       </Card>
@@ -444,12 +506,14 @@ function AITab({ c }: any) {
           <Badge variant="ai"><Icon.Sparkles size={10}/> Tailored to gaps</Badge>
         </div>
         <div style={{ padding: "0 24px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { q: "Walk me through scaling your payment API from 5M → 80M daily requests. What broke first?", why: "Validates resume claim of 16x scale. Probes failure-mode thinking and observability instincts." },
-            { q: "You mention reducing p99 latency by 38% with an event-driven refactor. What patterns did you reach for?", why: "Tests system-design depth, specifically pub/sub and idempotency reasoning at scale." },
-            { q: "We use Kubernetes heavily. Your resume shows 2 years — talk about a real incident you debugged in prod.", why: "Closes the K8s gap (nice-to-have but valuable). Looks for operational maturity." },
-            { q: "Mentorship: you grew 2 engineers to senior. What's your model for that?", why: "Validates leadership claim — important for the level we're hiring at." },
-          ].map((it, i) => (
+          {questions.length === 0 && !isPending && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="small" style={{ color: 'var(--muted)', flex: 1 }}>Generate tailored questions based on this candidate's profile and the job requirements.</div>
+              <Button variant="secondary" size="sm" icon={<Icon.Sparkles size={12}/>} onClick={handleGenerate}>Generate</Button>
+            </div>
+          )}
+          {isPending && <div className="small" style={{ color: 'var(--muted)' }}>Generating questions...</div>}
+          {questions.map((it, i) => (
             <div key={i} className="tsAIQ">
               <div style={{ display: "flex", gap: 10 }}>
                 <span className="tsAIQ-num mono">{String(i+1).padStart(2,"0")}</span>
@@ -472,10 +536,9 @@ const ActivityTab = ({ c }: any) => (
     <div className="tsCardHead"><div className="h3">Activity</div></div>
     <div className="tsTimeline" style={{ padding: "0 24px 22px" }}>
       {[
-        { who: "AI", action: "scored candidate at 92%", target: "Senior Software Engineer", time: "2 hours ago", type: "ai" },
-        { who: "Sarah Chen", action: "moved candidate from New to Shortlisted", time: "5 hours ago", type: "move" },
-        { who: "Priya Sharma", action: "submitted application", time: "Yesterday at 4:12 PM", type: "neutral" },
-      ].map((a, i) => <ActivityRow key={i} a={a}/>)}
+        c.overall_score != null && { who: "AI", action: `scored candidate at ${c.overall_score}%`, time: c.updated_at ? new Date(c.updated_at).toLocaleString() : '', type: "ai" },
+        c.created_at && { who: c.name, action: "submitted application", time: new Date(c.created_at).toLocaleString(), type: "neutral" },
+      ].filter(Boolean).map((a, i) => <ActivityRow key={i} a={a}/>)}
     </div>
   </Card>
 );

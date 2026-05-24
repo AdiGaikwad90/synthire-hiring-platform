@@ -36,7 +36,7 @@ export const errorHandler: ErrorHandler<{ Bindings: Env }> = (err, c) => {
     )
   }
 
-  console.error('[Unhandled Error]', err)
+  console.error(`[error] request_id=${request_id}`, err)
   return c.json(
     {
       success: false,

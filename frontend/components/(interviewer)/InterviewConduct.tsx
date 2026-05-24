@@ -5,6 +5,7 @@ import { Icon } from "@/lib/icons";
 import { Modal, Button, Avatar, Badge, AIPill, Textarea, useToast, ScorePill } from "@/components/ui";
 import { useInterview, useSubmitFeedback } from "@/hooks/queries/useInterviews";
 import { useParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 // Interview Conduct page + Feedback form modal
 const { useState: useS_ic, useEffect: useE_ic, useRef: useR_ic } = React;
@@ -15,12 +16,13 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
   const actualId = interviewId ?? paramId ?? '';
 
   const { data: interview, isLoading } = useInterview(actualId);
+  const { user } = useAuth();
 
   const [tab, setTab] = useS_ic("ai");
-  const [seconds, setSeconds] = useS_ic(33 * 60 + 47); // 33:47 elapsed of 60-min
+  const [seconds, setSeconds] = useS_ic(0);
   const [feedbackOpen, setFeedbackOpen] = useS_ic(false);
-  const [scores, setScores] = useS_ic({ tech: 4, comm: 5, problem: 4, culture: 4 });
-  const [notes, setNotes] = useS_ic("• Strong on system design — walked through 5M→80M scaling cleanly\n• Identified async/idempotency as the right primitive without prompting\n• Mentioned testing strategy — would dig deeper next round");
+  const [scores, setScores] = useS_ic({ tech: 0, comm: 0, problem: 0, culture: 0 });
+  const [notes, setNotes] = useS_ic("");
   const [savedAt, setSavedAt] = useS_ic(new Date());
 
   useE_ic(() => {
@@ -39,10 +41,9 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
   if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading interview...</div>;
   if (!interview) return <div style={{padding:32,color:'var(--danger)'}}>Interview not found</div>;
 
-  // Use interview data; candidate name will show as ID until candidate lookup is added
   const c = {
     id: interview.candidate_id,
-    name: interview.candidate_id,
+    name: interview.candidate_name ?? interview.candidate_id,
     email: '',
     avatar: '',
     title: '',
@@ -58,14 +59,14 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span className="h3" style={{ fontWeight: 500 }}>{c.name}</span>
-            <Badge variant="warning" dot>Technical Round · In progress</Badge>
+            <Badge variant="warning" dot>{interview.status}</Badge>
           </div>
-          <div className="small" style={{ color: "var(--muted)" }}>Interviewer: John Smith · {c.title}</div>
+          <div className="small" style={{ color: "var(--muted)" }}>Interviewer: {user?.name ?? 'You'}{c.title ? ` · ${c.title}` : ''}</div>
         </div>
         <div className="tsConduct-timer">
           <span className="tsConduct-timer-dot"/>
           <span className="tsConduct-timer-time">{mm}:{ss}</span>
-          <span className="small" style={{ color: "var(--muted)" }}>/ 60:00</span>
+          <span className="small" style={{ color: "var(--muted)" }}>/ {String(interview.duration_minutes ?? 60).padStart(2,'0')}:00</span>
         </div>
         <Button variant="secondary" icon={<Icon.Video size={14}/>}>Open Zoom</Button>
         <Button variant="primary" icon={<Icon.Check size={14} stroke={3}/>} onClick={() => setFeedbackOpen(true)}>Complete feedback</Button>
@@ -77,7 +78,7 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
           <div className="tsConduct-tabs">
             <button className={`tsTab ${tab === "resume" ? "tsTab-active" : ""}`} onClick={() => setTab("resume")}><Icon.FileText size={13}/> Resume</button>
             <button className={`tsTab ${tab === "jd" ? "tsTab-active" : ""}`} onClick={() => setTab("jd")}><Icon.Briefcase size={13}/> Job description</button>
-            <button className={`tsTab ${tab === "ai" ? "tsTab-active" : ""}`} onClick={() => setTab("ai")}><Icon.Sparkles size={13}/> AI questions <span className="tsTab-count">8</span></button>
+            <button className={`tsTab ${tab === "ai" ? "tsTab-active" : ""}`} onClick={() => setTab("ai")}><Icon.Sparkles size={13}/> AI questions</button>
             <button className={`tsTab ${tab === "prev" ? "tsTab-active" : ""}`} onClick={() => setTab("prev")}>Previous feedback</button>
           </div>
           <div className="tsConduct-tabBody">
@@ -150,23 +151,17 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
 
 // ----- AI Questions Tab -----
 function AIQuestionsTab() {
-  const items = [
-    { q: "Walk me through scaling your payment API from 5M → 80M daily requests. What broke first?", ctx: "Resume claim: 16x scale at Stripe. Validates real depth.", followups: ["What was your observability strategy?", "How did you handle backwards-compat during the migration?"], why: "Tests scale + failure-mode thinking" },
-    { q: "You mention reducing p99 latency by 38% via an event-driven refactor. Walk through the design.", ctx: "Pub/sub, queues, idempotency — strong system-design probes.", followups: ["How did you guarantee exactly-once?", "Cost trade-offs?"], why: "Validates distributed-systems depth" },
-    { q: "We use Kubernetes heavily. Your resume shows 2 years. Talk about a real prod incident you debugged.", ctx: "Closes the K8s gap (nice-to-have).", followups: ["What metric alerted you?", "What's your blameless-postmortem ritual?"], why: "Operational maturity check" },
-    { q: "Mentorship: you grew 2 engineers to senior at Stripe. What's your model?", ctx: "Validates leadership claim — important for staff-track.", followups: ["How do you give critical feedback?", "Lowest-performer story?"], why: "Leadership at level" },
-    { q: "Tell me about a time you disagreed strongly with a senior leader. How did it resolve?", ctx: "Behavioral / disagreement.", followups: [], why: "Culture / disagree-and-commit" },
-    { q: "What's a recent tool, paper, or essay that changed how you build software?", ctx: "Curiosity / staying current.", followups: [], why: "Growth mindset" },
-    { q: "If we hired you tomorrow, what's the first thing you'd want to ship in 30 days?", ctx: "Hypothetical / fit signal.", followups: ["What would you ask before committing?"], why: "Strategic thinking" },
-    { q: "What concerns do you have about Acme, this role, or our stack?", ctx: "Self-aware / candor.", followups: [], why: "Two-way fit signal" },
-  ];
+  const items: { q: string; ctx: string; followups: string[]; why: string }[] = [];
   const [open, setOpen] = useS_ic(0);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
         <AIPill>Tailored questions</AIPill>
-        <span className="small" style={{ color: "var(--muted)" }}>Based on resume gaps and required skills for this role</span>
+        <span className="small" style={{ color: "var(--muted)" }}>AI question generation coming soon.</span>
       </div>
+      {items.length === 0 && (
+        <div style={{ padding: 16, color: 'var(--muted)', fontSize: 13 }}>No questions generated yet.</div>
+      )}
       {items.map((it, i) => (
         <div key={i} className="tsAIQCard">
           <button className="tsAIQCard-head" onClick={() => setOpen(o => o === i ? -1 : i)}>
@@ -229,23 +224,7 @@ const JobDescTab = () => (
 );
 
 const PrevFeedbackTab = () => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    <div className="tsPrevFB">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Avatar name="Sarah Chen" color="#6366F1" size={26}/>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Sarah Chen</div>
-            <div className="small" style={{ color: "var(--muted)" }}>Screening Round · 4 days ago</div>
-          </div>
-        </div>
-        <Badge variant="success"><Icon.Check size={11} stroke={3}/> Strong Yes</Badge>
-      </div>
-      <div className="small" style={{ color: "var(--text-2)", lineHeight: 1.55 }}>
-        Energetic and clear communicator. Walked me through her last 2 roles with specific impact metrics. Strong on motivations — wants to move toward more infra-heavy work, which lines up with this role. No red flags.
-      </div>
-    </div>
-  </div>
+  <div style={{ padding: 16, color: 'var(--muted)', fontSize: 13 }}>No previous feedback available.</div>
 );
 
 // ----- Stars -----
@@ -277,11 +256,11 @@ function FeedbackForm({ c, interviewId, initialScores, onClose }: any) {
   };
 
   const recOptions = [
-    { id: "strongYes", label: "Strong Yes", desc: "Definitely hire" },
+    { id: "strong_yes", label: "Strong Yes", desc: "Definitely hire" },
     { id: "yes", label: "Yes", desc: "Move forward" },
     { id: "maybe", label: "Maybe", desc: "Mixed signals" },
     { id: "no", label: "No", desc: "Not a fit" },
-    { id: "strongNo", label: "Strong No", desc: "Do not hire" },
+    { id: "strong_no", label: "Strong No", desc: "Do not hire" },
   ];
 
   return (
@@ -292,7 +271,16 @@ function FeedbackForm({ c, interviewId, initialScores, onClose }: any) {
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button variant="secondary" icon={<Icon.Save size={13}/>}>Save draft</Button>
           <Button variant="primary" icon={<Icon.Send size={13}/>} disabled={!rec} onClick={() => {
-            submitFeedback({ scores, strengths, gaps, impact, recommendation: rec, ai_summary: aiSummary });
+            submitFeedback({
+              technical_score: scores.tech,
+              communication_score: scores.comm,
+              problem_solving_score: scores.problem,
+              culture_score: scores.culture,
+              strengths: strengths || undefined,
+              weaknesses: gaps || undefined,
+              notes: impact || undefined,
+              recommendation: rec,
+            });
             toast({ message: "Feedback submitted. Candidate moved to next stage." });
             onClose();
           }}>Submit feedback</Button>
@@ -304,7 +292,7 @@ function FeedbackForm({ c, interviewId, initialScores, onClose }: any) {
           <Avatar name={c.name} color={c.avatar} size={36}/>
           <div style={{ flex: 1 }}>
             <div className="small" style={{ color: "var(--muted)" }}>You're completing feedback for</div>
-            <div style={{ fontWeight: 500 }}>Technical Round · <b>{c.name}</b> · Senior Software Engineer</div>
+            <div style={{ fontWeight: 500 }}><b>{c.name}</b></div>
           </div>
           <Badge variant="warning" dot>In progress</Badge>
         </div>

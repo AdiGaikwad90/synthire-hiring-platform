@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Badge, AIPill, useToast } from "@/components/ui";
+import { Modal, Button, Badge, AIPill, Select, useToast } from "@/components/ui";
 import { Dropzone, FileRow } from "./Dropzone";
 import { useJobs } from "@/hooks/queries/useJobs";
 import { getToken } from "@/lib/auth";
@@ -20,12 +20,13 @@ interface ResumeBatchModalProps {
   onClose: () => void;
   onMatched?: (files: BatchFile[]) => void;
   defaultJobId?: string;
+  jobId?: string;
 }
 
-export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "" }: ResumeBatchModalProps) {
+export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId }: ResumeBatchModalProps) {
   const [stage, setStage] = React.useState<"drop" | "processing" | "done">("drop");
   const [files, setFiles] = React.useState<BatchFile[]>([]);
-  const [job, setJob] = React.useState(defaultJobId);
+  const [job, setJob] = React.useState(jobId ?? defaultJobId);
   const toast = useToast();
   const { data: jobsData } = useJobs();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
@@ -156,19 +157,17 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "" }: Resu
         <div>
           <div style={{ marginBottom: 14 }}>
             <div className="tiny" style={{ marginBottom: 6 }}>Score against</div>
-            <select
-              className="tsSelect"
+            <Select
               value={job}
               onChange={(e) => setJob(e.target.value)}
-              style={{ width: "100%", padding: 10 }}
-            >
-              <option value="">Select a job…</option>
-              {(jobsData?.items ?? []).map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.title} · {j.department ?? ""}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Select a job…" },
+                ...(jobsData?.items ?? []).map((j) => ({
+                  value: j.id,
+                  label: j.department ? `${j.title} · ${j.department}` : j.title,
+                })),
+              ]}
+            />
           </div>
           <Dropzone onFiles={handleFiles} multiple />
           <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>

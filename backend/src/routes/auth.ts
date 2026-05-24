@@ -5,13 +5,11 @@ import type { Env } from '../types/bindings'
 import { loginSchema, signupSchema, apiResponse, AppError } from '../types/api'
 import { signToken, authMiddleware } from '../middleware/auth'
 import {
-  createCompany,
-  createUser,
   findUserByEmail,
   findUserById,
   toPublicUser,
-  createEmailPreferences,
 } from '../db/queries/users'
+import { nanoid } from 'nanoid'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -25,19 +23,25 @@ router.post('/signup', zValidator('json', signupSchema), async (c) => {
     throw new AppError('Email already registered', 409)
   }
 
-  // Create company + user atomically
-  const company = await createCompany(c.env.DB, company_name)
+  // Generate IDs and hash before batch
+  const companyId = nanoid()
+  const userId = nanoid()
+  const unsubscribeToken = nanoid(32)
   const passwordHash = await hash(password, 10)
-  const user = await createUser(c.env.DB, {
-    company_id: company.id,
-    email,
-    password_hash: passwordHash,
-    name,
-    role: 'recruiter',
-  })
 
-  // Create default email preferences
-  await createEmailPreferences(c.env.DB, user.id)
+  // Create company + user + email preferences atomically
+  await c.env.DB.batch([
+    c.env.DB.prepare('INSERT INTO companies (id, name) VALUES (?, ?)').bind(companyId, company_name),
+    c.env.DB.prepare(
+      'INSERT INTO users (id, company_id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(userId, companyId, email, passwordHash, name, 'recruiter'),
+    c.env.DB.prepare(
+      'INSERT INTO email_preferences (user_id, unsubscribe_token) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING'
+    ).bind(userId, unsubscribeToken),
+  ])
+
+  const company = { id: companyId, name: company_name, plan: 'free', created_at: new Date().toISOString() }
+  const user = { id: userId, company_id: companyId, email, password_hash: passwordHash, name, role: 'recruiter', created_at: new Date().toISOString() }
 
   // Issue JWT
   const expirySeconds = parseInt(c.env.JWT_EXPIRY_SECONDS, 10)

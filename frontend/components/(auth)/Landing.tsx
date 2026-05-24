@@ -2,27 +2,28 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Button, Input, AIPill, Avatar, ScorePill } from "@/components/ui";
+import { Button, Input, AIPill, Avatar, ScorePill, useToast } from "@/components/ui";
 import { Logo } from "@/components/shared/Logo";
 
 // Landing page (condensed)
 function Landing() {
   const router = useRouter();
-  
+  const toast = useToast();
+
   return (
     <div className="tsLanding">
       {/* Nav */}
       <nav className="tsLanding-nav">
         <Logo/>
         <div className="tsLanding-navLinks">
-          <a>Product</a>
-          <a>Customers</a>
-          <a>Pricing</a>
-          <a>Docs</a>
+          <a href="#">Product</a>
+          <a href="#">Customers</a>
+          <a href="#">Pricing</a>
+          <a href="#">Docs</a>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="tsBtn tsBtn-ghost tsBtn-md" onClick={() => router.push("/login")}>Sign in</button>
-          <Button variant="primary" onClick={() => router.push("/login")}>Start free <Icon.ArrowRight size={13}/></Button>
+          <Button variant="primary" onClick={() => router.push("/signup")}>Start free <Icon.ArrowRight size={13}/></Button>
         </div>
       </nav>
 
@@ -46,8 +47,8 @@ function Landing() {
           </p>
 
           <div className="tsLanding-cta">
-            <Button variant="primary" size="lg" onClick={() => router.push("/login")}>Start free → 14-day trial</Button>
-            <button className="tsBtn tsBtn-secondary tsBtn-lg">
+            <Button variant="primary" size="lg" onClick={() => router.push("/signup")}>Start free → 14-day trial</Button>
+            <button className="tsBtn tsBtn-secondary tsBtn-lg" onClick={() => toast({ message: 'Demo coming soon' })}>
               <Icon.Play size={12}/> Watch demo · 2 min
             </button>
           </div>
@@ -82,7 +83,7 @@ function Landing() {
               <div className="tsLanding-feat-icon" style={{ background: `${f.c}1A`, color: f.c, borderColor: `${f.c}44` }}>{f.icon}</div>
               <div className="h3" style={{ marginBottom: 6 }}>{f.t}</div>
               <p className="small" style={{ color: "var(--text-2)", lineHeight: 1.55, marginBottom: 14 }}>{f.d}</p>
-              <button className="tsBtn tsBtn-ghost tsBtn-sm" style={{ padding: 0, color: "var(--primary-3)" }}>Learn more <Icon.ArrowRight size={11}/></button>
+              <button className="tsBtn tsBtn-ghost tsBtn-sm" style={{ padding: 0, color: "var(--primary-3)" }} onClick={() => toast({ message: 'Coming soon' })}>Learn more <Icon.ArrowRight size={11}/></button>
             </div>
           ))}
         </div>
@@ -141,7 +142,7 @@ function Landing() {
                 <span style={{ color: "var(--muted)" }}>/ seat / month</span>
               </div>
               <div style={{ height: 22 }}/>
-              <Button variant={p.primary ? "primary" : "secondary"} onClick={() => router.push("/login")} style={{ width: "100%" }}>{p.cta}</Button>
+              <Button variant={p.primary ? "primary" : "secondary"} onClick={() => router.push("/signup")} style={{ width: "100%" }}>{p.cta}</Button>
               <div style={{ borderTop: "1px solid var(--border)", margin: "22px 0" }}/>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {p.features.map(f => (
@@ -183,9 +184,9 @@ function Landing() {
         <div className="tsLanding-footBottom">
           <span className="small" style={{ color: "var(--muted)" }}>© 2026 Synthire · SOC 2 Type II · GDPR compliant</span>
           <div style={{ display: "flex", gap: 18 }}>
-            <a className="small" style={{ color: "var(--muted)" }}>Privacy</a>
-            <a className="small" style={{ color: "var(--muted)" }}>Terms</a>
-            <a className="small" style={{ color: "var(--muted)" }}>Cookies</a>
+            <a href="#" className="small" style={{ color: "var(--muted)" }}>Privacy</a>
+            <a href="#" className="small" style={{ color: "var(--muted)" }}>Terms</a>
+            <a href="#" className="small" style={{ color: "var(--muted)" }}>Cookies</a>
           </div>
         </div>
       </footer>
@@ -197,7 +198,7 @@ const FootCol = ({ title, items }: any) => (
   <div>
     <div className="tsLanding-footTitle">{title}</div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {items.map(i => <a key={i} className="small" style={{ color: "var(--text-2)" }}>{i}</a>)}
+      {items.map(i => <a key={i} href="#" className="small" style={{ color: "var(--text-2)" }}>{i}</a>)}
     </div>
   </div>
 );

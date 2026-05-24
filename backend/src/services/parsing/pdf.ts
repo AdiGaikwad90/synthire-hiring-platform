@@ -1,7 +1,6 @@
-// Uses pdf-parse package (available via nodejs_compat)
-import pdfParse from 'pdf-parse'
+import { extractText } from 'unpdf'
 
 export async function extractPdfText(buffer: ArrayBuffer): Promise<string> {
-  const result = await pdfParse(Buffer.from(buffer))
-  return result.text.trim()
+  const { text } = await extractText(new Uint8Array(buffer), { mergePages: true })
+  return (text as string).trim()
 }

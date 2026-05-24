@@ -211,6 +211,7 @@ const AIInsightsCard = () => { const router = useRouter(); return (
 
 // ----- Funnel chart -----
 const FunnelChart = ({ data }: any) => {
+  if (!data || data.length === 0) return <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No funnel data yet</div>;
   const max = data[0].count;
   return (
     <div className="tsFunnel">
@@ -239,6 +240,7 @@ const FunnelChart = ({ data }: any) => {
 
 // ----- Line chart -----
 const LineChart = ({ data, color = "#6366F1" }: any) => {
+  if (!data || data.length < 2) return <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No trend data yet</div>;
   const w = 480, h = 140;
   const xs = data.map((_, i) => (i / (data.length - 1)) * (w - 40) + 30);
   const max = Math.max(...data.map(d => d.days)) + 4;

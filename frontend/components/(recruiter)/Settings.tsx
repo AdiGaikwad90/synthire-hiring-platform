@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Card, Badge, Avatar, Input, Textarea, Toggle, useToast } from "@/components/ui";
+import { Modal, Button, Card, Badge, Avatar, Input, Textarea, Toggle, Select, useToast } from "@/components/ui";
 import { useInterviewTypes, useCreateInterviewType, useUpdateInterviewType, useDeleteInterviewType } from "@/hooks/queries/useSettings";
 
 // Settings — Interview Rounds Configuration
@@ -151,12 +151,14 @@ function Settings() {
               placeholder="E.g., Design Portfolio Review"/>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Input label="Duration (min)" type="number" value={draft.duration} onChange={e => setDraft(d => ({ ...d, duration: +e.target.value }))}/>
-              <label className="tsField">
-                <span className="tsField-label">Interviewer role</span>
-                <select className="tsSelect" value={draft.interviewer} onChange={e => setDraft(d => ({ ...d, interviewer: e.target.value }))} style={{ padding: "9px 12px", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-                  {["Recruiter","Junior Engineer","Senior Engineer","Team Lead","Manager","Director","CEO/Founder","Other"].map(r => <option key={r}>{r}</option>)}
-                </select>
-              </label>
+              <Select
+                label="Interviewer role"
+                value={draft.interviewer}
+                onChange={e => setDraft(d => ({ ...d, interviewer: e.target.value }))}
+                options={[
+                  "Recruiter","Junior Engineer","Senior Engineer","Team Lead","Manager","Director","CEO/Founder","Other"
+                ].map(r => ({ value: r, label: r }))}
+              />
             </div>
             <Textarea label="Purpose / description" value={draft.purpose} onChange={e => setDraft(d => ({ ...d, purpose: e.target.value }))}
               placeholder="What's the goal of this interview round?" rows={3}/>
@@ -177,8 +179,8 @@ function Settings() {
 const ComingSoonSection = ({ name }: any) => (
   <div style={{ padding: 60, textAlign: "center", color: "var(--muted)" }}>
     <Icon.Settings size={48} style={{ opacity: 0.3, marginBottom: 12 }}/>
-    <div className="h3" style={{ marginBottom: 4 }}>{name}</div>
-    <div className="small">Pretend this is configured. Switch to <b style={{ color: "var(--text)" }}>Interview rounds</b> to see the deep-dive.</div>
+    <div className="h3" style={{ marginBottom: 4, color: "var(--text)" }}>{name}</div>
+    <div className="small" style={{ maxWidth: 320, margin: "0 auto" }}>This section is coming soon. Check back in a future update.</div>
   </div>
 );
 

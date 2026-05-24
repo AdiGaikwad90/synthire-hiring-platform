@@ -1,12 +1,12 @@
 import type { Env } from '../../types/bindings'
 import type { ParsedResume } from '../ai/prompts/parse-resume'
-import type { ScoringWeights } from './aggregator'
+import type { ScoringDimensions } from '../scoring/dimensions'
 import { generateEmbedding } from '../embeddings/generator'
 import { upsertEmbedding } from '../embeddings/vectorize'
 import { cosineSimilarity } from '../embeddings/similarity'
-import { callWithFallback } from '../ai/fallback'
-import { buildScoringMessages, validateLLMScores, LLMScores } from '../ai/prompts/score-candidate'
-import { aggregateScore } from './aggregator'
+import { callWithFallback, buildLlmConfig } from '../ai/fallback'
+import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
+import { aggregateScore, buildScoreConfig } from './aggregator'
 
 export interface ScoringInput {
   candidateId: string
@@ -18,7 +18,7 @@ export interface ScoringInput {
   requiredSkills: string[]
   niceToHaveSkills: string[]
   minYearsExperience: number
-  scoringWeights: ScoringWeights
+  scoringWeights: ScoringDimensions
   parsedResume: ParsedResume
 }
 
@@ -55,16 +55,23 @@ export async function runScoringPipeline(
   const jobText = jobDescription ?? jobTitle
   const jobEmbedding = await generateEmbedding(env.AI, jobText)
 
-  // Step 3: Upsert candidate embedding to Vectorize
-  await upsertEmbedding(env.VECTORIZE, candidateId, resumeEmbedding, {
-    candidateId,
-    jobId,
-    companyId,
-  })
+  // Step 3: Upsert candidate embedding to Vectorize (skip if text was too short; non-fatal in local dev)
+  if (resumeEmbedding) {
+    try {
+      await upsertEmbedding(env.VECTORIZE, candidateId, resumeEmbedding, {
+        candidateId,
+        jobId,
+        companyId,
+      })
+    } catch {
+      // Vectorize not available locally — continue without semantic scoring
+    }
+  }
 
   // Step 4: Compute cosine similarity → semanticScore (0-100)
-  const similarity = cosineSimilarity(resumeEmbedding, jobEmbedding)
-  const semanticScore = Math.round(similarity * 100)
+  const semanticScore = (resumeEmbedding && jobEmbedding)
+    ? Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100)
+    : 0
 
   // Step 5: LLM scoring
   const messages = buildScoringMessages(
@@ -72,25 +79,36 @@ export async function runScoringPipeline(
     jobTitle,
     jobDescription,
     requiredSkills,
-    minYearsExperience
+    minYearsExperience,
+    scoringWeights
   )
 
+  const config = buildLlmConfig(env)
   const llmResult = await callWithFallback(
     env.OPENROUTER_API_KEY,
     messages,
-    validateLLMScores
+    validateLLMScores,
+    config
   ) as LLMScores
 
-  // Step 6: Aggregate final score
-  const overallScore = aggregateScore(llmResult, semanticScore, scoringWeights)
+  // Step 6: Aggregate final score using dimension rollup
+  const scoreConfig = buildScoreConfig(env)
+  const aggregated = aggregateScore(llmResult, semanticScore, scoringWeights, scoreConfig)
+
+  // Store strengths/concerns alongside summary as JSON
+  const ai_analysis = JSON.stringify({
+    summary: llmResult.summary,
+    strengths: llmResult.strengths ?? [],
+    concerns: llmResult.concerns ?? [],
+  })
 
   return {
-    overall_score: overallScore,
+    overall_score: aggregated.overall,
     semantic_score: semanticScore,
-    skills_score: Math.round(llmResult.skills_score),
-    experience_score: Math.round(llmResult.experience_score),
-    education_score: Math.round(llmResult.education_score),
-    achievements_score: Math.round(llmResult.achievements_score),
-    ai_analysis: llmResult.summary,
+    skills_score: aggregated.dimensionScores.skills,
+    experience_score: aggregated.dimensionScores.experience,
+    education_score: aggregated.dimensionScores.education,
+    achievements_score: aggregated.dimensionScores.achievements,
+    ai_analysis,
   }
 }

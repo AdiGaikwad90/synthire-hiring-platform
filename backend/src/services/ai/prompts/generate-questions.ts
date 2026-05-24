@@ -29,24 +29,22 @@ Recent Experience: ${recentRoles}
 Return JSON with this exact structure:
 {
   "questions": [
-    "Question 1?",
-    "Question 2?",
+    { "q": "Question text?", "why": "One sentence explaining what this reveals about the candidate" },
     ...
   ]
 }
 
-Focus on technical depth, problem-solving, and experience relevance.`,
+Focus on technical depth, problem-solving, and gaps vs. job requirements.`,
     },
   ]
 }
 
-export function validateQuestions(data: unknown): data is { questions: string[] } {
+export function validateQuestions(data: unknown): data is { questions: Array<string | { q: string; why: string }> } {
   if (!data || typeof data !== 'object') return false
   const d = data as Record<string, unknown>
-
-  if (!Array.isArray(d.questions)) return false
-  if (d.questions.length < 1) return false
-  if (!d.questions.every((q: unknown) => typeof q === 'string')) return false
-
-  return true
+  if (!Array.isArray(d.questions) || d.questions.length < 1) return false
+  return d.questions.every((item: unknown) =>
+    typeof item === 'string' ||
+    (typeof item === 'object' && item !== null && typeof (item as any).q === 'string')
+  )
 }

@@ -124,7 +124,7 @@ export async function updateCandidateParsed(
       WHERE id = ?`
     )
     .bind(
-      parsed.name,
+      parsed.name || 'Unknown Candidate',
       parsed.email ?? null,
       parsed.phone ?? null,
       parsed.location ?? null,

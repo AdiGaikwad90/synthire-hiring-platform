@@ -1,8 +1,7 @@
 -- Synthire — Initial D1 Schema
 -- Apply locally: wrangler d1 migrations apply synthire-prod --local
 -- Apply prod:    wrangler d1 migrations apply synthire-prod
-
-PRAGMA journal_mode = WAL;
+-- Note: PRAGMA journal_mode is omitted — D1 manages WAL mode internally
 
 -- ── Companies ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS companies (

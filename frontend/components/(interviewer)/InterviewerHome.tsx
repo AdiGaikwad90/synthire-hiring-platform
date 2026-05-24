@@ -4,15 +4,20 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, Avatar } from "@/components/ui";
 import { useInterviews } from "@/hooks/queries/useInterviews";
+import { useAuth } from "@/context/AuthContext";
 
 // Interviewer Portal (minimalist)
 const { useState: useS_iv } = React;
 
 function Interviewer() {
   const router = useRouter();
+  const { user } = useAuth();
   const [tab, setTab] = useS_iv("today");
+  const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
-  const { data: interviewsData, isLoading } = useInterviews();
+  const { data: interviewsData, isLoading, isError, error, refetch } = useInterviews();
   const allInterviews = interviewsData?.items ?? [];
   const todayStr = new Date().toISOString().split('T')[0];
   const todayInterviews = allInterviews.filter(iv => iv.scheduled_at.startsWith(todayStr));
@@ -32,7 +37,7 @@ function Interviewer() {
       <div className="tsIvr-head">
         <div>
           <div className="h1">Your interviews</div>
-          <div className="small" style={{ color: "var(--muted)" }}>Good afternoon, John. You have <b style={{ color: "var(--text)" }}>3 interviews</b> today and <b style={{ color: "var(--text)" }}>2 pending</b> feedbacks.</div>
+          <div className="small" style={{ color: "var(--muted)" }}>{greeting}, {firstName}. You have <b style={{ color: "var(--text)" }}>{todayInterviews.length} interview{todayInterviews.length === 1 ? '' : 's'}</b> today and <b style={{ color: "var(--text)" }}>{pendingFeedback.length} pending</b> feedback{pendingFeedback.length === 1 ? '' : 's'}.</div>
         </div>
         <div className="tsIvr-cal">
           <Icon.Calendar size={14}/>
@@ -59,16 +64,25 @@ function Interviewer() {
       </div>
 
       {isLoading && <div style={{padding:32,color:'var(--muted)'}}>Loading interviews...</div>}
+      {isError && (
+        <div style={{padding:32}}>
+          <p style={{color:'var(--danger)'}}>Failed to load interviews: {(error as Error)?.message}</p>
+          <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
+        </div>
+      )}
 
       {tab === "today" && (
         <div className="tsIvr-list">
+          {!isLoading && !isError && todayInterviews.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--muted)',fontSize:14}}>No interviews today.</div>
+          )}
           {todayInterviews.map((iv, i) => (
             <Card key={iv.id} className="tsIvr-card tsIvr-cardLarge" style={{ animationDelay: `${i * 60}ms` }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <Avatar name={iv.candidate_id} size={56}/>
+                <Avatar name={iv.candidate_name ?? iv.candidate_id} size={56}/>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                    <span className="h3" style={{ fontWeight: 500 }}>{iv.candidate_id}</span>
+                    <span className="h3" style={{ fontWeight: 500 }}>{iv.candidate_name ?? 'Unknown'}</span>
                     <Badge variant="warning"><Icon.Clock size={11}/> {new Date(iv.scheduled_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</Badge>
                   </div>
                   <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>{iv.status}</div>
@@ -88,12 +102,15 @@ function Interviewer() {
       )}
       {tab === "upcoming" && (
         <div className="tsIvr-list">
+          {!isLoading && !isError && upcoming.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--muted)',fontSize:14}}>No upcoming interviews.</div>
+          )}
           {upcoming.map(iv => (
             <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={iv.candidate_id} size={44}/>
+                <Avatar name={iv.candidate_name ?? iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_name ?? 'Unknown'}</div>
                   <div className="small" style={{ color: "var(--muted)" }}>{iv.status}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -108,12 +125,15 @@ function Interviewer() {
       )}
       {tab === "pending" && (
         <div className="tsIvr-list">
+          {!isLoading && !isError && pendingFeedback.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--muted)',fontSize:14}}>No pending feedback — you are all caught up.</div>
+          )}
           {pendingFeedback.map(iv => (
             <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={iv.candidate_id} size={44}/>
+                <Avatar name={iv.candidate_name ?? iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_name ?? 'Unknown'}</div>
                   <div className="small" style={{ color: "var(--muted)" }}>{new Date(iv.scheduled_at).toLocaleString()} · awaiting feedback</div>
                 </div>
                 <Badge variant="warning"><Icon.Clock size={11}/> Awaiting feedback</Badge>
@@ -125,12 +145,15 @@ function Interviewer() {
       )}
       {tab === "past" && (
         <div className="tsIvr-list">
+          {!isLoading && !isError && past.length === 0 && (
+            <div style={{padding:32,textAlign:'center',color:'var(--muted)',fontSize:14}}>No past interviews yet.</div>
+          )}
           {past.map(iv => (
             <Card key={iv.id} className="tsIvr-card">
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <Avatar name={iv.candidate_id} size={44}/>
+                <Avatar name={iv.candidate_name ?? iv.candidate_id} size={44}/>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_id}</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 2 }}>{iv.candidate_name ?? 'Unknown'}</div>
                   <div className="small" style={{ color: "var(--muted)" }}>{new Date(iv.scheduled_at).toLocaleString()}</div>
                 </div>
                 <Badge variant="success"><Icon.Check size={11} stroke={3}/> Completed</Badge>

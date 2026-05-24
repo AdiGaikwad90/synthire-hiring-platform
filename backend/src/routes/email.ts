@@ -23,24 +23,38 @@ router.post('/resend-callback', async (c) => {
 
   const payload = `${svixId}.${svixTimestamp}.${rawBody}`
 
+  // Strip whsec_ prefix and base64-decode to get raw secret bytes (Svix format)
+  const secretStr = c.env.RESEND_WEBHOOK_SECRET.startsWith('whsec_')
+    ? c.env.RESEND_WEBHOOK_SECRET.slice(6)
+    : c.env.RESEND_WEBHOOK_SECRET
+  const secretBytes = Uint8Array.from(atob(secretStr), ch => ch.charCodeAt(0))
+
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(c.env.RESEND_WEBHOOK_SECRET),
+    secretBytes,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['verify']
   )
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload))
-  const computed = btoa(String.fromCharCode(...new Uint8Array(sig)))
 
   // svix-signature may contain multiple signatures: "v1,<base64> v1,<base64>"
+  // Verify each one against the payload using the Web Crypto verify API
   const signatures = svixSignature.split(' ')
-  const valid = signatures.some((s) => {
+  let valid = false
+  for (const s of signatures) {
     const base64Part = s.startsWith('v1,') ? s.slice(3) : s
-    return base64Part === computed
-  })
+    let sigBytes: Uint8Array
+    try {
+      sigBytes = Uint8Array.from(atob(base64Part), ch => ch.charCodeAt(0))
+    } catch {
+      continue
+    }
+    const ok = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(payload))
+    if (ok) { valid = true; break }
+  }
 
   if (!valid) {
+    console.warn('[resend-webhook] Signature verification failed', { svixId, svixTimestamp })
     return c.json({ error: 'Invalid signature' }, 401)
   }
 
@@ -53,7 +67,12 @@ router.post('/resend-callback', async (c) => {
     }
   }
 
-  const body = JSON.parse(rawBody) as WebhookPayload
+  let body: WebhookPayload
+  try {
+    body = JSON.parse(rawBody) as WebhookPayload
+  } catch {
+    return c.json({ error: 'Invalid JSON payload' }, 400)
+  }
   const { type, data } = body
   const now = new Date().toISOString()
 
@@ -83,17 +102,45 @@ router.post('/resend-callback', async (c) => {
   return c.json({ received: true })
 })
 
-// GET /api/email/unsubscribe?token=X — public unsubscribe
+// GET /api/email/unsubscribe?token=X — show confirmation page (CSRF protection)
 router.get('/unsubscribe', async (c) => {
   const token = c.req.query('token')
 
   if (!token) {
-    return c.html(
+    return new Response(
       `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
         <h2>Invalid unsubscribe link</h2>
         <p>This unsubscribe link is missing a token.</p>
       </body></html>`,
-      400
+      { status: 400, headers: { 'Content-Type': 'text/html' } }
+    )
+  }
+
+  return new Response(`
+<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:400px;margin:40px auto;text-align:center">
+<h2>Unsubscribe from Synthire emails?</h2>
+<p>You will no longer receive notifications.</p>
+<form method="POST" action="/api/email/unsubscribe">
+  <input type="hidden" name="token" value="${token}">
+  <button type="submit" style="background:#ef4444;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-size:16px">Confirm Unsubscribe</button>
+</form>
+<p><small><a href="/">Cancel</a></small></p>
+</body></html>
+`, { headers: { 'Content-Type': 'text/html' } })
+})
+
+// POST /api/email/unsubscribe — perform the actual unsubscribe
+router.post('/unsubscribe', async (c) => {
+  const formData = await c.req.formData()
+  const token = formData.get('token') as string | null
+
+  if (!token) {
+    return new Response(
+      `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
+        <h2>Invalid unsubscribe request</h2>
+        <p>Token is missing.</p>
+      </body></html>`,
+      { status: 400, headers: { 'Content-Type': 'text/html' } }
     )
   }
 
@@ -104,12 +151,12 @@ router.get('/unsubscribe', async (c) => {
     .first<{ user_id: string; unsubscribed_at: string | null }>()
 
   if (!prefs) {
-    return c.html(
+    return new Response(
       `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
         <h2>Invalid unsubscribe link</h2>
         <p>This unsubscribe link is invalid or has already been used.</p>
       </body></html>`,
-      404
+      { status: 404, headers: { 'Content-Type': 'text/html' } }
     )
   }
 
@@ -119,12 +166,12 @@ router.get('/unsubscribe', async (c) => {
     .bind(token)
     .run()
 
-  return c.html(
+  return new Response(
     `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
       <h2>You've been unsubscribed</h2>
       <p>You'll no longer receive email notifications from Synthire.</p>
     </body></html>`,
-    200
+    { status: 200, headers: { 'Content-Type': 'text/html' } }
   )
 })
 

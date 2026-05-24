@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
+import { zv } from '../types/api'
 import type { Env } from '../types/bindings'
 import { createInterviewTypeSchema, apiResponse, AppError } from '../types/api'
 import {
@@ -8,8 +8,11 @@ import {
   updateInterviewType,
   deleteInterviewType,
 } from '../db/queries/interviews'
+import { authMiddleware } from '../middleware/auth'
 
 const router = new Hono<{ Bindings: Env }>()
+
+router.use('*', authMiddleware)
 
 // GET /api/interview-types — list all interview types for the company
 router.get('/', async (c) => {
@@ -19,7 +22,7 @@ router.get('/', async (c) => {
 })
 
 // POST /api/interview-types — create a new interview type
-router.post('/', zValidator('json', createInterviewTypeSchema), async (c) => {
+router.post('/', zv('json', createInterviewTypeSchema), async (c) => {
   const body = c.req.valid('json')
   const user = c.get('user')
   const interviewType = await createInterviewType(c.env.DB, user.company_id, body)
@@ -27,7 +30,7 @@ router.post('/', zValidator('json', createInterviewTypeSchema), async (c) => {
 })
 
 // PATCH /api/interview-types/:id — partial update
-router.patch('/:id', zValidator('json', createInterviewTypeSchema.partial()), async (c) => {
+router.patch('/:id', zv('json', createInterviewTypeSchema.partial()), async (c) => {
   const body = c.req.valid('json')
   const user = c.get('user')
   const interviewType = await updateInterviewType(c.env.DB, c.req.param('id'), user.company_id, body)

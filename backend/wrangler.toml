@@ -8,8 +8,10 @@ ENVIRONMENT = "development"
 JWT_EXPIRY_SECONDS = "86400"
 FRONTEND_ORIGIN = "http://localhost:3000"
 MAX_UPLOAD_BYTES = "10485760"
-RESEND_FROM_EMAIL = "noreply@synthire.io"
+EMAIL_PROVIDER = "sendgrid" #"resend"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
 RESEND_FROM_NAME = "Synthire"
+SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
 EMAIL_QUEUE_INTERVAL_SECONDS = "30"
 EMAIL_MAX_RETRIES = "3"
 
@@ -18,7 +20,8 @@ EMAIL_MAX_RETRIES = "3"
 [[d1_databases]]
 binding = "DB"
 database_name = "synthire-prod"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "f6a8faf6-0220-4870-a66b-cbca43405762"
+migrations_dir = "src/db/migrations"
 
 # After running: wrangler r2 bucket create synthire-resumes
 [[r2_buckets]]
@@ -29,8 +32,8 @@ bucket_name = "synthire-resumes"
 # Replace REPLACE_WITH_YOUR_KV_ID with the output id
 [[kv_namespaces]]
 binding = "KV_CACHE"
-id = "REPLACE_WITH_YOUR_KV_ID"
-preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_ID"
+id = "6da4fc72343e4286a9080b741ad98bc7"
+preview_id = "a808db59def7494d8ad4718dea31cf3b"
 
 # After running: wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
 [[vectorize]]

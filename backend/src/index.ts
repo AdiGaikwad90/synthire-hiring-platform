@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
 import { corsMiddleware } from './middleware/cors'
 import { errorHandler } from './middleware/error'
-import { authMiddleware } from './middleware/auth'
+import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
 
 // Route imports (implemented in later phases)
 import authRoutes from './routes/auth'
 import jobRoutes from './routes/jobs'
+import jobsParseRoutes from './routes/jobs-parse'
 import candidateRoutes from './routes/candidates'
 import interviewRoutes from './routes/interviews'
 import interviewTypeRoutes from './routes/interview-types'
@@ -19,24 +20,17 @@ const app = new Hono<{ Bindings: Env }>()
 
 // Global middleware
 app.use('*', corsMiddleware)
+app.use('/api/*', rateLimitMiddleware)
 app.onError(errorHandler)
 
 // Public routes
 app.route('/api/auth', authRoutes)
 
-// Email public endpoints (webhook + unsubscribe — no JWT needed)
-// These are handled inside emailRoutes with their own auth
-
-// Protected routes (require JWT)
-app.use('/api/jobs/*', authMiddleware)
-app.use('/api/candidates/*', authMiddleware)
-app.use('/api/interviews/*', authMiddleware)
-app.use('/api/interview-types/*', authMiddleware)
-app.use('/api/analytics/*', authMiddleware)
-app.use('/api/settings/*', authMiddleware)
-app.use('/api/email/logs', authMiddleware)
-app.use('/api/email/preferences', authMiddleware)
-
+// Protected routes — authMiddleware is registered INSIDE each route file
+// (Hono's `path/*` matcher does not match the exact `path`, which silently
+// bypassed auth on list endpoints like GET /api/candidates. Per-router
+// registration via `router.use('*', authMiddleware)` is path-agnostic.)
+app.route('/api/jobs/parse-jd', jobsParseRoutes)
 app.route('/api/jobs', jobRoutes)
 app.route('/api/candidates', candidateRoutes)
 app.route('/api/interviews', interviewRoutes)

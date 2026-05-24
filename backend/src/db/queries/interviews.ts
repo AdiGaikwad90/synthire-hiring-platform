@@ -117,7 +117,8 @@ export async function createInterview(
     candidate_id: string
     job_id: string
     company_id: string
-    interviewer_id: string
+    interviewer_id: string | null
+    interviewer_email?: string
     interview_type_id?: string
     scheduled_at: string
     duration_minutes: number
@@ -131,17 +132,18 @@ export async function createInterview(
   await db
     .prepare(
       `INSERT INTO interviews (
-        id, candidate_id, job_id, company_id, interviewer_id, interview_type_id,
+        id, candidate_id, job_id, company_id, interviewer_id, interviewer_email, interview_type_id,
         scheduled_at, duration_minutes, video_link, meeting_notes, status,
         email_sent_at, reminder_sent_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, ?)`
     )
     .bind(
       id,
       data.candidate_id,
       data.job_id,
       data.company_id,
-      data.interviewer_id,
+      data.interviewer_id ?? null,
+      data.interviewer_email ?? null,
       data.interview_type_id ?? null,
       data.scheduled_at,
       data.duration_minutes,
@@ -160,40 +162,49 @@ export async function createInterview(
   return row
 }
 
+export type InterviewWithCandidateName = InterviewRow & { candidate_name: string | null }
+
 export async function listInterviews(
   db: D1Database,
   companyId: string,
   opts: { interviewerId?: string; status?: string; page: number; limit: number }
-): Promise<{ items: InterviewRow[]; total: number }> {
+): Promise<{ items: InterviewWithCandidateName[]; total: number }> {
   const { interviewerId, status, page, limit } = opts
   const offset = (page - 1) * limit
 
-  const conditions: string[] = ['company_id = ?']
+  const conditions: string[] = ['i.company_id = ?']
   const params: unknown[] = [companyId]
 
   if (interviewerId) {
-    conditions.push('interviewer_id = ?')
+    conditions.push('i.interviewer_id = ?')
     params.push(interviewerId)
   }
 
   if (status) {
-    conditions.push('status = ?')
+    conditions.push('i.status = ?')
     params.push(status)
   }
 
   const where = conditions.join(' AND ')
 
   const countResult = await db
-    .prepare(`SELECT COUNT(*) as total FROM interviews WHERE ${where}`)
+    .prepare(`SELECT COUNT(*) as total FROM interviews i WHERE ${where}`)
     .bind(...params)
     .first<{ total: number }>()
 
   const total = countResult?.total ?? 0
 
   const rows = await db
-    .prepare(`SELECT * FROM interviews WHERE ${where} ORDER BY scheduled_at DESC LIMIT ? OFFSET ?`)
+    .prepare(
+      `SELECT i.*, c.name AS candidate_name
+       FROM interviews i
+       LEFT JOIN candidates c ON c.id = i.candidate_id
+       WHERE ${where}
+       ORDER BY i.scheduled_at DESC
+       LIMIT ? OFFSET ?`
+    )
     .bind(...params, limit, offset)
-    .all<InterviewRow>()
+    .all<InterviewWithCandidateName>()
 
   return { items: rows.results ?? [], total }
 }
@@ -202,11 +213,16 @@ export async function getInterview(
   db: D1Database,
   id: string,
   companyId: string
-): Promise<InterviewRow | null> {
+): Promise<InterviewWithCandidateName | null> {
   return db
-    .prepare('SELECT * FROM interviews WHERE id = ? AND company_id = ? LIMIT 1')
+    .prepare(
+      `SELECT i.*, c.name AS candidate_name
+       FROM interviews i
+       LEFT JOIN candidates c ON c.id = i.candidate_id
+       WHERE i.id = ? AND i.company_id = ? LIMIT 1`
+    )
     .bind(id, companyId)
-    .first<InterviewRow>()
+    .first<InterviewWithCandidateName>()
 }
 
 export async function updateInterview(

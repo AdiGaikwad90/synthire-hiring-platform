@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
+import { zv } from '../types/api'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
 import {
@@ -18,8 +18,10 @@ import {
 } from '../db/queries/interviews'
 import { getCandidate } from '../db/queries/candidates'
 import { getJob } from '../db/queries/jobs'
-import { findUserById } from '../db/queries/users'
+import { findUserById, findUserByEmail } from '../db/queries/users'
 import { queueEmail } from '../db/queries/email'
+import { processEmailQueue } from '../services/email/queue'
+import { authMiddleware } from '../middleware/auth'
 
 const listInterviewsQuerySchema = z.object({
   status: z.string().optional(),
@@ -29,8 +31,10 @@ const listInterviewsQuerySchema = z.object({
 
 const router = new Hono<{ Bindings: Env }>()
 
+router.use('*', authMiddleware)
+
 // GET /api/interviews — list interviews for the company
-router.get('/', zValidator('query', listInterviewsQuerySchema), async (c) => {
+router.get('/', zv('query', listInterviewsQuerySchema), async (c) => {
   const { status, page, limit } = c.req.valid('query')
   const user = c.get('user')
 
@@ -47,7 +51,7 @@ router.get('/', zValidator('query', listInterviewsQuerySchema), async (c) => {
 })
 
 // POST /api/interviews — create a new interview
-router.post('/', zValidator('json', createInterviewSchema), async (c) => {
+router.post('/', zv('json', createInterviewSchema), async (c) => {
   const body = c.req.valid('json')
   const user = c.get('user')
   const db = c.env.DB
@@ -57,6 +61,26 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
     .first<{ name: string }>()
   const companyName = companyRow?.name ?? 'Synthire'
 
+  // Resolve interviewer_id from interviewer_email if provided
+  let interviewerId = body.interviewer_id
+  let resolvedInterviewerEmail = body.interviewer_email
+  if (body.interviewer_email && !interviewerId) {
+    const interviewerByEmail = await findUserByEmail(db, body.interviewer_email)
+    if (interviewerByEmail) {
+      if (interviewerByEmail.company_id !== user.company_id) {
+        throw new AppError('Interviewer does not belong to this company', 403)
+      }
+      interviewerId = interviewerByEmail.id
+    }
+    // If not found, we store the email for external interviewers and send an invite
+  }
+
+  // Verify job exists and belongs to company
+  const job = await getJob(db, body.job_id, user.company_id)
+  if (!job) {
+    throw new AppError('Job not found', 404)
+  }
+
   // Verify candidate exists and belongs to company
   const candidate = await getCandidate(db, body.candidate_id, user.company_id)
   if (!candidate) {
@@ -64,18 +88,25 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
   }
 
   const interview = await createInterview(db, {
-    ...body,
+    candidate_id: body.candidate_id,
+    job_id: body.job_id,
+    interviewer_id: interviewerId ?? null,
+    interviewer_email: interviewerId ? undefined : resolvedInterviewerEmail,
+    interview_type_id: body.interview_type_id,
+    scheduled_at: body.scheduled_at,
+    duration_minutes: body.duration_minutes,
+    video_link: body.video_link,
+    meeting_notes: body.meeting_notes,
     company_id: user.company_id,
   })
 
-  // Fire-and-forget email queuing
-  void (async () => {
+  // Fire-and-forget email queuing — wrapped in waitUntil so the Worker isn't killed after response
+  c.executionCtx.waitUntil((async () => {
     try {
-      const [interviewer, job] = await Promise.all([
-        findUserById(db, body.interviewer_id),
-        getJob(db, body.job_id, user.company_id),
-      ])
+      const interviewer = interviewerId ? await findUserById(db, interviewerId) : null
+      const externalInterviewerEmail = !interviewerId ? resolvedInterviewerEmail : undefined
 
+      const candidateEmail = body.candidate_email_override || candidate.email
       const candidateName = candidate.name
       const jobTitle = job?.title ?? 'Unknown Position'
       const scheduledAt = body.scheduled_at
@@ -83,8 +114,27 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
       const videoLink = body.video_link
       const frontendUrl = c.env.FRONTEND_ORIGIN
 
+      // 1a. If external interviewer (not a Synthire user), send a plain invite email
+      if (!interviewer && externalInterviewerEmail) {
+        await queueEmail(db, {
+          recipientEmail: externalInterviewerEmail,
+          emailType: 'magic_link',
+          templateData: {
+            interviewId: interview.id,
+            interviewerName: externalInterviewerEmail.split('@')[0],
+            candidateName,
+            jobTitle,
+            scheduledAt,
+            durationMinutes,
+            videoLink: videoLink ?? undefined,
+            overallScore: undefined,
+            frontendUrl,
+          },
+        })
+      }
+
       if (interviewer) {
-        // 1. Magic link to interviewer
+        // 1b. Magic link to registered interviewer
         await queueEmail(db, {
           recipientEmail: interviewer.email,
           emailType: 'magic_link',
@@ -103,9 +153,9 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
       }
 
       // 2. Interview scheduled notification to candidate
-      if (candidate.email) {
+      if (candidateEmail) {
         await queueEmail(db, {
-          recipientEmail: candidate.email,
+          recipientEmail: candidateEmail,
           emailType: 'interview_scheduled',
           templateData: {
             candidateName,
@@ -143,9 +193,9 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
         })
       }
 
-      if (candidate.email) {
+      if (candidateEmail) {
         await queueEmail(db, {
-          recipientEmail: candidate.email,
+          recipientEmail: candidateEmail,
           emailType: 'interview_reminder',
           templateData: {
             interviewId: interview.id,
@@ -162,10 +212,13 @@ router.post('/', zValidator('json', createInterviewSchema), async (c) => {
           scheduledFor: reminderTime,
         })
       }
-    } catch {
-      // fire-and-forget: swallow errors
+      // Process the queue immediately so emails send right away
+      // (cron runs every minute but this ensures instant delivery)
+      await processEmailQueue(c.env)
+    } catch (err) {
+      console.error('[interviews] Email send error:', err)
     }
-  })()
+  })())
 
   return c.json(apiResponse(interview), 201)
 })
@@ -190,7 +243,7 @@ router.get('/:id', async (c) => {
 // PATCH /api/interviews/:id — update status or meeting notes
 router.patch(
   '/:id',
-  zValidator('json', z.object({
+  zv('json', z.object({
     status: z.string().optional(),
     meeting_notes: z.string().optional(),
   })),
@@ -208,7 +261,7 @@ router.patch(
 )
 
 // POST /api/interviews/:id/feedback — submit feedback for an interview
-router.post('/:id/feedback', zValidator('json', submitFeedbackSchema), async (c) => {
+router.post('/:id/feedback', zv('json', submitFeedbackSchema), async (c) => {
   const body = c.req.valid('json')
   const user = c.get('user')
   const db = c.env.DB

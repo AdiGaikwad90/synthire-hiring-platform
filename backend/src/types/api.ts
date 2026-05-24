@@ -1,7 +1,27 @@
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
+import type { ValidationTargets } from 'hono'
+import { zValidator as _zValidator } from '@hono/zod-validator'
 
 // ── Standard response envelope ────────────────────────────────────────────────
+
+// Wrapper that returns our standard { success, error, details } shape on validation failure
+// instead of @hono/zod-validator's default raw ZodError response.
+export function zv<T extends keyof ValidationTargets>(
+  target: T,
+  schema: z.ZodTypeAny
+) {
+  return _zValidator(target, schema, (result, c) => {
+    if (!result.success) {
+      const flat = result.error.flatten()
+      console.error('[validation] 422 on', c.req.path, JSON.stringify(flat))
+      return c.json(
+        { success: false, data: null, error: 'Validation failed', details: flat },
+        422
+      )
+    }
+  })
+}
 
 export function apiResponse<T>(data: T, status = 200) {
   return {
@@ -58,6 +78,27 @@ export const signupSchema = z.object({
   company_name: z.string().min(1).max(200),
 })
 
+// Scoring v2 — independent 0-100 importance per dimension, with sub-dimensions.
+// No "sum to 100" constraint; backend normalizes via weighted averages.
+const dimensionConfigSchema = z.object({
+  importance: z.number().min(0).max(100),
+  sub_dimensions: z.record(z.string(), z.number().min(0).max(100)),
+})
+
+const scoringDimensionsSchema = z.object({
+  skills: dimensionConfigSchema,
+  experience: dimensionConfigSchema,
+  education: dimensionConfigSchema,
+  achievements: dimensionConfigSchema,
+})
+
+const DEFAULT_DIMENSIONS = {
+  skills:       { importance: 80, sub_dimensions: { technical: 90, soft: 60, domain: 70 } },
+  experience:   { importance: 70, sub_dimensions: { years_relevant: 80, industry_match: 60, leadership: 50 } },
+  education:    { importance: 50, sub_dimensions: { degree_level: 60, field_relevance: 70, certifications: 40 } },
+  achievements: { importance: 60, sub_dimensions: { impact: 80, recognition: 50 } },
+}
+
 export const createJobSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
@@ -68,20 +109,14 @@ export const createJobSchema = z.object({
   salary_range: z.string().optional(),
   required_skills: z.array(z.string()).default([]),
   nice_to_have_skills: z.array(z.string()).default([]),
-  min_years_experience: z.number().int().min(0).default(0),
+  min_years_experience: z.number().min(0).transform(Math.round).default(0),
   education_requirement: z.enum(['none', 'bachelors', 'masters', 'phd']).optional(),
-  scoring_weights: z.object({
-    skills: z.number().min(0).max(100),
-    experience: z.number().min(0).max(100),
-    education: z.number().min(0).max(100),
-    achievements: z.number().min(0).max(100),
-  }).refine(
-    w => w.skills + w.experience + w.education + w.achievements === 100,
-    { message: 'Scoring weights must sum to 100' }
-  ).default({ skills: 40, experience: 30, education: 20, achievements: 10 }),
+  scoring_dimensions: scoringDimensionsSchema.default(DEFAULT_DIMENSIONS),
 })
 
-export const updateJobSchema = createJobSchema.partial()
+export const updateJobSchema = createJobSchema.partial().extend({
+  status: z.enum(['active', 'paused', 'closed']).optional(),
+})
 
 export const listJobsSchema = z.object({
   status: z.enum(['active', 'paused', 'closed']).optional(),
@@ -105,12 +140,18 @@ export const listCandidatesSchema = z.object({
 export const createInterviewSchema = z.object({
   candidate_id: z.string(),
   job_id: z.string(),
-  interviewer_id: z.string(),
+  interviewer_id: z.string().optional(),
+  interviewer_email: z.string().email().optional(),
   interview_type_id: z.string().optional(),
   scheduled_at: z.string().datetime(),
   duration_minutes: z.number().int().min(15).max(480).default(60),
-  video_link: z.string().url().optional(),
+  video_link: z.string().transform(v => {
+    if (!v) return undefined
+    if (/^https?:\/\//i.test(v)) return v
+    return `https://${v}`
+  }).pipe(z.string().url()).optional(),
   meeting_notes: z.string().optional(),
+  candidate_email_override: z.string().email().optional(),
 })
 
 export const submitFeedbackSchema = z.object({

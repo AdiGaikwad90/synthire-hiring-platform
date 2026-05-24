@@ -12,7 +12,7 @@ interface DropzoneProps {
 
 export function Dropzone({ onFiles, multiple, accept = ".pdf,.docx,.doc,.txt", hint }: DropzoneProps) {
   const [over, setOver] = React.useState(false);
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const inputId = React.useId();
 
   const handleFiles = (files: FileList | null) => {
     const arr = Array.from(files || []);
@@ -20,7 +20,7 @@ export function Dropzone({ onFiles, multiple, accept = ".pdf,.docx,.doc,.txt", h
   };
 
   return (
-    <label
+    <div
       className={`tsDrop ${over ? "tsDrop-over" : ""}`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -32,10 +32,9 @@ export function Dropzone({ onFiles, multiple, accept = ".pdf,.docx,.doc,.txt", h
         setOver(false);
         handleFiles(e.dataTransfer.files);
       }}
-      onClick={() => inputRef.current?.click()}
     >
       <input
-        ref={inputRef}
+        id={inputId}
         type="file"
         multiple={multiple}
         accept={accept}
@@ -51,10 +50,10 @@ export function Dropzone({ onFiles, multiple, accept = ".pdf,.docx,.doc,.txt", h
       <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
         {hint || (multiple ? "PDFs, Word docs, or plain text — up to 200 files" : "PDF, DOCX, or paste text")}
       </div>
-      <button type="button" className="tsBtn tsBtn-secondary tsBtn-sm" style={{ marginTop: 14, pointerEvents: "none" }}>
+      <label htmlFor={inputId} className="tsBtn tsBtn-secondary tsBtn-sm" style={{ marginTop: 14, cursor: "pointer" }}>
         <Icon.FileText size={12} /> Browse files
-      </button>
-    </label>
+      </label>
+    </div>
   );
 }
 

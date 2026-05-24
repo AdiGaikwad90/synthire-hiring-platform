@@ -1,7 +1,40 @@
-# Copy to .dev.vars and fill in real values
-# .dev.vars is gitignored
+# Copy this file to .dev.vars and fill in real values before running locally.
+# .dev.vars is gitignored — never commit it.
+#
+# Usage:
+#   cp .dev.vars.example .dev.vars
+#   # then edit .dev.vars with your real secrets
 
-JWT_SECRET=your-super-secret-jwt-key-min-32-characters-long
-OPENROUTER_API_KEY=sk-or-your-openrouter-key-here
-RESEND_API_KEY=re_your-resend-api-key-here
-RESEND_WEBHOOK_SECRET=whsec_your-resend-webhook-secret-here
+# ─── Required ────────────────────────────────────────────────────────────────
+
+# JWT signing secret — minimum 32 characters, any random string.
+# Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET=
+
+# OpenRouter API key — for LLM resume parsing and scoring.
+# Sign up free at https://openrouter.ai → Dashboard → API Keys
+# Free models (Qwen3, Gemma 3) are used by default; no billing required.
+# Format: sk-or-v1-...
+OPENROUTER_API_KEY=
+
+# Resend API key — for transactional email (interview notifications, reminders).
+# Sign up free at https://resend.com → API Keys → Create API Key
+# Free tier: 100 emails/day, 3000/month — sufficient for development.
+# Format: re_...
+RESEND_API_KEY=
+
+# SendGrid API key — optional alternative to Resend (sends to any email without domain verification).
+# Sign up free at https://sendgrid.com → Settings → API Keys → Create API Key (Mail Send permission).
+# Free tier: 100 emails/day. Set EMAIL_PROVIDER=sendgrid in wrangler.toml to activate.
+# Format: SG.xxxxx...
+SENDGRID_API_KEY=
+
+# Resend webhook secret — verifies that delivery status callbacks come from Resend.
+# In the Resend dashboard: Webhooks → Add Endpoint →
+#   URL: https://<your-worker>.workers.dev/api/email/resend-callback
+#   Events: email.delivered, email.bounced, email.complained
+#   → copy the Signing Secret shown after creation.
+# Leave blank during local dev if you don't need delivery tracking.
+# Format: whsec_...
+RESEND_WEBHOOK_SECRET=

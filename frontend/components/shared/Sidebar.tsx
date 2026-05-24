@@ -4,13 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Logo } from "./Logo";
+import { useJobs } from "@/hooks/queries/useJobs";
+import { useCandidates } from "@/hooks/queries/useCandidates";
+import { useInterviews } from "@/hooks/queries/useInterviews";
 
 export const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard",  icon: <Icon.Home size={17} /> },
-  { href: "/jobs",       label: "Jobs",       icon: <Icon.Briefcase size={17} />, count: 12 },
-  { href: "/candidates", label: "Candidates", icon: <Icon.Users size={17} />, count: 247 },
+  { href: "/jobs",       label: "Jobs",       icon: <Icon.Briefcase size={17} /> },
+  { href: "/candidates", label: "Candidates", icon: <Icon.Users size={17} /> },
   { href: "/pipeline",   label: "Pipeline",   icon: <Icon.Kanban size={17} /> },
-  { href: "/interviews", label: "Interviews", icon: <Icon.Calendar size={17} />, count: 5 },
+  { href: "/interviews", label: "Interviews", icon: <Icon.Calendar size={17} /> },
   { href: "/analytics",  label: "Analytics",  icon: <Icon.Chart size={17} /> },
   { href: "/settings",   label: "Settings",   icon: <Icon.Settings size={17} /> },
 ];
@@ -23,6 +26,16 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
+
+  const { data: jobsData } = useJobs();
+  const { data: candidatesData } = useCandidates({});
+  const { data: interviewsData } = useInterviews();
+
+  const counts: Record<string, number | undefined> = {
+    "/jobs": jobsData?.pagination?.total,
+    "/candidates": candidatesData?.pagination?.total,
+    "/interviews": interviewsData?.pagination?.total,
+  };
 
   return (
     <aside className={`tsSidebar ${collapsed ? "tsSidebar-collapsed" : ""}`}>
@@ -54,7 +67,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {!collapsed && (
               <>
                 <span className="tsNavItem-label">{item.label}</span>
-                {item.count != null && <span className="tsNavItem-count">{item.count}</span>}
+                {counts[item.href] != null && counts[item.href]! > 0 && (
+                  <span className="tsNavItem-count">{counts[item.href]}</span>
+                )}
               </>
             )}
           </Link>

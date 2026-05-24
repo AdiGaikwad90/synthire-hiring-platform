@@ -40,3 +40,10 @@ export function useUpdateCandidateStage() {
     onSettled: () => qc.invalidateQueries({ queryKey: candidateKeys.all }),
   })
 }
+
+
+export function useGenerateQuestions(candidateId: string) {
+  return useMutation({
+    mutationFn: () => candidatesApi.generateQuestions(candidateId),
+  })
+}

@@ -1,18 +1,20 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Button, Input, Checkbox, Avatar } from "@/components/ui";
+import { Button, Input, Checkbox, Avatar, useToast } from "@/components/ui";
 import { Logo } from "@/components/shared/Logo";
 import { useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // Login page
 const { useState: useS_lg } = React;
 
 function Login() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useS_lg("sarah@acme.co");
   const [password, setPassword] = useS_lg("••••••••••");
   const [remember, setRemember] = useS_lg(true);
@@ -37,7 +39,8 @@ function Login() {
     setApiError(null);
     try {
       await login(email, password);
-      // login() calls router.push('/dashboard') on success
+      const from = searchParams.get('from');
+      window.location.href = (from && from.startsWith('/')) ? from : '/dashboard';
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : 'Login failed');
     } finally {
@@ -121,7 +124,7 @@ function Login() {
               <Input label={
                 <span style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
                   <span>Password</span>
-                  <a style={{ color: "var(--primary-3)", fontSize: 11.5, cursor: "pointer" }}>Forgot?</a>
+                  <a style={{ color: "var(--primary-3)", fontSize: 11.5, cursor: "pointer" }} onClick={(e) => { e.preventDefault(); toast({ message: 'Password reset coming soon' }); }}>Forgot?</a>
                 </span>
               }
                 value={password} onChange={e => setPassword(e.target.value)}
@@ -146,8 +149,8 @@ function Login() {
           <div className="tsLogin-divider">OR CONTINUE WITH</div>
 
           <div className="tsLogin-social">
-            <Button variant="secondary" size="md" icon={<Icon.Google size={16}/>} style={{ justifyContent: "center", width: "100%" }} onClick={() => router.push("/dashboard")}>Continue with Google</Button>
-            <Button variant="secondary" size="md" icon={<Icon.Linkedin size={16}/>} style={{ justifyContent: "center", width: "100%" }} onClick={() => router.push("/dashboard")}>Continue with LinkedIn</Button>
+            <Button type="button" variant="secondary" size="md" icon={<Icon.Google size={16}/>} style={{ justifyContent: "center", width: "100%" }} onClick={() => toast({ message: 'Google login coming soon' })}>Continue with Google</Button>
+            <Button type="button" variant="secondary" size="md" icon={<Icon.Linkedin size={16}/>} style={{ justifyContent: "center", width: "100%" }} onClick={() => toast({ message: 'LinkedIn login coming soon' })}>Continue with LinkedIn</Button>
           </div>
 
           <div className="tsLogin-foot">
