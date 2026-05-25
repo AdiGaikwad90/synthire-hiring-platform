@@ -1,3 +1,4 @@
+export const runtime = "edge"
 import { Suspense } from "react";
 import { LoginForm } from "@/components/(auth)/LoginForm";
 

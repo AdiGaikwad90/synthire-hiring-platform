@@ -1,6 +1,7 @@
-"use client";
+export const runtime = "edge"
 import { JobEditForm } from "@/components/(recruiter)/JobEditForm";
 
-export default function EditJobPage({ params }: { params: { jobId: string } }) {
-  return <JobEditForm jobId={params.jobId} />;
+export default async function EditJobPage({ params }: { params: Promise<{ jobId: string }> }) {
+  const { jobId } = await params;
+  return <JobEditForm jobId={jobId} />;
 }

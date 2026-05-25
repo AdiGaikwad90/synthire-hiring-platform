@@ -1,4 +1,5 @@
 "use client";
+export const runtime = "edge"
 import * as React from "react";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Navigation } from "@/components/shared/Navigation";

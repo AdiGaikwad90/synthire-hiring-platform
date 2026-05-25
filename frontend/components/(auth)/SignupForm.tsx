@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Button, Input, Checkbox } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { removeToken } from "@/lib/auth";
 
 /**
  * Signup form — wired to POST /api/auth/signup via AuthContext.
@@ -12,6 +14,7 @@ import { ApiError } from "@/lib/api";
 export function SignupForm() {
   const router = useRouter();
   const { signup } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = React.useState("");
   const [name, setName] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -27,6 +30,9 @@ export function SignupForm() {
     setApiError(null);
     try {
       await signup(email, password, name, company);
+      removeToken();
+      toast({ message: "Account created successfully! Please sign in.", variant: "success" });
+      router.push("/login");
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : 'Signup failed');
     } finally {

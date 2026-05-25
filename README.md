@@ -135,19 +135,37 @@ Open http://localhost:3001, sign up, and start using the app.
 
 ## Production Deployment
 
-### Step 1 — Provision Cloudflare resources (skip if already done for local)
+> **Important:** The backend uses a named Wrangler environment (`production`). Always pass `--env=production` to every wrangler command targeting production, and always use `npm run deploy` (not `wrangler deploy`) since the npm script includes the flag automatically.
+
+### Step 1 — Provision Cloudflare resources (skip if already done for local dev)
 
 ```bash
 wrangler login
 
+# D1 database → copy the printed database_id into wrangler.toml
 wrangler d1 create synthire-prod
+
+# KV namespace → copy id and preview_id into wrangler.toml
 wrangler kv:namespace create KV_CACHE
 wrangler kv:namespace create KV_CACHE --preview
+
+# R2 bucket (no ID needed)
 wrangler r2 bucket create synthire-resumes
+
+# Vectorize index (no ID needed)
 wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
 ```
 
-Fill the IDs into `backend/wrangler.toml` as described in local setup Step 2.
+Fill the three placeholder IDs into `backend/wrangler.toml`:
+
+```toml
+[[d1_databases]]
+database_id = "paste-your-d1-id-here"
+
+[[kv_namespaces]]
+id = "paste-your-kv-id-here"
+preview_id = "paste-your-kv-preview-id-here"
+```
 
 ### Step 2 — Apply database migrations to production
 
@@ -156,65 +174,101 @@ cd backend
 wrangler d1 migrations apply synthire-prod --remote
 ```
 
-> Always use `--remote` for production. Without this flag, migrations only apply to your local SQLite copy.
+> Always use `--remote` for production. Without it, migrations only apply to your local SQLite copy.
 
-### Step 3 — Set production secrets
+### Step 3 — Set ALL production secrets
 
-```bash
-cd backend
-
-wrangler secret put JWT_SECRET
-# paste a 64-char random string
-
-wrangler secret put OPENROUTER_API_KEY
-# paste your sk-or-... key
-
-wrangler secret put RESEND_API_KEY
-# paste your re_... key (or press Enter to skip if using SendGrid)
-
-wrangler secret put RESEND_WEBHOOK_SECRET
-# paste whsec_... or press Enter to skip
-
-wrangler secret put SENDGRID_API_KEY
-# paste your SG.xxx... key (or press Enter to skip if using Resend)
-```
-
-Verify secrets were saved:
-```bash
-wrangler secret list
-```
-
-### Step 4 — Deploy the backend
+Secrets must be set with `--env=production` and take effect immediately — no redeploy needed.
 
 ```bash
 cd backend
-wrangler deploy
+
+# Generate a JWT secret first:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+wrangler secret put JWT_SECRET --env=production
+# paste the generated hex string above
+
+wrangler secret put OPENROUTER_API_KEY --env=production
+# paste your sk-or-v1-... key from openrouter.ai
+
+wrangler secret put SENDGRID_API_KEY --env=production
+# paste your SG.xxx... key from sendgrid.com
+
+wrangler secret put RESEND_API_KEY --env=production
+# paste your re_... key, or press Enter to skip if using SendGrid
+
+wrangler secret put RESEND_WEBHOOK_SECRET --env=production
+# press Enter to skip (only needed for delivery tracking webhooks)
+```
+
+Verify all secrets are saved before continuing:
+```bash
+wrangler secret list --env=production
+```
+
+Expected output — all 5 should be listed:
+```
+JWT_SECRET
+OPENROUTER_API_KEY
+SENDGRID_API_KEY
+RESEND_API_KEY
+RESEND_WEBHOOK_SECRET
+```
+
+> **Common mistake:** Running `wrangler secret put` without `--env=production` sets the secret on the wrong (top-level) worker. Always include the flag.
+
+### Step 4 — Configure production vars in `backend/wrangler.toml`
+
+The `[env.production]` section must explicitly declare all bindings — they are NOT inherited from the top-level config. This is already set up in the repo. You only need to update:
+
+```toml
+[env.production.vars]
+ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← update after Step 6
+EMAIL_PROVIDER = "sendgrid"                        # or "resend"
+SENDGRID_FROM_EMAIL = "your-verified@email.com"    # must be verified in SendGrid
+```
+
+### Step 5 — Deploy the backend
+
+```bash
+cd backend
+npm run deploy
+# expands to: wrangler deploy --env=production
 ```
 
 Output will show your worker URL:
 ```
-https://synthire-backend.<your-subdomain>.workers.dev
+https://synthire-backend-production.<your-subdomain>.workers.dev
 ```
 
 Save this URL — you need it in Step 6.
 
-### Step 5 — Deploy the frontend to Vercel
+Verify it works:
+```bash
+curl https://synthire-backend-production.<your-subdomain>.workers.dev/health
+# → {"success":true,"data":{"status":"ok"},...}
+```
+
+### Step 6 — Deploy the frontend to Vercel
 
 ```bash
 cd frontend
+
+# First deployment
 npx vercel
+# Prompts:
+#   Set up and deploy? → Y
+#   Link to existing project? → N
+#   Project name? → synthire
+#   Customize settings? → N
 ```
 
-When prompted:
-- **Set up and deploy?** → Y
-- **Link to existing project?** → N (first time)
-- **Project name?** → synthire (or anything)
-- **Directory?** → `./`
-
-Set the backend URL as an environment variable:
+Add the backend URL as an environment variable:
 ```bash
 npx vercel env add NEXT_PUBLIC_API_URL production
-# paste: https://synthire-backend.<your-subdomain>.workers.dev
+# paste: https://synthire-backend-production.<your-subdomain>.workers.dev
 ```
 
 Deploy to production:
@@ -222,32 +276,58 @@ Deploy to production:
 npx vercel --prod
 ```
 
-Vercel outputs your frontend URL, e.g. `https://synthire.vercel.app`
+Note your frontend URL — e.g. `https://synthire.vercel.app`
 
-### Step 6 — Wire frontend URL back to backend
+### Step 7 — Wire frontend URL back to backend
 
-Update `backend/wrangler.toml`:
+Update `FRONTEND_ORIGIN` in `backend/wrangler.toml`:
 
 ```toml
 [env.production.vars]
-ENVIRONMENT = "production"
-FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← your real Vercel URL
+FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← exact Vercel URL, no trailing slash
 ```
 
-Redeploy the backend to pick up the new CORS origin:
+Redeploy the backend to apply the CORS change:
 ```bash
 cd backend
-wrangler deploy
+npm run deploy
 ```
 
-### Step 7 — Verify production
+### Step 8 — Verify the full stack
 
 ```bash
-curl https://synthire-backend.<your-subdomain>.workers.dev/health
-# → {"status":"ok"}
+# Backend health
+curl https://synthire-backend-production.<your-subdomain>.workers.dev/health
+
+# Watch live logs
+wrangler tail --env=production
 ```
 
-Open your Vercel URL, sign up, and test the full flow.
+Open `https://synthire.vercel.app/signup`, create an account, and test the full flow. The cron logs should show `"* * * * *" - Ok` every minute.
+
+### Re-deploying after code changes
+
+```bash
+# Backend only
+cd backend && npm run deploy
+
+# Frontend only
+cd frontend && npx vercel --prod
+
+# Both
+cd backend && npm run deploy && cd ../frontend && npx vercel --prod
+```
+
+### Updating an environment variable after deploy
+
+```bash
+# For a secret (API key, JWT secret):
+wrangler secret put SECRET_NAME --env=production
+
+# For a non-secret var (FRONTEND_ORIGIN, EMAIL_PROVIDER, etc.):
+# Edit backend/wrangler.toml → [env.production.vars] → then redeploy:
+cd backend && npm run deploy
+```
 
 ---
 
@@ -255,12 +335,16 @@ Open your Vercel URL, sign up, and test the full flow.
 
 | Problem | Fix |
 |---|---|
-| CORS errors in browser | `FRONTEND_ORIGIN` in `wrangler.toml` doesn't exactly match your Vercel URL |
+| `Cannot read properties of undefined (reading 'prepare')` in cron | D1/KV/R2 bindings missing from `[env.production]` — the `[[env.production.d1_databases]]` block must exist in `wrangler.toml` |
+| `Missing Authentication header` from OpenRouter | `OPENROUTER_API_KEY` secret not set — run `wrangler secret put OPENROUTER_API_KEY --env=production` |
+| `Imported HMAC key length (0)` on signup/login | `JWT_SECRET` not set — run `wrangler secret put JWT_SECRET --env=production` |
+| `The from address does not match a verified Sender Identity` | SendGrid from-email not verified — go to app.sendgrid.com → Settings → Sender Authentication → verify your `SENDGRID_FROM_EMAIL` address |
+| CORS errors in browser | `FRONTEND_ORIGIN` in `[env.production.vars]` doesn't exactly match your Vercel URL (no trailing slash) |
 | D1 errors on first load | Migrations not applied to remote — run `wrangler d1 migrations apply synthire-prod --remote` |
 | Resume upload fails | R2 bucket name must be exactly `synthire-resumes` |
-| Emails not sending | Run `wrangler secret list` to verify secrets; check email_queue in D1 for error messages |
 | Vectorize errors on first deploy | Index takes ~2 min to become available after creation |
-| Workers AI returns errors locally | Workers AI requires a live Cloudflare connection — embeddings/scoring degrade gracefully in local dev |
+| Secrets applied to wrong worker | You ran `wrangler secret put` without `--env=production` — re-run with the flag |
+| Workers AI unavailable locally | Workers AI requires live Cloudflare connection — embeddings/scoring degrade gracefully in local dev |
 
 ---
 

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { interviewsApi } from '@/lib/api'
+import { interviewsApi, ApiInterviewFeedback } from '@/lib/api'
 
 export const interviewKeys = {
   all: ['interviews'] as const,
@@ -23,6 +23,14 @@ export function useScheduleInterview() {
   })
 }
 
+export function useInterviewFeedback(interviewId: string) {
+  return useQuery({
+    queryKey: ['interviews', interviewId, 'feedback'],
+    queryFn: () => interviewsApi.getFeedback(interviewId),
+    enabled: !!interviewId,
+  })
+}
+
 export function useSubmitFeedback(interviewId: string) {
   const qc = useQueryClient()
   return useMutation({
@@ -30,6 +38,7 @@ export function useSubmitFeedback(interviewId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: interviewKeys.all })
       qc.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) })
+      qc.invalidateQueries({ queryKey: ['interviews', interviewId, 'feedback'] })
     },
   })
 }

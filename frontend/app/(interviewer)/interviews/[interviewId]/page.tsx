@@ -1,5 +1,7 @@
+export const runtime = "edge"
 import { InterviewConduct } from "@/components/(interviewer)/InterviewConduct";
 
-export default function InterviewConductPage({ params }: { params: { interviewId: string } }) {
-  return <InterviewConduct interviewId={params.interviewId} />;
+export default async function InterviewConductPage({ params }: { params: Promise<{ interviewId: string }> }) {
+  const { interviewId } = await params;
+  return <InterviewConduct interviewId={interviewId} />;
 }

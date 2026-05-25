@@ -1,4 +1,5 @@
 "use client";
+export const runtime = "edge"
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Navigation } from "@/components/shared/Navigation";
@@ -10,7 +11,10 @@ export default function InterviewerLayout({ children }: { children: React.ReactN
 
   React.useEffect(() => {
     if (!isLoading && user && user.role === 'recruiter') {
-      router.replace('/dashboard');
+      // Allow recruiters to access interview conduct pages
+      if (!window.location.pathname.startsWith('/interviews/')) {
+        router.replace('/dashboard');
+      }
     }
   }, [user, isLoading]);
 

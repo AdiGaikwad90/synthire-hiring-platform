@@ -112,6 +112,7 @@ type CreateJobData = {
   education_requirement?: string
   scoring_dimensions: ScoringDimensions
   status?: string
+  jd_url?: string | null
 }
 
 export async function createJob(
@@ -199,6 +200,7 @@ export async function updateJob(
   if (data.education_requirement !== undefined) { setClauses.push('education_requirement = ?'); params.push(data.education_requirement) }
   if (data.scoring_dimensions !== undefined) { setClauses.push('scoring_weights = ?'); params.push(JSON.stringify(data.scoring_dimensions)) }
   if (data.status !== undefined) { setClauses.push('status = ?'); params.push(data.status) }
+  if (data.jd_url !== undefined) { setClauses.push('jd_url = ?'); params.push(data.jd_url) }
 
   if (setClauses.length === 0) {
     return getJob(db, id, companyId)

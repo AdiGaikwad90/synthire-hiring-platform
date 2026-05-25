@@ -18,9 +18,10 @@ import {
   deleteJob,
 } from '../db/queries/jobs'
 import { authMiddleware } from '../middleware/auth'
-import { detectFileType } from '../services/parsing/detector'
+import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
+import { uploadToR2, getFromR2 } from '../services/storage/r2'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
 import type { OpenRouterRequest } from '../services/ai/openrouter'
 
@@ -154,7 +155,46 @@ router.post('/parse-jd', async (c) => {
     nice_to_have_skills: parsed.nice_to_have_skills ?? [],
   }
 
-  return c.json(apiResponse(result))
+  // Store original file in R2 so it can be shown in interview conduct page
+  const user = c.get('user')
+  const ext = getExtension(fileType)
+  const jdKey = `jd/${user.company_id}/${Date.now()}.${ext}`
+  try {
+    const contentType = getContentType(fileType)
+    await uploadToR2(c.env, jdKey, buffer, contentType)
+  } catch {
+    // Non-fatal — parsing succeeded, just won't have PDF preview
+  }
+
+  return c.json(apiResponse({ ...result, jd_url: jdKey }))
+})
+
+// GET /api/jobs/:id/jd — stream the original JD file from R2
+router.get('/:id/jd', async (c) => {
+  const user = c.get('user')
+  const job = await getJob(c.env.DB, c.req.param('id'), user.company_id)
+  if (!job) throw new AppError('Job not found', 404)
+  if (!job.jd_url) return c.json({ success: false, error: 'No JD file uploaded for this job' }, 404)
+
+  const object = await getFromR2(c.env, job.jd_url)
+  if (!object) return c.json({ success: false, error: 'JD file not found in storage' }, 404)
+
+  const ext = job.jd_url.endsWith('.docx') ? 'docx' : 'pdf'
+  const contentType = ext === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  const origin = c.req.header('Origin') || ''
+  const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
+    ? origin
+    : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `inline; filename="JobDescription.${ext}"`,
+      'Cache-Control': 'private, max-age=3600',
+      'Access-Control-Allow-Origin': corsOrigin,
+      'Vary': 'Origin',
+    },
+  })
 })
 
 // GET /api/jobs/:id — get a single job

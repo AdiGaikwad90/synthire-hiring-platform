@@ -1,5 +1,7 @@
+export const runtime = "edge"
 import { CandidateDetail } from "@/components/(recruiter)/CandidateDetail";
 
-export default function CandidateDetailPage({ params }: { params: { candidateId: string } }) {
-  return <CandidateDetail candidateId={params.candidateId} />;
+export default async function CandidateDetailPage({ params }: { params: Promise<{ candidateId: string }> }) {
+  const { candidateId } = await params;
+  return <CandidateDetail candidateId={candidateId} />;
 }

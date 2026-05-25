@@ -23,13 +23,28 @@ function Candidates({ jobId, hideUpload }: { jobId?: string; hideUpload?: boolea
 
 // ── Global /candidates — job-grouped layout ───────────────────────────────────
 
+const STAGE_OPTIONS = [
+  { value: "", label: "All Stages" },
+  { value: "applied", label: "Applied" },
+  { value: "shortlisted", label: "Shortlisted" },
+  { value: "interviewing", label: "Interviewing" },
+  { value: "rejected", label: "Rejected" },
+];
+
 function CandidatesGlobal() {
   const router = useRouter();
   const [search, setSearch] = useS_c("");
+  const [stageFilter, setStageFilter] = useS_c("");
+  const [jobFilter, setJobFilter] = useS_c("");
   const [showUpload, setShowUpload] = useS_c(false);
   const [uploadJobId, setUploadJobId] = useS_c("");
   const { data: jobsData, isLoading } = useJobs();
   const jobs = jobsData?.items ?? [];
+
+  const jobOptions = [
+    { value: "", label: "All Jobs" },
+    ...jobs.map(j => ({ value: j.id, label: j.title })),
+  ];
 
   if (isLoading) return <div className="tsPage"><div style={{ padding: 32, color: "var(--muted)" }}>Loading...</div></div>;
 
@@ -47,6 +62,20 @@ function CandidatesGlobal() {
         </div>
       </div>
 
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        <Select
+          value={stageFilter}
+          onChange={e => setStageFilter(e.target.value)}
+          options={STAGE_OPTIONS}
+        />
+        <Select
+          value={jobFilter}
+          onChange={e => setJobFilter(e.target.value)}
+          options={jobOptions}
+        />
+      </div>
+
       {jobs.length === 0 ? (
         <Card padded>
           <div style={{ padding: "60px 0", textAlign: "center" }}>
@@ -60,13 +89,14 @@ function CandidatesGlobal() {
         </Card>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-          {jobs.map(job => (
+          {jobs.filter(job => !jobFilter || job.id === jobFilter).map(job => (
             <JobCandidateSection
               key={job.id}
               job={job}
               search={search}
+              stageFilter={stageFilter}
               onUpload={() => { setUploadJobId(job.id); setShowUpload(true); }}
-              onViewJob={() => router.push(`/jobs/${job.id}`)}
+              onViewJob={() => router.push(`/jobs/${job.id}?tab=candidates`)}
             />
           ))}
         </div>
@@ -82,13 +112,15 @@ function CandidatesGlobal() {
   );
 }
 
-function JobCandidateSection({ job, search, onUpload, onViewJob }: {
-  job: ApiJob; search: string; onUpload: () => void; onViewJob: () => void;
+function JobCandidateSection({ job, search, stageFilter, onUpload, onViewJob }: {
+  job: ApiJob; search: string; stageFilter?: string; onUpload: () => void; onViewJob: () => void;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [detailCand, setDetailCand] = useS_c<any>(null);
-  const { data, isLoading } = useCandidates({ job_id: job.id });
+  const queryParams: Record<string, string> = { job_id: job.id };
+  if (stageFilter) queryParams.status = stageFilter;
+  const { data, isLoading } = useCandidates(queryParams);
   const updateStage = useUpdateCandidateStage();
   const candidates = data?.items ?? [];
   const filtered = search
@@ -488,6 +520,13 @@ const FilterSlider = ({ label, value, onChange, color, max = 100, unit = "%" }: 
 );
 
 // ===== Candidate Card =====
+function stageBadgeVariant(stage: string): "success" | "danger" | "neutral" | "primary" {
+  if (stage === "shortlisted") return "success";
+  if (stage === "rejected") return "danger";
+  if (stage === "interviewing") return "primary";
+  return "neutral";
+}
+
 function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any) {
   const tone = c.score >= 80 ? "success" : c.score >= 60 ? "warning" : "danger";
   return (
@@ -495,7 +534,14 @@ function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any
       <div className="tsCandCard-head">
         <Avatar name={c.name} color={c.avatar} size={40}/>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 500, fontSize: 14 }}>{c.name}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 500, fontSize: 14 }}>{c.name}</div>
+            {c.stage && (
+              <Badge variant={stageBadgeVariant(c.stage)} style={{ fontSize: 10, padding: "1px 6px" }}>
+                {c.stage.charAt(0).toUpperCase() + c.stage.slice(1)}
+              </Badge>
+            )}
+          </div>
           <div className="small" style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || "—"}</div>
         </div>
         <div className={`tsCandCard-score tsCandCard-score-${tone}`}>

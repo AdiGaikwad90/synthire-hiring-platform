@@ -136,12 +136,13 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
               icon={<Icon.ArrowRight size={13} />}
               onClick={() => {
                 const jobTitle = jobsData?.items.find((j) => j.id === job)?.title ?? "pipeline";
-                toast({ message: `${highMatches} candidates added to ${jobTitle}` });
+                const addedCount = sortedFiles.filter(f => f.status === 'done').length;
+                toast({ message: `${addedCount} candidate${addedCount !== 1 ? 's' : ''} added to ${jobTitle}` });
                 onMatched?.(sortedFiles);
                 onClose();
               }}
             >
-              Add {highMatches} to pipeline
+              Add {sortedFiles.filter(f => f.status === 'done').length} to pipeline
             </Button>
           </>
         ) : stage === "processing" ? (

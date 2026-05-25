@@ -1,3 +1,4 @@
+export const runtime = "edge"
 import { Dashboard } from "@/components/(recruiter)/Dashboard";
 
 export default function DashboardPage() {

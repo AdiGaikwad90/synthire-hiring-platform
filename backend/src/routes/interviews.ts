@@ -15,6 +15,7 @@ import {
   getInterview,
   updateInterview,
   createFeedback,
+  getFeedback,
 } from '../db/queries/interviews'
 import { getCandidate } from '../db/queries/candidates'
 import { getJob } from '../db/queries/jobs'
@@ -259,6 +260,19 @@ router.patch(
     return c.json(apiResponse(interview))
   }
 )
+
+// GET /api/interviews/:id/feedback — get submitted feedback for an interview
+router.get('/:id/feedback', async (c) => {
+  const user = c.get('user')
+  const interviewId = c.req.param('id')
+  const interview = await getInterview(c.env.DB, interviewId, user.company_id)
+  if (!interview) throw new AppError('Interview not found', 404)
+  if (user.role === 'interviewer' && interview.interviewer_id !== user.sub) {
+    throw new AppError('Forbidden', 403)
+  }
+  const feedback = await getFeedback(c.env.DB, interviewId)
+  return c.json(apiResponse(feedback))
+})
 
 // POST /api/interviews/:id/feedback — submit feedback for an interview
 router.post('/:id/feedback', zv('json', submitFeedbackSchema), async (c) => {

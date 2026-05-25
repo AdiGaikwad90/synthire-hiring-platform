@@ -42,6 +42,16 @@ export function useUpdateCandidateStage() {
 }
 
 
+export function useInterviewQuestions(candidateId: string) {
+  return useQuery({
+    queryKey: ['candidates', candidateId, 'questions'],
+    queryFn: () => candidatesApi.generateQuestions(candidateId),
+    enabled: false, // only fetch on demand
+    staleTime: 7 * 24 * 60 * 60 * 1000, // 7 days — matches backend KV cache
+    gcTime: 7 * 24 * 60 * 60 * 1000,
+  })
+}
+
 export function useGenerateQuestions(candidateId: string) {
   return useMutation({
     mutationFn: () => candidatesApi.generateQuestions(candidateId),

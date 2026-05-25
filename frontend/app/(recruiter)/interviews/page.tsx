@@ -1,3 +1,4 @@
+export const runtime = "edge"
 import { InterviewerHome } from "@/components/(interviewer)/InterviewerHome";
 
 // Recruiter-side interview list. Reuses the interviewer portal because the surface

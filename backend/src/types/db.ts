@@ -34,6 +34,7 @@ export interface JobRow {
   nice_to_have_skills: string  // JSON TEXT
   min_years_experience: number
   education_requirement: string | null
+  jd_url: string | null
   created_at: string
   updated_at: string
 }

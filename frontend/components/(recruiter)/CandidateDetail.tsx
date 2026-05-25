@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, Card, Badge, Avatar, ScoreRing, ScoreBar, ScorePill, StagePill, AIPill } from "@/components/ui";
 import { useCandidate, useUpdateCandidateStage, useGenerateQuestions } from "@/hooks/queries/useCandidates";
+import { useJob } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
 import { ScheduleModal } from "./ScheduleModal";
 import { ActivityRow } from "./Dashboard";
@@ -39,6 +40,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const { data: apiCandidate, isLoading } = useCandidate(actualId);
   const { mutate: updateStage } = useUpdateCandidateStage();
   const { user } = useAuth();
+  const { data: appliedJob } = useJob(apiCandidate?.job_id ?? '');
   const toast = useToast();
 
   const [tab, setTab] = useS_cd("overview");
@@ -117,6 +119,11 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
             <div className="small" style={{ color: "var(--muted)" }}>
               {c.title} · {c.location} · <span className="mono">{c.email}</span>
             </div>
+            {appliedJob && (
+              <div className="small" style={{ color: "var(--muted)", marginTop: 2 }}>
+                Applied for: <span style={{ color: "var(--text-2)", fontWeight: 500 }}>{appliedJob.title}</span>
+              </div>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

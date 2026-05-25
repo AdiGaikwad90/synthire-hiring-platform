@@ -23,7 +23,7 @@ export interface ApiJob {
   employment_type: string; experience_level: string; salary_range: string | null
   status: string; scoring_dimensions: ScoringDimensions; scoring_weights: Record<string, number> | null
   required_skills: string[]; nice_to_have_skills: string[]; min_years_experience: number
-  education_requirement: string | null; created_at: string; updated_at: string
+  education_requirement: string | null; jd_url: string | null; created_at: string; updated_at: string
   candidate_count?: number
 }
 
@@ -42,6 +42,14 @@ export interface ApiInterview {
   interviewer_id: string; interview_type_id: string | null; scheduled_at: string
   duration_minutes: number; video_link: string | null; meeting_notes: string | null
   status: string; created_at: string; candidate_name?: string | null
+}
+
+export interface ApiInterviewFeedback {
+  id: string; interview_id: string; interviewer_id: string
+  technical_score: number | null; communication_score: number | null
+  problem_solving_score: number | null; culture_score: number | null
+  strengths: string | null; weaknesses: string | null; notes: string | null
+  recommendation: string; ai_summary: string | null; created_at: string
 }
 
 export interface ApiInterviewType {
@@ -95,13 +103,17 @@ export async function apiFetch<T>(
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers })
 
+  const json = await res.json() as { success: boolean; data: T; error: string | null }
+
   if (res.status === 401) {
-    removeToken()
-    if (typeof window !== 'undefined') window.location.href = '/login'
-    throw new ApiError('Unauthorized', 401)
+    // Only redirect to login when a token existed (expired session), not on auth endpoints
+    if (token) {
+      removeToken()
+      if (typeof window !== 'undefined') window.location.href = '/login'
+    }
+    throw new ApiError(json.error ?? 'Invalid email or password', 401)
   }
 
-  const json = await res.json() as { success: boolean; data: T; error: string | null }
   if (!res.ok || !json.success) {
     throw new ApiError(json.error ?? `HTTP ${res.status}`, res.status, json)
   }
@@ -169,6 +181,8 @@ export const interviewsApi = {
     apiFetch<ApiInterview>(`/api/interviews/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   submitFeedback: (id: string, data: unknown) =>
     apiFetch<unknown>(`/api/interviews/${id}/feedback`, { method: 'POST', body: JSON.stringify(data) }),
+  getFeedback: (id: string) =>
+    apiFetch<ApiInterviewFeedback | null>(`/api/interviews/${id}/feedback`),
 }
 
 // Group: Analytics

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, SearchInput, useToast } from "@/components/ui";
 import { useJobs, useJob, useUpdateJob } from "@/hooks/queries/useJobs";
@@ -181,10 +181,12 @@ function Jobs() {
 
 function JobDetail({ jobId }: { jobId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const { data: job, isLoading } = useJob(jobId);
   const updateJob = useUpdateJob();
-  const [tab, setTab] = useS_jobs<"overview" | "candidates" | "settings">("overview");
+  const initialTab = (searchParams.get('tab') as "overview" | "candidates" | "settings") ?? "overview";
+  const [tab, setTab] = useS_jobs<"overview" | "candidates" | "settings">(initialTab);
   const [showUpload, setShowUpload] = useS_jobs(false);
 
   if (isLoading) return <div className="tsPage"><div style={{padding:32,color:'var(--muted)'}}>Loading...</div></div>;

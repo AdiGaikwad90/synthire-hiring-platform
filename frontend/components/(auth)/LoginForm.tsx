@@ -15,8 +15,8 @@ function Login() {
   const searchParams = useSearchParams();
   const { login } = useAuth();
   const toast = useToast();
-  const [email, setEmail] = useS_lg("sarah@acme.co");
-  const [password, setPassword] = useS_lg("••••••••••");
+  const [email, setEmail] = useS_lg("");
+  const [password, setPassword] = useS_lg("");
   const [remember, setRemember] = useS_lg(true);
   const [showPw, setShowPw] = useS_lg(false);
   const [loading, setLoading] = useS_lg(false);
@@ -136,12 +136,16 @@ function Login() {
                     {showPw ? <Icon.EyeOff size={14}/> : <Icon.Eye size={14}/>}
                   </button>
                 }/>
-              {apiError && (
-                <div style={{ color: 'var(--danger)', fontSize: 13, marginTop: 4 }}>{apiError}</div>
-              )}
             </div>
 
             <Checkbox checked={remember} onChange={setRemember} label="Remember me for 30 days"/>
+
+            {apiError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon.AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                {apiError}
+              </div>
+            )}
 
             <Button variant="primary" size="lg" loading={loading} type="submit" style={{ width: "100%", justifyContent: "center" }}>Sign in</Button>
           </div>

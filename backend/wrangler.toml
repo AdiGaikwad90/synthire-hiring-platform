@@ -50,4 +50,36 @@ crons = ["* * * * *"]
 
 [env.production.vars]
 ENVIRONMENT = "production"
-FRONTEND_ORIGIN = "https://synthire.vercel.app"
+FRONTEND_ORIGIN = "https://synthire-frontend.pages.dev"
+EMAIL_PROVIDER = "sendgrid"
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
+RESEND_FROM_NAME = "Synthire"
+SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
+JWT_EXPIRY_SECONDS = "86400"
+MAX_UPLOAD_BYTES = "10485760"
+EMAIL_QUEUE_INTERVAL_SECONDS = "30"
+EMAIL_MAX_RETRIES = "3"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "synthire-prod"
+database_id = "f6a8faf6-0220-4870-a66b-cbca43405762"
+migrations_dir = "src/db/migrations"
+
+[[env.production.r2_buckets]]
+binding = "RESUME_BUCKET"
+bucket_name = "synthire-resumes"
+
+[[env.production.kv_namespaces]]
+binding = "KV_CACHE"
+id = "6da4fc72343e4286a9080b741ad98bc7"
+
+[[env.production.vectorize]]
+binding = "VECTORIZE"
+index_name = "synthire-embeddings"
+
+[env.production.ai]
+binding = "AI"
+
+[env.production.triggers]
+crons = ["* * * * *"]

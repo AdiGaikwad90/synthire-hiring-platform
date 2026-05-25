@@ -1,6 +1,12 @@
-"use client";
+export const runtime = "edge"
+import { Suspense } from "react";
 import { JobDetail } from "@/components/(recruiter)/Jobs";
 
-export default function JobDetailPage({ params }: { params: { jobId: string } }) {
-  return <JobDetail jobId={params.jobId} />;
+export default async function JobDetailPage({ params }: { params: Promise<{ jobId: string }> }) {
+  const { jobId } = await params;
+  return (
+    <Suspense>
+      <JobDetail jobId={jobId} />
+    </Suspense>
+  );
 }
