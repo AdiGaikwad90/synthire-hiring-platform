@@ -36,7 +36,6 @@ Copy from `.dev.vars.example` and fill in:
 
 ```ini
 JWT_SECRET=           # min 32 chars; node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-OPENROUTER_API_KEY=   # sk-or-... from openrouter.ai → Dashboard → API Keys
 RESEND_API_KEY=       # re_... from resend.com → API Keys
 RESEND_WEBHOOK_SECRET= # whsec_... from Resend → Webhooks (leave blank for local dev)
 ```
@@ -62,12 +61,12 @@ JWT_EXPIRY_SECONDS = "86400"               # 24 hours
 MAX_UPLOAD_BYTES = "10485760"              # 10 MB
 ALLOWED_FILE_TYPES = "pdf,docx"
 
-# LLM — swap FALLBACK2 to a faster paid model in production
-OPENROUTER_MODEL_PRIMARY = "qwen/qwen3-235b-a22b:free"
-OPENROUTER_MODEL_FALLBACK1 = "google/gemma-3-27b-it:free"
-OPENROUTER_MODEL_FALLBACK2 = "openai/gpt-4o-mini"
+# LLM — Workers AI native models (change in wrangler.toml without touching code)
+LLM_MODEL_PRIMARY  = "@cf/meta/llama-3-70b-instruct"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3-8b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
+NEURONS_DAILY_LIMIT = "10000"   # hard stop — AI calls blocked when reached
 
 # Scoring composition — must sum to 1.0
 SCORE_LLM_WEIGHT = "0.70"          # weight for LLM dimension scores
@@ -146,8 +145,8 @@ src/
 │   └── settings.ts                   # /api/settings (placeholder)
 ├── services/
 │   ├── ai/
-│   │   ├── openrouter.ts             # Base fetch wrapper to OpenRouter API
-│   │   ├── fallback.ts               # 3-model retry chain with backoff
+│   │   ├── workers-ai.ts             # Native Workers AI binding wrapper
+│   │   ├── fallback.ts               # 2-model fallback chain with Neurons budget guard
 │   │   └── prompts/
 │   │       ├── parse-resume.ts       # LLM prompt + Zod validation for resume parsing
 │   │       ├── score-candidate.ts    # LLM prompt + Zod validation for scoring
@@ -285,7 +284,7 @@ Internal steps:
 2. Create D1 candidate row (`processing_status = 'parsing'`)
 3. Upload file to R2 → `resume_url`
 4. Extract text (mammoth for DOCX, pdf-parse for PDF) — requires `nodejs_compat` flag
-5. Parse resume structure via LLM (OpenRouter fallback chain)
+5. Parse resume structure via LLM (Workers AI fallback chain)
 6. Update D1 with parsed fields (`processing_status = 'scoring'`)
 7. Generate embedding via Workers AI
 8. Upsert embedding to Vectorize
@@ -295,24 +294,23 @@ Internal steps:
 
 ---
 
-## AI — OpenRouter fallback chain
+## AI — Workers AI fallback chain
 
 ```
 src/services/ai/fallback.ts
 
 Model chain (from wrangler.toml — change without touching code):
-  1. OPENROUTER_MODEL_PRIMARY   → maxRetries: 3
-  2. OPENROUTER_MODEL_FALLBACK1 → maxRetries: 3
-  3. OPENROUTER_MODEL_FALLBACK2 → maxRetries: 2
+  1. LLM_MODEL_PRIMARY  = @cf/meta/llama-3-70b-instruct
+  2. LLM_MODEL_FALLBACK = @cf/meta/llama-3-8b-instruct
 
-All requests: response_format={type:'json_object'}
+Budget guard: checkNeuronBudget() hard-stops at NEURONS_DAILY_LIMIT (default 10000/day)
+On budget exceeded: throw AppError(503) with reset time — does NOT try next model
 temperature = LLM_TEMPERATURE   (default: 0.1)
 max_tokens  = LLM_MAX_TOKENS    (default: 2000)
 
-On 429:  exponential backoff (2^attempt * 1000 ms), retry same model
-On bad JSON:  break inner loop → try next model
-On invalid schema (Zod):  break inner loop → try next model
-On other error:  break inner loop → try next model
+On bad JSON:  try next model
+On invalid schema (Zod):  try next model
+On other error:  try next model
 
 Exhausted:  throw AppError('All AI models exhausted without a valid response', 503)
 ```
@@ -437,7 +435,6 @@ Duplicate-identifier warnings from `node_modules` (`@cloudflare/workers-types` v
 ```bash
 # Set production secrets (interactive prompts)
 wrangler secret put JWT_SECRET
-wrangler secret put OPENROUTER_API_KEY
 wrangler secret put RESEND_API_KEY
 wrangler secret put RESEND_WEBHOOK_SECRET
 

@@ -100,17 +100,19 @@ router.post('/upload', async (c) => {
   // Upload to R2
   await uploadToR2(env, key, buffer, contentType)
 
-  // SSE streaming response
-  const stream = new ReadableStream({
-    async start(controller) {
-      const encoder = new TextEncoder()
+  // SSE streaming response — TransformStream flushes each chunk immediately
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
+  const encoder = new TextEncoder()
 
-      const send = (data: object) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-      }
+  const send = (data: object) =>
+    writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
 
+  // Keep Worker alive even if client disconnects
+  c.executionCtx.waitUntil(
+    (async () => {
       try {
-        send({ candidateId, status: 'parsing' })
+        await send({ candidateId, status: 'parsing' })
 
         // Extract text
         let resumeText: string
@@ -134,7 +136,7 @@ router.post('/upload', async (c) => {
         // Update candidate with parsed data
         await updateCandidateParsed(env.DB, candidateId, parsedResume, key)
 
-        send({ candidateId, status: 'scoring' })
+        await send({ candidateId, status: 'scoring' })
 
         // Run scoring pipeline
         const scoringResult = await runScoringPipeline(env, {
@@ -157,14 +159,12 @@ router.post('/upload', async (c) => {
         // Fetch final candidate row
         const finalCandidate = await getCandidate(env.DB, candidateId, companyId)
 
-        send({
+        await send({
           candidateId,
           status: 'complete',
           score: scoringResult.overall_score,
           candidate: finalCandidate,
         })
-
-        controller.close()
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error'
         try {
@@ -172,22 +172,24 @@ router.post('/upload', async (c) => {
         } catch {
           // best-effort
         }
-        send({ candidateId, status: 'error', error: message })
-        controller.close()
+        await send({ candidateId, status: 'error', error: message })
+      } finally {
+        await writer.close()
       }
-    },
-  })
+    })()
+  )
 
   const origin = c.req.header('Origin') || ''
   const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
     ? origin
     : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
 
-  return new Response(stream, {
+  return new Response(readable, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
       'Access-Control-Allow-Origin': corsOrigin,
       'Vary': 'Origin',
     },

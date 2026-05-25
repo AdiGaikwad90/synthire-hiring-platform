@@ -1,4 +1,4 @@
-import type { OpenRouterRequest } from '../openrouter'
+import type { WorkersAIRequest } from '../workers-ai'
 import type { ScoringDimensions } from '../../scoring/dimensions'
 import { SUB_DIMENSION_KEYS } from '../../scoring/dimensions'
 
@@ -25,7 +25,7 @@ export function buildScoringMessages(
   requiredSkills: string[],
   minYearsExperience: number,
   _dimensions: ScoringDimensions
-): OpenRouterRequest['messages'] {
+): WorkersAIRequest['messages'] {
   const skillsList = requiredSkills.length > 0 ? requiredSkills.join(', ') : 'Not specified'
   const jobContext = jobDescription ? `Job Description: ${jobDescription}` : `Job Title: ${jobTitle}`
 

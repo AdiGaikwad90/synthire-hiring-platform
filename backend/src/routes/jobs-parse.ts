@@ -6,7 +6,7 @@ import { detectFileType } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
-import type { OpenRouterRequest } from '../services/ai/openrouter'
+import type { WorkersAIRequest } from '../services/ai/workers-ai'
 import { z } from 'zod'
 
 const router = new Hono<{ Bindings: Env }>()
@@ -33,7 +33,7 @@ function validateParsedJD(data: unknown): boolean {
   return result.success
 }
 
-function buildJDParseMessages(jdText: string): OpenRouterRequest['messages'] {
+function buildJDParseMessages(jdText: string): WorkersAIRequest['messages'] {
   return [
     {
       role: 'system',

@@ -23,7 +23,7 @@ import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
 import { uploadToR2, getFromR2 } from '../services/storage/r2'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
-import type { OpenRouterRequest } from '../services/ai/openrouter'
+import type { WorkersAIRequest } from '../services/ai/workers-ai'
 
 // ── JD parse schema ───────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ const parsedJdSchema = z.object({
 
 type ParsedJd = z.infer<typeof parsedJdSchema>
 
-function buildJdParseMessages(jdText: string): OpenRouterRequest['messages'] {
+function buildJdParseMessages(jdText: string): WorkersAIRequest['messages'] {
   return [
     {
       role: 'system',

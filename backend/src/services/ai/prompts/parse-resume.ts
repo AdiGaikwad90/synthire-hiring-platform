@@ -1,4 +1,4 @@
-import type { OpenRouterRequest } from '../openrouter'
+import type { WorkersAIRequest } from '../workers-ai'
 
 export interface ParsedResume {
   name: string
@@ -24,7 +24,7 @@ export interface ParsedResume {
   achievements: string[]
 }
 
-export function buildResumeParseMessages(resumeText: string): OpenRouterRequest['messages'] {
+export function buildResumeParseMessages(resumeText: string): WorkersAIRequest['messages'] {
   return [
     {
       role: 'system',

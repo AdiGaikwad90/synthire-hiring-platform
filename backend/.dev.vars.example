@@ -12,12 +12,6 @@
 #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=
 
-# OpenRouter API key — for LLM resume parsing and scoring.
-# Sign up free at https://openrouter.ai → Dashboard → API Keys
-# Free models (Qwen3, Gemma 3) are used by default; no billing required.
-# Format: sk-or-v1-...
-OPENROUTER_API_KEY=
-
 # Resend API key — for transactional email (interview notifications, reminders).
 # Sign up free at https://resend.com → API Keys → Create API Key
 # Free tier: 100 emails/day, 3000/month — sufficient for development.

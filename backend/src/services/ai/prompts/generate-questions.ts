@@ -1,4 +1,4 @@
-import type { OpenRouterRequest } from '../openrouter'
+import type { WorkersAIRequest } from '../workers-ai'
 import type { ParsedResume } from './parse-resume'
 
 export function buildQuestionMessages(
@@ -6,7 +6,7 @@ export function buildQuestionMessages(
   jobTitle: string,
   technicalSkills: string[],
   experience: ParsedResume['professional_experience']
-): OpenRouterRequest['messages'] {
+): WorkersAIRequest['messages'] {
   const skillsList = technicalSkills.slice(0, 10).join(', ')
   const recentRoles = experience
     .slice(0, 3)
