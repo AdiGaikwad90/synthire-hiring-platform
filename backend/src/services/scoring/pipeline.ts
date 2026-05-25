@@ -7,6 +7,7 @@ import { cosineSimilarity } from '../embeddings/similarity'
 import { callWithFallback, buildLlmConfig } from '../ai/fallback'
 import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
 import { aggregateScore, buildScoreConfig } from './aggregator'
+import { checkNeuronBudget, deductNeurons } from '../budget/neurons'
 
 export interface ScoringInput {
   candidateId: string
@@ -48,12 +49,18 @@ export async function runScoringPipeline(
     scoringWeights,
   } = input
 
+  const dailyLimit = parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10)
+
   // Step 1: Generate embedding for resume text
+  await checkNeuronBudget(env.KV_CACHE, 'EMBEDDING', dailyLimit)
   const resumeEmbedding = await generateEmbedding(env.AI, resumeText)
+  if (resumeEmbedding) await deductNeurons(env.KV_CACHE, 'EMBEDDING')
 
   // Step 2: Generate embedding for job description (use jobTitle if no description)
   const jobText = jobDescription ?? jobTitle
+  await checkNeuronBudget(env.KV_CACHE, 'EMBEDDING', dailyLimit)
   const jobEmbedding = await generateEmbedding(env.AI, jobText)
+  if (jobEmbedding) await deductNeurons(env.KV_CACHE, 'EMBEDDING')
 
   // Step 3: Upsert candidate embedding to Vectorize (skip if text was too short; non-fatal in local dev)
   if (resumeEmbedding) {
@@ -85,9 +92,12 @@ export async function runScoringPipeline(
 
   const config = buildLlmConfig(env)
   const llmResult = await callWithFallback(
-    env.OPENROUTER_API_KEY,
+    env.AI,
+    env.KV_CACHE,
+    dailyLimit,
     messages,
     validateLLMScores,
+    'LLM_SCORE',
     config
   ) as LLMScores
 

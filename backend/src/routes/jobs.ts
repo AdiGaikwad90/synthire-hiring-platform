@@ -142,9 +142,12 @@ router.post('/parse-jd', async (c) => {
   const llmConfig = buildLlmConfig(c.env)
 
   const parsed = await callWithFallback(
-    c.env.OPENROUTER_API_KEY,
+    c.env.AI,
+    c.env.KV_CACHE,
+    parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
     messages,
     validateParsedJd,
+    'LLM_PARSE',
     llmConfig
   ) as ParsedJd
 

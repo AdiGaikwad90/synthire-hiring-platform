@@ -1,91 +1,85 @@
+import type { Ai } from '@cloudflare/workers-types'
+import type { KVNamespace } from '@cloudflare/workers-types'
 import { AppError } from '../../types/api'
-import { callOpenRouter } from './openrouter'
-import type { OpenRouterRequest } from './openrouter'
+import { callWorkersAI } from './workers-ai'
+import type { WorkersAIRequest } from './workers-ai'
 import type { Env } from '../../types/bindings'
+import { checkNeuronBudget, deductNeurons } from '../budget/neurons'
+import type { NeuronOperation } from '../budget/neurons'
 
 export interface LlmConfig {
-  models: Array<{ model: string; maxRetries: number }>
+  models: string[]
   temperature: number
   maxTokens: number
 }
 
-// Default config used when no env is available (tests, edge cases)
+const CF_MODELS = [
+  '@cf/meta/llama-3-70b-instruct',
+  '@cf/meta/llama-3-8b-instruct',
+]
+
 const DEFAULT_CONFIG: LlmConfig = {
-  models: [
-    { model: 'meta-llama/llama-3.3-70b-instruct:free', maxRetries: 3 },
-    { model: 'google/gemma-4-31b-it:free', maxRetries: 3 },
-    { model: 'openai/gpt-4o-mini', maxRetries: 2 },
-  ],
+  models: CF_MODELS,
   temperature: 0.1,
   maxTokens: 2000,
 }
 
 export function buildLlmConfig(env: Env): LlmConfig {
   return {
-    models: [
-      { model: env.OPENROUTER_MODEL_PRIMARY ?? DEFAULT_CONFIG.models[0].model, maxRetries: 3 },
-      { model: env.OPENROUTER_MODEL_FALLBACK1 ?? DEFAULT_CONFIG.models[1].model, maxRetries: 3 },
-      { model: env.OPENROUTER_MODEL_FALLBACK2 ?? DEFAULT_CONFIG.models[2].model, maxRetries: 2 },
-    ],
+    models: CF_MODELS,
     temperature: parseFloat(env.LLM_TEMPERATURE ?? '0.1'),
     maxTokens: parseInt(env.LLM_MAX_TOKENS ?? '2000', 10),
   }
 }
 
 export async function callWithFallback(
-  apiKey: string,
-  messages: OpenRouterRequest['messages'],
+  ai: Ai,
+  kv: KVNamespace,
+  dailyLimit: number,
+  messages: WorkersAIRequest['messages'],
   validateFn: (parsed: unknown) => boolean,
+  operation: NeuronOperation,
   config: LlmConfig = DEFAULT_CONFIG
 ): Promise<unknown> {
+  // Hard stop — check budget before attempting any model
+  await checkNeuronBudget(kv, operation, dailyLimit)
+
   const errors: string[] = []
 
-  for (const { model, maxRetries } of config.models) {
+  for (const model of config.models) {
     console.info(`[llm] trying model=${model}`)
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const content = await callWorkersAI(ai, model, {
+        messages,
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+      })
+
+      let parsed: unknown
       try {
-        const content = await callOpenRouter(apiKey, {
-          model,
-          messages,
-          response_format: { type: 'json_object' },
-          temperature: config.temperature,
-          max_tokens: config.maxTokens,
-        })
-
-        let parsed: unknown
-        try {
-          parsed = JSON.parse(content)
-        } catch {
-          // Bad JSON from this model — try next model
-          errors.push(`${model}: returned invalid JSON`)
-          break  // break inner → try next model in outer
-        }
-
-        if (validateFn(parsed)) {
-          console.info(`[llm] success model=${model} attempt=${attempt}`)
-          return parsed
-        }
-
-        // Valid JSON but failed schema — try next model
-        console.warn(`[llm] model=${model} response failed schema validation, trying next model`)
-        errors.push(`${model}: response failed schema validation`)
-        break  // break inner → try next model in outer
-
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-
-        if (message.includes('429')) {
-          const waitMs = Math.pow(2, attempt) * 1000
-          console.warn(`[llm] ${model} rate limited, waiting ${waitMs}ms`)
-          await new Promise(resolve => setTimeout(resolve, waitMs))
-          continue  // retry same model
-        }
-
-        // Any other error — log and skip to next model
-        console.error(`[llm] model=${model} attempt=${attempt} error:`, message)
-        errors.push(`${model}: ${message}`)
-        break  // break inner → try next model in outer
+        parsed = JSON.parse(content)
+      } catch {
+        errors.push(`${model}: returned invalid JSON`)
+        console.warn(`[llm] model=${model} returned invalid JSON, trying next`)
+        continue
       }
+
+      if (validateFn(parsed)) {
+        // Deduct Neurons only on success
+        await deductNeurons(kv, operation)
+        console.info(`[llm] success model=${model}`)
+        return parsed
+      }
+
+      errors.push(`${model}: response failed schema validation`)
+      console.warn(`[llm] model=${model} failed schema validation, trying next`)
+    } catch (err) {
+      // Re-throw budget errors immediately — do not try next model
+      if (err instanceof AppError && err.statusCode === 503) throw err
+
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[llm] model=${model} error:`, message)
+      errors.push(`${model}: ${message}`)
     }
   }
 

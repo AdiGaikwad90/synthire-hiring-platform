@@ -123,9 +123,12 @@ router.post('/upload', async (c) => {
         // Parse resume with AI
         const messages = buildResumeParseMessages(resumeText)
         const parsedResume = await callWithFallback(
-          env.OPENROUTER_API_KEY,
+          env.AI,
+          env.KV_CACHE,
+          parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
           messages,
-          validateParsedResume
+          validateParsedResume,
+          'LLM_PARSE'
         ) as ParsedResume
 
         // Update candidate with parsed data
@@ -149,7 +152,7 @@ router.post('/upload', async (c) => {
         })
 
         // Update scores
-        await updateCandidateScores(env.DB, candidateId, scoringResult, 'openrouter')
+        await updateCandidateScores(env.DB, candidateId, scoringResult, 'workers-ai')
 
         // Fetch final candidate row
         const finalCandidate = await getCandidate(env.DB, candidateId, companyId)
@@ -305,9 +308,12 @@ router.post('/:id/questions', async (c) => {
   )
 
   const result = await callWithFallback(
-    c.env.OPENROUTER_API_KEY,
+    c.env.AI,
+    c.env.KV_CACHE,
+    parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
     messages,
-    validateQuestions
+    validateQuestions,
+    'LLM_QUESTIONS'
   ) as { questions: Array<string | { q: string; why: string }> }
 
   // Normalize to {q, why} format regardless of model output shape

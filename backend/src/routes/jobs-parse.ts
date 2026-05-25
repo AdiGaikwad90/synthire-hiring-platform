@@ -104,9 +104,12 @@ router.post('/', async (c) => {
   const config = buildLlmConfig(c.env)
 
   const parsed = await callWithFallback(
-    c.env.OPENROUTER_API_KEY,
+    c.env.AI,
+    c.env.KV_CACHE,
+    parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
     messages,
     validateParsedJD,
+    'LLM_PARSE',
     config
   ) as ParsedJD
 

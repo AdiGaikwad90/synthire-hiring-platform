@@ -10,7 +10,6 @@ export interface Env {
 
   // ── Secrets (.dev.vars locally / wrangler secret put in production) ────────
   JWT_SECRET: string
-  OPENROUTER_API_KEY: string
   RESEND_API_KEY: string
   RESEND_WEBHOOK_SECRET: string
   SENDGRID_API_KEY: string
@@ -28,12 +27,10 @@ export interface Env {
   MAX_UPLOAD_BYTES: string           // default: "10485760" (10 MB)
   ALLOWED_FILE_TYPES: string         // default: "pdf,docx" (comma-separated)
 
-  // LLM — OpenRouter model chain
-  OPENROUTER_MODEL_PRIMARY: string   // default: "qwen/qwen3-235b-a22b:free"
-  OPENROUTER_MODEL_FALLBACK1: string // default: "google/gemma-3-27b-it:free"
-  OPENROUTER_MODEL_FALLBACK2: string // default: "openai/gpt-5.4-mini"
+  // LLM — Workers AI native models
   LLM_TEMPERATURE: string            // default: "0.1"
   LLM_MAX_TOKENS: string             // default: "2000"
+  NEURONS_DAILY_LIMIT: string        // default: "10000" — hard cap, stops AI calls when reached
 
   // Scoring composition
   SCORE_LLM_WEIGHT: string           // default: "0.70"  (LLM dimension scores %)
