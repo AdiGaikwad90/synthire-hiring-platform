@@ -1,6 +1,6 @@
 # Synthire — AI-Powered Applicant Tracking System
 
-Synthire (Synthetic + Hire) is a production-grade ATS built on Cloudflare's developer platform. It uses AI to parse resumes, score candidates against job requirements, and automate recruiter communications.
+Synthire (Synthetic + Hire) is a production-grade ATS built entirely on Cloudflare's developer platform. It uses AI to parse resumes, score candidates against job requirements, and automate recruiter communications.
 
 ---
 
@@ -9,7 +9,7 @@ Synthire (Synthetic + Hire) is a production-grade ATS built on Cloudflare's deve
 ```
 TS_CF_Hackathon/
 ├── backend/        Cloudflare Workers API (Hono framework)
-└── frontend/       Next.js 14 App Router UI
+└── frontend/       Next.js 15 App Router → Cloudflare Pages
 ```
 
 | Layer | Technology |
@@ -22,7 +22,8 @@ TS_CF_Hackathon/
 | Embeddings | Workers AI (`@cf/baai/bge-large-en-v1.5`) |
 | AI / LLM | OpenRouter (configurable model chain, defaults to free models) |
 | Email | Resend or SendGrid (switchable via `EMAIL_PROVIDER`) |
-| Frontend | Next.js 14, React Query v5, TypeScript |
+| Frontend | Next.js 15, React Query v5, TypeScript |
+| Frontend hosting | Cloudflare Pages (via `@cloudflare/next-on-pages`) |
 
 ---
 
@@ -103,6 +104,8 @@ EMAIL_PROVIDER = "sendgrid"   # or "resend"
 echo "NEXT_PUBLIC_API_URL=http://localhost:8787" > frontend/.env.local
 ```
 
+This is the only variable needed for local development. `npm run dev` reads it automatically — you never need to change it.
+
 ### Step 5 — Apply database schema locally
 
 ```bash
@@ -123,13 +126,13 @@ Open two terminals:
 # Terminal 1 — backend on http://localhost:8787
 cd backend && npm run dev
 
-# Terminal 2 — frontend on http://localhost:3001
+# Terminal 2 — frontend on http://localhost:3000
 cd frontend && npm run dev
 ```
 
 Health check: `curl http://localhost:8787/health`
 
-Open http://localhost:3001, sign up, and start using the app.
+Open http://localhost:3000, sign up, and start using the app.
 
 ---
 
@@ -171,7 +174,7 @@ preview_id = "paste-your-kv-preview-id-here"
 
 ```bash
 cd backend
-wrangler d1 migrations apply synthire-prod --remote
+wrangler d1 migrations apply synthire-prod --remote --env=production
 ```
 
 > Always use `--remote` for production. Without it, migrations only apply to your local SQLite copy.
@@ -218,19 +221,7 @@ RESEND_WEBHOOK_SECRET
 
 > **Common mistake:** Running `wrangler secret put` without `--env=production` sets the secret on the wrong (top-level) worker. Always include the flag.
 
-### Step 4 — Configure production vars in `backend/wrangler.toml`
-
-The `[env.production]` section must explicitly declare all bindings — they are NOT inherited from the top-level config. This is already set up in the repo. You only need to update:
-
-```toml
-[env.production.vars]
-ENVIRONMENT = "production"
-FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← update after Step 6
-EMAIL_PROVIDER = "sendgrid"                        # or "resend"
-SENDGRID_FROM_EMAIL = "your-verified@email.com"    # must be verified in SendGrid
-```
-
-### Step 5 — Deploy the backend
+### Step 4 — Deploy the backend
 
 ```bash
 cd backend
@@ -243,7 +234,7 @@ Output will show your worker URL:
 https://synthire-backend-production.<your-subdomain>.workers.dev
 ```
 
-Save this URL — you need it in Step 6.
+Save this URL — you need it in the next steps.
 
 Verify it works:
 ```bash
@@ -251,47 +242,52 @@ curl https://synthire-backend-production.<your-subdomain>.workers.dev/health
 # → {"success":true,"data":{"status":"ok"},...}
 ```
 
-### Step 6 — Deploy the frontend to Vercel
+### Step 5 — Create Cloudflare Pages project (one-time)
 
 ```bash
 cd frontend
 
-# First deployment
-npx vercel
-# Prompts:
-#   Set up and deploy? → Y
-#   Link to existing project? → N
-#   Project name? → synthire
-#   Customize settings? → N
+# Create the Pages project in your Cloudflare account
+wrangler pages project create synthire-frontend
+# Choose: No framework preset / static (the build step handles this)
 ```
 
-Add the backend URL as an environment variable:
-```bash
-npx vercel env add NEXT_PUBLIC_API_URL production
-# paste: https://synthire-backend-production.<your-subdomain>.workers.dev
-```
+### Step 6 — Configure production vars in `backend/wrangler.toml`
 
-Deploy to production:
-```bash
-npx vercel --prod
-```
-
-Note your frontend URL — e.g. `https://synthire.vercel.app`
-
-### Step 7 — Wire frontend URL back to backend
-
-Update `FRONTEND_ORIGIN` in `backend/wrangler.toml`:
+Update the `[env.production.vars]` section with your Pages URL:
 
 ```toml
 [env.production.vars]
-FRONTEND_ORIGIN = "https://synthire.vercel.app"   # ← exact Vercel URL, no trailing slash
+ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://synthire-frontend.pages.dev"   # ← your Pages URL
+EMAIL_PROVIDER = "sendgrid"                                # or "resend"
+SENDGRID_FROM_EMAIL = "your-verified@email.com"            # must be verified in SendGrid
 ```
 
 Redeploy the backend to apply the CORS change:
 ```bash
-cd backend
-npm run deploy
+cd backend && npm run deploy
 ```
+
+### Step 7 — Deploy the frontend to Cloudflare Pages
+
+`NEXT_PUBLIC_API_URL` is a build-time variable — Next.js bakes it into the bundle during `next build`. Update `frontend/.env.production` with your backend URL, then deploy:
+
+```bash
+# 1. Set your production backend URL in frontend/.env.production
+echo "NEXT_PUBLIC_API_URL=https://synthire-backend-production.<your-subdomain>.workers.dev" > frontend/.env.production
+
+# 2. Deploy (reads .env.production automatically)
+cd frontend && npm run deploy
+```
+
+Your frontend is now live at `https://synthire-frontend.pages.dev`.
+
+> **How env vars work across environments:**
+> - `npm run dev` → reads `.env.local` → `http://localhost:8787` (your local backend)
+> - `npm run deploy` → reads `.env.production` → your deployed worker URL
+>
+> You never need to change anything manually. Each command reads the right file for its environment.
 
 ### Step 8 — Verify the full stack
 
@@ -299,11 +295,11 @@ npm run deploy
 # Backend health
 curl https://synthire-backend-production.<your-subdomain>.workers.dev/health
 
-# Watch live logs
+# Watch live backend logs
 wrangler tail --env=production
 ```
 
-Open `https://synthire.vercel.app/signup`, create an account, and test the full flow. The cron logs should show `"* * * * *" - Ok` every minute.
+Open `https://synthire-frontend.pages.dev/signup`, create an account, and test the full flow.
 
 ### Re-deploying after code changes
 
@@ -311,22 +307,25 @@ Open `https://synthire.vercel.app/signup`, create an account, and test the full 
 # Backend only
 cd backend && npm run deploy
 
-# Frontend only
-cd frontend && npx vercel --prod
+# Frontend only (reads .env.production automatically)
+cd frontend && npm run deploy
 
 # Both
-cd backend && npm run deploy && cd ../frontend && npx vercel --prod
+cd backend && npm run deploy && cd ../frontend && npm run deploy
 ```
 
 ### Updating an environment variable after deploy
 
 ```bash
-# For a secret (API key, JWT secret):
+# For a backend secret (API key, JWT secret):
 wrangler secret put SECRET_NAME --env=production
 
-# For a non-secret var (FRONTEND_ORIGIN, EMAIL_PROVIDER, etc.):
+# For a backend non-secret var (FRONTEND_ORIGIN, EMAIL_PROVIDER, etc.):
 # Edit backend/wrangler.toml → [env.production.vars] → then redeploy:
 cd backend && npm run deploy
+
+# For the frontend API URL:
+# Re-run the frontend deploy command in Step 7 with the updated URL
 ```
 
 ---
@@ -339,12 +338,14 @@ cd backend && npm run deploy
 | `Missing Authentication header` from OpenRouter | `OPENROUTER_API_KEY` secret not set — run `wrangler secret put OPENROUTER_API_KEY --env=production` |
 | `Imported HMAC key length (0)` on signup/login | `JWT_SECRET` not set — run `wrangler secret put JWT_SECRET --env=production` |
 | `The from address does not match a verified Sender Identity` | SendGrid from-email not verified — go to app.sendgrid.com → Settings → Sender Authentication → verify your `SENDGRID_FROM_EMAIL` address |
-| CORS errors in browser | `FRONTEND_ORIGIN` in `[env.production.vars]` doesn't exactly match your Vercel URL (no trailing slash) |
-| D1 errors on first load | Migrations not applied to remote — run `wrangler d1 migrations apply synthire-prod --remote` |
+| CORS errors in browser | `FRONTEND_ORIGIN` in `[env.production.vars]` doesn't exactly match your Pages URL (no trailing slash) |
+| D1 errors on first load | Migrations not applied to remote — run `wrangler d1 migrations apply synthire-prod --remote --env=production` |
 | Resume upload fails | R2 bucket name must be exactly `synthire-resumes` |
 | Vectorize errors on first deploy | Index takes ~2 min to become available after creation |
 | Secrets applied to wrong worker | You ran `wrangler secret put` without `--env=production` — re-run with the flag |
 | Workers AI unavailable locally | Workers AI requires live Cloudflare connection — embeddings/scoring degrade gracefully in local dev |
+| `Login failed` on Pages deployment | `NEXT_PUBLIC_API_URL` not passed at build time — re-run `build:cf` with `NEXT_PUBLIC_API_URL=...` prefix |
+| Pages build fails with peer dep errors | Run `npm install` in `frontend/` — `.npmrc` sets `legacy-peer-deps=true` |
 
 ---
 
@@ -420,6 +421,7 @@ All protected endpoints require `Authorization: Bearer <token>` header.
 | GET | `/api/jobs/:id` | ✓ | Get job |
 | PATCH | `/api/jobs/:id` | ✓ | Update job |
 | DELETE | `/api/jobs/:id` | ✓ | Soft-delete job |
+| GET | `/api/jobs/:id/jd` | ✓ | Stream original JD PDF from R2 |
 | POST | `/api/candidates/upload` | ✓ | Upload resume (SSE stream) |
 | GET | `/api/candidates` | ✓ | List candidates |
 | GET | `/api/candidates/:id` | ✓ | Get candidate |
@@ -430,6 +432,7 @@ All protected endpoints require `Authorization: Bearer <token>` header.
 | POST | `/api/interviews` | ✓ | Schedule interview + queue emails |
 | PATCH | `/api/interviews/:id` | ✓ | Update interview |
 | POST | `/api/interviews/:id/feedback` | ✓ | Submit feedback |
+| GET | `/api/interviews/:id/feedback` | ✓ | Get submitted feedback |
 | GET | `/api/interview-types` | ✓ | List interview rounds |
 | POST | `/api/interview-types` | ✓ | Create interview round |
 | PATCH | `/api/interview-types/:id` | ✓ | Update interview round |
@@ -494,7 +497,7 @@ backend/src/
 │   ├── scoring/                # Skill matcher + score aggregator + pipeline
 │   └── storage/                # R2 helpers
 ├── db/
-│   ├── migrations/             # D1 SQL schema (9 tables)
+│   ├── migrations/             # D1 SQL schema
 │   └── queries/                # Typed D1 query helpers
 └── types/                      # TypeScript interfaces (Env, DB rows, API, email)
 
@@ -513,7 +516,8 @@ frontend/
 │   ├── auth.ts                 # Token storage helpers (localStorage + cookie)
 │   ├── types.ts                # Domain types
 │   └── utils.ts                # cn(), initials(), formatDate()
-└── middleware.ts               # Route protection (reads synthire_token cookie)
+├── middleware.ts               # Route protection (reads synthire_token cookie)
+└── wrangler.toml               # Cloudflare Pages config
 ```
 
 ---
@@ -531,3 +535,6 @@ frontend/
 | All config in wrangler.toml | Model names, thresholds, TTLs — tunable without code changes |
 | KV-backed rate limiting | Works on free tier; self-cleaning keys via TTL |
 | Native fetch for Resend/SendGrid | Avoids Node.js npm dependencies that don't run in Workers |
+| Cloudflare Pages for frontend | Entire stack on Cloudflare — no Vercel dependency |
+| `@cloudflare/next-on-pages` | Converts Next.js App Router to Cloudflare Pages Worker format |
+| `NEXT_PUBLIC_API_URL` at build time | Next.js bakes public env vars into bundle — set explicitly for production builds |

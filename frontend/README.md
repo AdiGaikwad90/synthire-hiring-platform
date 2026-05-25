@@ -1,86 +1,114 @@
-# TalentScout AI — Frontend
+# Synthire — Frontend
 
-Next.js 14 (App Router) + TypeScript frontend for the TalentScout AI applicant tracking system. Built as a complete UI scaffold ready for backend wiring.
+Next.js 15 (App Router) + TypeScript frontend for the Synthire AI-powered ATS. Deployed to Cloudflare Pages via `@cloudflare/next-on-pages`.
 
 ## Stack
 
-- **Next.js 14** — App Router, RSC where appropriate, `'use client'` on interactive surfaces
-- **TypeScript** — `strict: false` initially so the prototype compiles; tighten as you wire types
-- **Tailwind CSS** — configured with the design tokens; co-exists with the custom CSS in `app/globals.css`
-- **Lucide React** — listed as a dependency. The prototype currently ships an inline icon set in `lib/icons.tsx` so it works offline; swap to `lucide-react` per-icon as you go.
-- **No state library** — pages use `useState` / props for now. Add Zustand, Redux Toolkit, or React Query when you wire APIs.
+- **Next.js 15** — App Router, `'use client'` on interactive surfaces, `export const runtime = "edge"` on all routes
+- **TypeScript** — `strict: false`
+- **Tailwind CSS** — design tokens in `app/globals.css`
+- **React Query v5** — all server state; hooks in `hooks/queries/`
+- **Cloudflare Pages** — hosting via `@cloudflare/next-on-pages`
+
+## Local development
+
+```bash
+# 1. Create .env.local (one-time)
+echo "NEXT_PUBLIC_API_URL=http://localhost:8787" > .env.local
+
+# 2. Install and run
+npm install
+npm run dev    # http://localhost:3000
+```
+
+Backend must be running at `http://localhost:8787`. See root `README.md` for backend setup.
+
+`.env.local` is read automatically by `next dev` — no changes needed between sessions.
+
+## Build for Cloudflare Pages (production)
+
+`NEXT_PUBLIC_API_URL` is a build-time variable — Next.js bakes it into the bundle during `next build`. The deploy script reads it from `.env.production` automatically.
+
+```bash
+# One-time: set your production backend URL
+echo "NEXT_PUBLIC_API_URL=https://your-worker.workers.dev" > .env.production
+
+# Deploy (reads .env.production automatically)
+npm run deploy
+```
+
+**How env vars work across environments:**
+
+| Command | Reads from | URL used |
+|---|---|---|
+| `npm run dev` | `.env.local` | `http://localhost:8787` |
+| `npm run deploy` | `.env.production` | your deployed worker |
+
+You never need to manually set or swap URLs.
+
+## npm scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server on port 3000, reads `.env.local` |
+| `npm run build` | Standard Next.js build (for local testing) |
+| `npm run build:cf` | Cloudflare Pages build via `@cloudflare/next-on-pages` |
+| `npm run deploy` | `build:cf` + `wrangler pages deploy` (set `NEXT_PUBLIC_API_URL` first) |
+| `npm run typecheck` | `tsc --noEmit` — target 0 errors |
+| `npm run lint` | ESLint |
 
 ## Folder structure
 
 ```
 app/
-├── layout.tsx                              # Root layout: <html>, fonts, providers, globals.css
-├── globals.css                             # Design tokens + all UI styles
-├── page.tsx                                # Marketing landing
-├── providers.tsx                           # Toast + Tweaks providers
-│
-├── (auth)/                                 # Route group — no shared layout chrome
+├── layout.tsx                  # Root layout — fonts, providers, globals.css
+├── globals.css                 # ALL design tokens + component styles
+├── providers.tsx               # QueryClientProvider → AuthProvider → ToastProvider
+├── page.tsx                    # / → Landing
+├── (auth)/
 │   ├── login/page.tsx
 │   └── signup/page.tsx
-│
-├── (recruiter)/                            # Route group with sidebar + top nav
-│   ├── layout.tsx                          # RecruiterLayout — Sidebar + Topbar + CommandPalette
+├── (recruiter)/                # Route group with Sidebar + Topbar layout
+│   ├── layout.tsx
 │   ├── dashboard/page.tsx
-│   ├── jobs/
-│   │   ├── page.tsx
-│   │   ├── new/page.tsx                    # Job wizard
-│   │   └── [jobId]/page.tsx                # Job detail = candidate list
-│   ├── candidates/
-│   │   ├── page.tsx
-│   │   └── [candidateId]/page.tsx
-│   ├── pipeline/page.tsx                   # Kanban
-│   ├── interviews/page.tsx                 # Recruiter interview list
+│   ├── jobs/page.tsx
+│   ├── jobs/new/page.tsx
+│   ├── jobs/[jobId]/page.tsx
+│   ├── candidates/page.tsx
+│   ├── candidates/[candidateId]/page.tsx
+│   ├── pipeline/page.tsx
+│   ├── interviews/page.tsx
 │   ├── analytics/page.tsx
 │   └── settings/page.tsx
-│
-└── (interviewer)/                          # Route group for interviewer surfaces
-    ├── interviewer/page.tsx                # Interviewer portal (today's interviews)
-    └── interviews/[interviewId]/page.tsx   # Conduct interview + feedback
+└── (interviewer)/
+    ├── interviewer/page.tsx
+    └── interviews/[interviewId]/page.tsx
 
 components/
-├── ui/                                     # Design-system primitives (Button, Card, Modal, …)
-├── shared/                                 # Sidebar, Navigation, CommandPalette, Logo, TweaksPanel
-├── (auth)/                                 # AuthLayout
-├── (recruiter)/                            # CandidateCard, JobForm (wizard), PipelineKanban, FilterPanel, ScoreDisplay, screen sections
-└── (interviewer)/                          # InterviewConduct, FeedbackForm
+├── ui/                         # Design-system primitives (Button, Card, Modal, …)
+├── shared/                     # Sidebar, Navigation, CommandPalette, TweaksPanel
+├── (auth)/                     # LoginForm, SignupForm
+├── (recruiter)/                # All recruiter screen components
+└── (interviewer)/              # InterviewConduct, FeedbackForm
+
+hooks/queries/
+├── useJobs.ts
+├── useCandidates.ts
+├── useInterviews.ts
+├── useAnalytics.ts
+├── useSettings.ts
+└── useEmail.ts
 
 lib/
-├── data.ts                                 # Mock data — replace with API calls
-├── icons.tsx                               # Inline SVG icon set (Icon.X)
-├── types.ts                                # Domain types (Candidate, Job, …)
-└── utils.ts                                # cn() helper
+├── api.ts          # Typed API client — all endpoint groups
+├── auth.ts         # Token helpers (localStorage + cookie sync)
+├── types.ts        # Domain types
+├── utils.ts        # cn(), initials(), formatDate()
+└── icons.tsx       # Inline SVG icon set
 ```
 
-## Backend wiring map
-
-The places to wire are concentrated:
-
-| Surface | What to replace |
-|---|---|
-| Mock data | `lib/data.ts` — replace each export with a fetch from your API |
-| Login | `app/(auth)/login/page.tsx` — calls `setRoute("dashboard")`; replace with your auth flow |
-| JD upload | `components/(recruiter)/JDUploadModal.tsx` — animated stub; wire `handleFiles` to a real upload + parse endpoint |
-| Batch resume upload | `components/(recruiter)/ResumeBatchModal.tsx` — same: wire `handleFiles` to your bulk parse + score endpoint |
-| Score-against-job filter | `components/(recruiter)/FilterPanel.tsx` — pure client-side filtering on the mock list; replace with API-backed query |
-| Interview scheduling | `components/(recruiter)/ScheduleModal.tsx` — collects state but doesn't post |
-| Feedback submission | `components/(interviewer)/FeedbackForm.tsx` — toast on submit; wire to your API |
-
-## Run
+## Typecheck
 
 ```bash
-npm install
-npm run dev
+npm run typecheck    # tsc --noEmit — target 0 errors
 ```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-## Notes
-
-- The CSS is in one large `app/globals.css` rather than CSS modules — that keeps the design-token system contained. You can split it later.
-- All interactive components carry `'use client'`. Pages that just compose are server components.
-- `tsconfig.json` is intentionally loose (`strict: false`, `noImplicitAny: false`) to keep the prototype compiling. Tighten as you wire real types.
