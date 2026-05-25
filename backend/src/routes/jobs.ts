@@ -100,7 +100,7 @@ router.post('/', zv('json', createJobSchema), async (c) => {
   return c.json(apiResponse(job), 201)
 })
 
-// POST /api/jobs/parse-jd — parse a job description file (PDF or DOCX) via LLM
+// POST /api/jobs/parse-jd — start async JD parse; returns parseId immediately (202)
 router.post('/parse-jd', async (c) => {
   const maxUploadBytes = parseInt(c.env.MAX_UPLOAD_BYTES ?? '10485760', 10)
 
@@ -112,9 +112,7 @@ router.post('/parse-jd', async (c) => {
   }
 
   const file = formData.get('file') as File | null
-  if (!file) {
-    throw new AppError('file is required', 400)
-  }
+  if (!file) throw new AppError('file is required', 400)
 
   const buffer = await file.arrayBuffer()
 
@@ -123,9 +121,7 @@ router.post('/parse-jd', async (c) => {
   }
 
   const fileType = detectFileType(buffer)
-  if (!fileType) {
-    throw new AppError('Only PDF and DOCX files are supported', 400)
-  }
+  if (!fileType) throw new AppError('Only PDF and DOCX files are supported', 400)
 
   let jdText: string
   if (fileType === 'pdf') {
@@ -134,42 +130,77 @@ router.post('/parse-jd', async (c) => {
     jdText = await extractDocxText(buffer)
   }
 
-  if (!jdText.trim()) {
-    throw new AppError('Could not extract text from file', 422)
-  }
+  if (!jdText.trim()) throw new AppError('Could not extract text from file', 422)
 
-  const messages = buildJdParseMessages(jdText)
-  const llmConfig = buildLlmConfig(c.env)
-
-  const parsed = await callWithFallback(
-    c.env.AI,
-    c.env.KV_CACHE,
-    parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
-    messages,
-    validateParsedJd,
-    'LLM_PARSE',
-    llmConfig
-  ) as ParsedJd
-
-  // Normalise optional arrays to always be present
-  const result: ParsedJd = {
-    ...parsed,
-    required_skills: parsed.required_skills ?? [],
-    nice_to_have_skills: parsed.nice_to_have_skills ?? [],
-  }
-
-  // Store original file in R2 so it can be shown in interview conduct page
+  // Generate a parse ID and store 'processing' status in KV immediately
+  const parseId = crypto.randomUUID()
   const user = c.get('user')
+  const kvKey = `jdparse:${parseId}`
+  await c.env.KV_CACHE.put(kvKey, JSON.stringify({ status: 'processing' }), { expirationTtl: 3600 })
+
+  const env = c.env
   const ext = getExtension(fileType)
   const jdKey = `jd/${user.company_id}/${Date.now()}.${ext}`
+
+  // Run LLM in background — client gets parseId immediately and polls
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        // Store original file in R2
+        try {
+          await uploadToR2(env, jdKey, buffer, getContentType(fileType))
+        } catch {
+          // Non-fatal
+        }
+
+        const messages = buildJdParseMessages(jdText)
+        const llmConfig = buildLlmConfig(env)
+
+        const parsed = await callWithFallback(
+          env.AI,
+          env.KV_CACHE,
+          parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+          messages,
+          validateParsedJd,
+          'LLM_PARSE',
+          llmConfig
+        ) as ParsedJd
+
+        const result: ParsedJd = {
+          ...parsed,
+          required_skills: parsed.required_skills ?? [],
+          nice_to_have_skills: parsed.nice_to_have_skills ?? [],
+        }
+
+        await env.KV_CACHE.put(
+          kvKey,
+          JSON.stringify({ status: 'done', result: { ...result, jd_url: jdKey } }),
+          { expirationTtl: 3600 }
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Parsing failed'
+        await env.KV_CACHE.put(kvKey, JSON.stringify({ status: 'error', error: message }), { expirationTtl: 3600 })
+      }
+    })()
+  )
+
+  return c.json(apiResponse({ parseId }), 202)
+})
+
+// GET /api/jobs/parse-jd/:parseId — poll for async JD parse result
+router.get('/parse-jd/:parseId', async (c) => {
+  const parseId = c.req.param('parseId')
+  const raw = await c.env.KV_CACHE.get(`jdparse:${parseId}`)
+  if (!raw) return c.json(apiResponse({ status: 'processing' }))
+
+  let state: { status: string; result?: unknown; error?: string }
   try {
-    const contentType = getContentType(fileType)
-    await uploadToR2(c.env, jdKey, buffer, contentType)
+    state = JSON.parse(raw)
   } catch {
-    // Non-fatal — parsing succeeded, just won't have PDF preview
+    return c.json(apiResponse({ status: 'processing' }))
   }
 
-  return c.json(apiResponse({ ...result, jd_url: jdKey }))
+  return c.json(apiResponse(state))
 })
 
 // GET /api/jobs/:id/jd — stream the original JD file from R2

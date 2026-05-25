@@ -100,19 +100,33 @@ router.post('/upload', async (c) => {
   // Upload to R2
   await uploadToR2(env, key, buffer, contentType)
 
-  // SSE streaming response — TransformStream flushes each chunk immediately
-  const { readable, writable } = new TransformStream()
-  const writer = writable.getWriter()
+  // SSE streaming — synchronous enqueue flushes each event immediately in CF Workers
   const encoder = new TextEncoder()
+  let sseController: ReadableStreamDefaultController<Uint8Array>
 
-  const send = (data: object) =>
-    writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      sseController = controller
+    },
+  })
 
-  // Keep Worker alive even if client disconnects
+  const send = (data: object) => {
+    try {
+      sseController.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+    } catch {
+      // stream already closed (client disconnected) — ignore
+    }
+  }
+
+  const close = () => {
+    try { sseController.close() } catch { /* already closed */ }
+  }
+
+  // Keep Worker alive during long LLM + scoring pipeline (can take 30-60s)
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        await send({ candidateId, status: 'parsing' })
+        send({ candidateId, status: 'parsing' })
 
         // Extract text
         let resumeText: string
@@ -136,7 +150,7 @@ router.post('/upload', async (c) => {
         // Update candidate with parsed data
         await updateCandidateParsed(env.DB, candidateId, parsedResume, key)
 
-        await send({ candidateId, status: 'scoring' })
+        send({ candidateId, status: 'scoring' })
 
         // Run scoring pipeline
         const scoringResult = await runScoringPipeline(env, {
@@ -159,7 +173,7 @@ router.post('/upload', async (c) => {
         // Fetch final candidate row
         const finalCandidate = await getCandidate(env.DB, candidateId, companyId)
 
-        await send({
+        send({
           candidateId,
           status: 'complete',
           score: scoringResult.overall_score,
@@ -172,9 +186,9 @@ router.post('/upload', async (c) => {
         } catch {
           // best-effort
         }
-        await send({ candidateId, status: 'error', error: message })
+        send({ candidateId, status: 'error', error: message })
       } finally {
-        await writer.close()
+        close()
       }
     })()
   )
@@ -184,7 +198,7 @@ router.post('/upload', async (c) => {
     ? origin
     : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
 
-  return new Response(readable, {
+  return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

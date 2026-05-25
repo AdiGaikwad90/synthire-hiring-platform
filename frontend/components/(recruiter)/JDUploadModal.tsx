@@ -3,7 +3,7 @@ import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { Modal, Button, AIPill, Badge } from "@/components/ui";
 import { Dropzone, FileRow } from "./Dropzone";
-import { apiUpload } from "@/lib/api";
+import { apiUpload, apiFetch } from "@/lib/api";
 
 interface ParsedJD {
   title: string;
@@ -28,21 +28,57 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
   const [progress, setProgress] = React.useState(0);
   const [parsed, setParsed] = React.useState<ParsedJD | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear polling on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const handleFiles = async (files: any[]) => {
     const f = files[0];
     setFile(f);
     setStage("parsing");
-    setProgress(20);
+    setProgress(15);
 
     try {
-      setProgress(50);
       const formData = new FormData();
       formData.append("file", f);
-      const result = await apiUpload<ParsedJD>("/api/jobs/parse-jd", formData);
-      setProgress(100);
-      setParsed(result);
-      setStage("done");
+      // Fast upload — returns parseId immediately (202), LLM runs in background
+      const { parseId } = await apiUpload<{ parseId: string }>("/api/jobs/parse-jd", formData);
+      setProgress(30);
+
+      // Poll every 2s for result
+      let ticks = 0;
+      pollRef.current = setInterval(async () => {
+        ticks++;
+        // Animate progress 30→90 during polling
+        setProgress(Math.min(90, 30 + ticks * 5));
+
+        try {
+          const state = await apiFetch<{ status: string; result?: ParsedJD; error?: string }>(
+            `/api/jobs/parse-jd/${parseId}`
+          );
+
+          if (state.status === "done" && state.result) {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setProgress(100);
+            setParsed(state.result);
+            setStage("done");
+          } else if (state.status === "error") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setError(state.error ?? "Parsing failed");
+            setStage("error");
+          }
+          // status === 'processing' → keep polling
+        } catch {
+          // network error during poll — keep trying
+        }
+      }, 2000);
     } catch (err: any) {
       setError(err?.message ?? "Failed to parse job description");
       setStage("error");
