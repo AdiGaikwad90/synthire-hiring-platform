@@ -62,8 +62,8 @@ MAX_UPLOAD_BYTES = "10485760"              # 10 MB
 ALLOWED_FILE_TYPES = "pdf,docx"
 
 # LLM — Workers AI native models (change in wrangler.toml without touching code)
-LLM_MODEL_PRIMARY  = "@cf/meta/llama-3-70b-instruct"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3-8b-instruct"
+LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "10000"   # hard stop — AI calls blocked when reached
@@ -300,8 +300,8 @@ Internal steps:
 src/services/ai/fallback.ts
 
 Model chain (from wrangler.toml — change without touching code):
-  1. LLM_MODEL_PRIMARY  = @cf/meta/llama-3-70b-instruct
-  2. LLM_MODEL_FALLBACK = @cf/meta/llama-3-8b-instruct
+  1. LLM_MODEL_PRIMARY  = @cf/meta/llama-3.1-8b-instruct
+  2. LLM_MODEL_FALLBACK = @cf/meta/llama-3.2-3b-instruct
 
 Budget guard: checkNeuronBudget() hard-stops at NEURONS_DAILY_LIMIT (default 10000/day)
 On budget exceeded: throw AppError(503) with reset time — does NOT try next model

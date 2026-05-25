@@ -14,7 +14,7 @@ export interface LlmConfig {
 }
 
 const DEFAULT_CONFIG: LlmConfig = {
-  models: ['@cf/meta/llama-3-70b-instruct', '@cf/meta/llama-3-8b-instruct'],
+  models: ['@cf/meta/llama-3.1-8b-instruct', '@cf/meta/llama-3.2-3b-instruct'],
   temperature: 0.1,
   maxTokens: 2000,
 }
@@ -22,8 +22,8 @@ const DEFAULT_CONFIG: LlmConfig = {
 export function buildLlmConfig(env: Env): LlmConfig {
   return {
     models: [
-      env.LLM_MODEL_PRIMARY  ?? '@cf/meta/llama-3-70b-instruct',
-      env.LLM_MODEL_FALLBACK ?? '@cf/meta/llama-3-8b-instruct',
+      env.LLM_MODEL_PRIMARY  ?? '@cf/meta/llama-3.1-8b-instruct',
+      env.LLM_MODEL_FALLBACK ?? '@cf/meta/llama-3.2-3b-instruct',
     ],
     temperature: parseFloat(env.LLM_TEMPERATURE ?? '0.1'),
     maxTokens: parseInt(env.LLM_MAX_TOKENS ?? '2000', 10),
