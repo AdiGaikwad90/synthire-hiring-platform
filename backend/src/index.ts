@@ -8,7 +8,6 @@ import { processEmailQueue } from './services/email/queue'
 // Route imports (implemented in later phases)
 import authRoutes from './routes/auth'
 import jobRoutes from './routes/jobs'
-import jobsParseRoutes from './routes/jobs-parse'
 import candidateRoutes from './routes/candidates'
 import interviewRoutes from './routes/interviews'
 import interviewTypeRoutes from './routes/interview-types'
@@ -30,7 +29,6 @@ app.route('/api/auth', authRoutes)
 // (Hono's `path/*` matcher does not match the exact `path`, which silently
 // bypassed auth on list endpoints like GET /api/candidates. Per-router
 // registration via `router.use('*', authMiddleware)` is path-agnostic.)
-app.route('/api/jobs/parse-jd', jobsParseRoutes)
 app.route('/api/jobs', jobRoutes)
 app.route('/api/candidates', candidateRoutes)
 app.route('/api/interviews', interviewRoutes)
