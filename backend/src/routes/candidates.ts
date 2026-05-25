@@ -122,11 +122,13 @@ router.post('/upload', async (c) => {
     try { sseController.close() } catch { /* already closed */ }
   }
 
-  // Keep Worker alive during long LLM + scoring pipeline (can take 30-60s)
-  c.executionCtx.waitUntil(
-    (async () => {
-      try {
-        send({ candidateId, status: 'parsing' })
+  // Fire async pipeline — Worker stays alive while the ReadableStream body is open.
+  // Do NOT wrap in waitUntil here: waitUntil in wrangler dev blocks the response
+  // until the promise resolves, preventing streaming. The open stream body itself
+  // keeps the Worker alive in production.
+  ;(async () => {
+    try {
+      send({ candidateId, status: 'parsing' })
 
         // Extract text
         let resumeText: string
@@ -191,7 +193,6 @@ router.post('/upload', async (c) => {
         close()
       }
     })()
-  )
 
   const origin = c.req.header('Origin') || ''
   const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)

@@ -47,26 +47,35 @@ function buildJdParseMessages(jdText: string): WorkersAIRequest['messages'] {
   return [
     {
       role: 'system',
-      content: 'You are a job description parser. Extract structured data from job description text. Return ONLY valid JSON.',
+      content: 'You are a strict job description data extractor. Extract ONLY what is explicitly written. NEVER infer, guess, or fabricate any field. Return ONLY valid JSON with no markdown.',
     },
     {
       role: 'user',
-      content: `Parse the following job description and return a JSON object with this exact structure:
+      content: `Extract data from the job description below. Return a JSON object with EXACTLY these fields.
+
+CRITICAL RULES — violation is not acceptable:
+- salary_range: return null UNLESS a specific dollar amount, range, or compensation figure is written in the text. Do NOT guess based on title or seniority.
+- min_years_experience: return null UNLESS the text explicitly says "X years" or "X+ years". Do NOT infer from job title.
+- department, location, education_requirement: return null if not mentioned.
+- required_skills: ONLY skills the JD explicitly lists as required. Short keywords only (1-4 words).
+- nice_to_have_skills: ONLY skills explicitly marked as preferred/nice-to-have/bonus.
+
+JSON structure:
 {
-  "title": "string - job title",
-  "department": "string or null - department name",
-  "location": "string or null - location or remote policy",
-  "description": "string or null - concise role summary (2-3 sentences)",
-  "employment_type": "one of: full_time | part_time | contract (use underscores exactly)",
-  "experience_level": "one of: junior | mid | senior | lead (use lowercase exactly)",
-  "salary_range": "string or null - compensation band if mentioned",
-  "required_skills": ["array of required skill strings"],
-  "nice_to_have_skills": ["array of nice-to-have skill strings"],
-  "min_years_experience": number or null - minimum years of experience as a number,
-  "education_requirement": "string or null - e.g. Bachelor's in CS or equivalent"
+  "title": "exact job title",
+  "department": "department name or null",
+  "location": "location/remote policy or null",
+  "description": "1-2 sentence role summary",
+  "employment_type": "full_time or part_time or contract or null",
+  "experience_level": "junior or mid or senior or lead — infer only from explicit seniority language",
+  "salary_range": "exact text from JD or null — NEVER fabricate",
+  "required_skills": ["skill keyword", "..."],
+  "nice_to_have_skills": ["skill keyword", "..."],
+  "min_years_experience": explicit number from JD or null — NEVER infer,
+  "education_requirement": "none or bachelors or masters or phd or null"
 }
 
-Job description text:
+Job description:
 ${jdText}`,
     },
   ]
