@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "npx @cloudflare/next-on-pages",
+    "build:cf": "NEXT_PUBLIC_API_URL=https://synthire-backend-production.adigaikwad4321.workers.dev npx @cloudflare/next-on-pages",
     "deploy": "npm run build:cf && wrangler pages deploy",
     "start": "next start",
     "lint": "next lint",

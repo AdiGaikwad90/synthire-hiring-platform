@@ -5,6 +5,14 @@ import type { Env } from '../types/bindings'
 import { nanoid } from 'nanoid'
 
 export const errorHandler: ErrorHandler<{ Bindings: Env }> = (err, c) => {
+  // Ensure CORS headers are present on error responses — middleware headers
+  // are not inherited by onError responses in Hono.
+  const requestOrigin = c.req.header('Origin') || ''
+  const configured = c.env?.FRONTEND_ORIGIN || 'http://localhost:3000'
+  const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(requestOrigin)
+  c.header('Access-Control-Allow-Origin', isLocalhost ? requestOrigin : configured)
+  c.header('Vary', 'Origin')
+
   const timestamp = new Date().toISOString()
   const request_id = nanoid(12)
 
