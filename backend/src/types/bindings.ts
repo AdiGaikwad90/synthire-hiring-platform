@@ -27,7 +27,9 @@ export interface Env {
   MAX_UPLOAD_BYTES: string           // default: "10485760" (10 MB)
   ALLOWED_FILE_TYPES: string         // default: "pdf,docx" (comma-separated)
 
-  // LLM — Workers AI native models
+  // LLM — Workers AI native models (change in wrangler.toml without touching code)
+  LLM_MODEL_PRIMARY: string          // default: "@cf/meta/llama-3-70b-instruct"
+  LLM_MODEL_FALLBACK: string         // default: "@cf/meta/llama-3-8b-instruct"
   LLM_TEMPERATURE: string            // default: "0.1"
   LLM_MAX_TOKENS: string             // default: "2000"
   NEURONS_DAILY_LIMIT: string        // default: "10000" — hard cap, stops AI calls when reached
