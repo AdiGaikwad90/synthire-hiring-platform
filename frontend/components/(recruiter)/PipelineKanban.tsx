@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Button, Avatar, ScorePill, SearchInput } from "@/components/ui";
+import { Button, Avatar, ScorePill, SearchInput, Select } from "@/components/ui";
 import { useCandidates, useUpdateCandidateStage } from "@/hooks/queries/useCandidates";
 import { useJobs } from "@/hooks/queries/useJobs";
 
@@ -130,42 +130,26 @@ function Pipeline() {
           padding: "10px 24px", background: "var(--surface-2)",
           borderBottom: "1px solid var(--border)", flexWrap: "wrap",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500 }}>Job</span>
-            <select
-              value={selectedJob}
-              onChange={e => setSelectedJob(e.target.value)}
-              style={{
-                background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: 6, padding: "4px 10px", fontSize: 12,
-                color: "var(--text)", cursor: "pointer", minWidth: 180,
-              }}
-            >
-              <option value="">All jobs</option>
-              {(jobsData?.items ?? []).map(job => (
-                <option key={job.id} value={job.id}>{job.title}</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Job"
+            value={selectedJob}
+            onChange={e => setSelectedJob(e.target.value)}
+            options={[
+              { value: "", label: "All jobs" },
+              ...(jobsData?.items ?? []).map(job => ({ value: job.id, label: job.title })),
+            ]}
+            style={{ minWidth: 200 }}
+          />
 
           <div style={{ width: 1, height: 20, background: "var(--border)" }}/>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500 }}>Sort by</span>
-            <select
-              value={sortBy}
-              onChange={e => setSortBy(e.target.value)}
-              style={{
-                background: "var(--surface)", border: "1px solid var(--border)",
-                borderRadius: 6, padding: "4px 10px", fontSize: 12,
-                color: "var(--text)", cursor: "pointer", minWidth: 160,
-              }}
-            >
-              {SORT_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Sort by"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            options={SORT_OPTIONS}
+            style={{ minWidth: 180 }}
+          />
 
           {activeFilterCount > 0 && (
             <>
