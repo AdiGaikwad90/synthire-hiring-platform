@@ -30,6 +30,22 @@ export function buildLlmConfig(env: Env): LlmConfig {
   }
 }
 
+// Strip markdown code fences and find the first {...} or [...] JSON object in the response.
+// Many smaller models wrap their JSON in ```json ... ``` or add prose before/after.
+function extractJson(raw: string): string {
+  // Remove ```json ... ``` or ``` ... ``` fences
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (fenceMatch) return fenceMatch[1].trim()
+
+  // Find first { or [ and last matching } or ]
+  const start = raw.search(/[{[]/)
+  if (start === -1) return raw
+  const isArray = raw[start] === '['
+  const close = isArray ? raw.lastIndexOf(']') : raw.lastIndexOf('}')
+  if (close === -1 || close <= start) return raw
+  return raw.slice(start, close + 1)
+}
+
 export async function callWithFallback(
   ai: Ai,
   kv: KVNamespace,
@@ -55,7 +71,7 @@ export async function callWithFallback(
 
       let parsed: unknown
       try {
-        parsed = JSON.parse(content)
+        parsed = JSON.parse(extractJson(content))
       } catch {
         errors.push(`${model}: returned invalid JSON`)
         console.warn(`[llm] model=${model} returned invalid JSON, trying next`)
