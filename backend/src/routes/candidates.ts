@@ -6,7 +6,6 @@ import {
   updateCandidateSchema,
   apiResponse,
   paginatedResponse,
-  AppError,
 } from '../types/api'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
@@ -17,7 +16,7 @@ import {
   validateParsedResume,
 } from '../services/ai/prompts/parse-resume'
 import { buildQuestionMessages, validateQuestions } from '../services/ai/prompts/generate-questions'
-import { callWithFallback } from '../services/ai/fallback'
+import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
 import { runScoringPipeline } from '../services/scoring/pipeline'
 import {
   createCandidate,
@@ -32,6 +31,69 @@ import {
 import { getJob } from '../db/queries/jobs'
 import type { ParsedResume } from '../services/ai/prompts/parse-resume'
 import { authMiddleware } from '../middleware/auth'
+
+// ── runPipeline — background work for resume upload ──────────────────────────
+
+async function runPipeline(
+  env: Env,
+  candidateId: string,
+  jobId: string,
+  companyId: string,
+  buffer: ArrayBuffer,
+  fileType: 'pdf' | 'docx',
+  r2ObjectKey: string,
+  job: Awaited<ReturnType<typeof getJob>> & {}
+): Promise<void> {
+  try {
+    // Extract text
+    let resumeText: string
+    if (fileType === 'pdf') {
+      resumeText = await extractPdfText(buffer)
+    } else {
+      resumeText = await extractDocxText(buffer)
+    }
+
+    // Parse resume with AI
+    const messages = buildResumeParseMessages(resumeText)
+    const parsedResume = await callWithFallback(
+      env.AI,
+      env.KV_CACHE,
+      parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+      messages,
+      validateParsedResume,
+      'LLM_PARSE',
+      buildLlmConfig(env)
+    ) as ParsedResume
+
+    // Update candidate with parsed data
+    await updateCandidateParsed(env.DB, candidateId, parsedResume, r2ObjectKey)
+
+    // Run scoring pipeline
+    const scoringResult = await runScoringPipeline(env, {
+      candidateId,
+      jobId,
+      companyId,
+      resumeText,
+      jobTitle: job.title,
+      jobDescription: job.description ?? null,
+      requiredSkills: job.required_skills,
+      niceToHaveSkills: job.nice_to_have_skills,
+      minYearsExperience: job.min_years_experience,
+      scoringWeights: job.scoring_dimensions,
+      parsedResume,
+    })
+
+    // Update scores
+    await updateCandidateScores(env.DB, candidateId, scoringResult, 'workers-ai')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    try {
+      await updateCandidateError(env.DB, candidateId, message)
+    } catch {
+      // best-effort — don't let the error handler throw
+    }
+  }
+}
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -97,102 +159,29 @@ router.post('/upload', async (c) => {
   const contentType = getContentType(fileType)
   const key = r2Key(companyId, jobId, candidateId, ext)
 
-  // Upload to R2
+  // Upload to R2 before responding so the file is available for the background pipeline
   await uploadToR2(env, key, buffer, contentType)
 
-  // SSE streaming — synchronous enqueue flushes each event immediately in CF Workers
+  // Emit status events immediately and close the stream — the actual pipeline
+  // runs in background via waitUntil() so the Worker is not kept alive by the
+  // open stream body (which caused timeouts on large PDFs).
   const encoder = new TextEncoder()
-  let sseController: ReadableStreamDefaultController<Uint8Array>
-
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      sseController = controller
+      controller.enqueue(encoder.encode(
+        `data: ${JSON.stringify({ candidateId, status: 'parsing' })}\n\n`
+      ))
+      controller.enqueue(encoder.encode(
+        `data: ${JSON.stringify({ candidateId, status: 'scoring' })}\n\n`
+      ))
+      controller.close()
     },
   })
 
-  const send = (data: object) => {
-    try {
-      sseController.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
-    } catch {
-      // stream already closed (client disconnected) — ignore
-    }
-  }
-
-  const close = () => {
-    try { sseController.close() } catch { /* already closed */ }
-  }
-
-  // Fire async pipeline — Worker stays alive while the ReadableStream body is open.
-  // Do NOT wrap in waitUntil here: waitUntil in wrangler dev blocks the response
-  // until the promise resolves, preventing streaming. The open stream body itself
-  // keeps the Worker alive in production.
-  ;(async () => {
-    try {
-      send({ candidateId, status: 'parsing' })
-
-        // Extract text
-        let resumeText: string
-        if (fileType === 'pdf') {
-          resumeText = await extractPdfText(buffer)
-        } else {
-          resumeText = await extractDocxText(buffer)
-        }
-
-        // Parse resume with AI
-        const messages = buildResumeParseMessages(resumeText)
-        const parsedResume = await callWithFallback(
-          env.AI,
-          env.KV_CACHE,
-          parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
-          messages,
-          validateParsedResume,
-          'LLM_PARSE'
-        ) as ParsedResume
-
-        // Update candidate with parsed data
-        await updateCandidateParsed(env.DB, candidateId, parsedResume, key)
-
-        send({ candidateId, status: 'scoring' })
-
-        // Run scoring pipeline
-        const scoringResult = await runScoringPipeline(env, {
-          candidateId,
-          jobId,
-          companyId,
-          resumeText,
-          jobTitle: job.title,
-          jobDescription: job.description ?? null,
-          requiredSkills: job.required_skills,
-          niceToHaveSkills: job.nice_to_have_skills,
-          minYearsExperience: job.min_years_experience,
-          scoringWeights: job.scoring_dimensions,
-          parsedResume,
-        })
-
-        // Update scores
-        await updateCandidateScores(env.DB, candidateId, scoringResult, 'workers-ai')
-
-        // Fetch final candidate row
-        const finalCandidate = await getCandidate(env.DB, candidateId, companyId)
-
-        send({
-          candidateId,
-          status: 'complete',
-          score: scoringResult.overall_score,
-          candidate: finalCandidate,
-        })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error'
-        try {
-          await updateCandidateError(env.DB, candidateId, message)
-        } catch {
-          // best-effort
-        }
-        send({ candidateId, status: 'error', error: message })
-      } finally {
-        close()
-      }
-    })()
+  // Run the heavy pipeline in background — Worker stays alive after response via waitUntil
+  c.executionCtx.waitUntil(
+    runPipeline(env, candidateId, jobId, companyId, buffer, fileType, key, job)
+  )
 
   const origin = c.req.header('Origin') || ''
   const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
@@ -330,7 +319,8 @@ router.post('/:id/questions', async (c) => {
     parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
     messages,
     validateQuestions,
-    'LLM_QUESTIONS'
+    'LLM_QUESTIONS',
+    buildLlmConfig(c.env)
   ) as { questions: Array<string | { q: string; why: string }> }
 
   // Normalize to {q, why} format regardless of model output shape
