@@ -21,7 +21,8 @@ export interface Env {
   FRONTEND_ORIGIN: string            // CORS allowed origin + base URL for email links
 
   // Auth
-  JWT_EXPIRY_SECONDS: string         // default: "86400" (24 h)
+  JWT_EXPIRY_SECONDS: string         // default: "900" (15 min)
+  REFRESH_TOKEN_EXPIRY_SECONDS: string // default: "2592000" (30 days)
 
   // File upload
   MAX_UPLOAD_BYTES: string           // default: "10485760" (10 MB)
@@ -67,4 +68,7 @@ export interface Env {
   R2_MAX_STORAGE_BYTES: string       // default: "10737418240" (10 GB free tier)
   R2_MAX_CLASS_A_OPS_MONTHLY: string // default: "900000"  (90% of 1M free tier)
   R2_MAX_CLASS_B_OPS_MONTHLY: string // default: "9000000" (90% of 10M free tier)
+
+  // Monitoring (optional — leave empty to disable)
+  SENTRY_DSN?: string
 }
