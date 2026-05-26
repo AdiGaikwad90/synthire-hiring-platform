@@ -10,6 +10,7 @@ import {
   getUserEmailPreferences,
   updateUserEmailPreferences,
 } from '../db/queries/email'
+import { escapeHtml } from '../utils/html'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -116,17 +117,24 @@ router.get('/unsubscribe', async (c) => {
     )
   }
 
-  return new Response(`
+  const html = `
 <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:400px;margin:40px auto;text-align:center">
 <h2>Unsubscribe from Synthire emails?</h2>
 <p>You will no longer receive notifications.</p>
 <form method="POST" action="/api/email/unsubscribe">
-  <input type="hidden" name="token" value="${token}">
+  <input type="hidden" name="token" value="${escapeHtml(token)}">
   <button type="submit" style="background:#ef4444;color:white;border:none;padding:12px 24px;border-radius:6px;cursor:pointer;font-size:16px">Confirm Unsubscribe</button>
 </form>
 <p><small><a href="/">Cancel</a></small></p>
 </body></html>
-`, { headers: { 'Content-Type': 'text/html' } })
+`
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+      'X-Content-Type-Options': 'nosniff',
+    },
+  })
 })
 
 // POST /api/email/unsubscribe — perform the actual unsubscribe
@@ -160,11 +168,24 @@ router.post('/unsubscribe', async (c) => {
     )
   }
 
+  // Check replay
+  const replayKey = `unsub_used:${token}`
+  const alreadyUsed = await c.env.KV_CACHE.get(replayKey)
+  if (alreadyUsed) {
+    return new Response('This unsubscribe link has already been used.', {
+      status: 400,
+      headers: { 'Content-Type': 'text/plain' },
+    })
+  }
+
   await c.env.DB.prepare(
     "UPDATE email_preferences SET unsubscribed_at = datetime('now') WHERE unsubscribe_token = ?"
   )
     .bind(token)
     .run()
+
+  // Mark token as used (90 days)
+  await c.env.KV_CACHE.put(replayKey, '1', { expirationTtl: 7776000 })
 
   return new Response(
     `<html><body style="font-family: sans-serif; text-align: center; padding: 40px;">
