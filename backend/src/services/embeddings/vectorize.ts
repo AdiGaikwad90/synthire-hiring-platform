@@ -18,9 +18,14 @@ export async function upsertEmbedding(
 export async function queryEmbedding(
   vectorize: VectorizeIndex,
   embedding: number[],
-  topK: number
+  topK: number,
+  companyId: string,
 ): Promise<{ id: string; score: number }[]> {
-  const result = await vectorize.query(embedding, { topK })
+  const result = await vectorize.query(embedding, {
+    topK,
+    returnMetadata: 'all',
+    filter: { companyId },
+  })
 
   return (result.matches ?? []).map(match => ({
     id: match.id,
