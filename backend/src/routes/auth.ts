@@ -16,9 +16,10 @@ const router = new Hono<{ Bindings: Env }>()
 // POST /api/auth/signup
 router.post('/signup', zValidator('json', signupSchema), async (c) => {
   const { email, password, name, company_name } = c.req.valid('json')
+  const normalizedEmail = email.trim().toLowerCase()
 
   // Check if email already taken
-  const existing = await findUserByEmail(c.env.DB, email)
+  const existing = await findUserByEmail(c.env.DB, normalizedEmail)
   if (existing) {
     throw new AppError('Email already registered', 409)
   }
@@ -34,14 +35,14 @@ router.post('/signup', zValidator('json', signupSchema), async (c) => {
     c.env.DB.prepare('INSERT INTO companies (id, name) VALUES (?, ?)').bind(companyId, company_name),
     c.env.DB.prepare(
       'INSERT INTO users (id, company_id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(userId, companyId, email, passwordHash, name, 'recruiter'),
+    ).bind(userId, companyId, normalizedEmail, passwordHash, name, 'recruiter'),
     c.env.DB.prepare(
       'INSERT INTO email_preferences (user_id, unsubscribe_token) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING'
     ).bind(userId, unsubscribeToken),
   ])
 
   const company = { id: companyId, name: company_name, plan: 'free', created_at: new Date().toISOString() }
-  const user = { id: userId, company_id: companyId, email, password_hash: passwordHash, name, role: 'recruiter', created_at: new Date().toISOString() }
+  const user = { id: userId, company_id: companyId, email: normalizedEmail, password_hash: passwordHash, name, role: 'recruiter', created_at: new Date().toISOString() }
 
   // Issue JWT
   const expirySeconds = parseInt(c.env.JWT_EXPIRY_SECONDS, 10)
@@ -80,7 +81,7 @@ router.post('/login', zValidator('json', loginSchema), async (c) => {
     throw new AppError('Too many login attempts. Please try again in a minute.', 429)
   }
 
-  const user = await findUserByEmail(c.env.DB, email)
+  const user = await findUserByEmail(c.env.DB, emailNorm)
   if (!user) {
     await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: 60 })
     throw new AppError('Invalid email or password', 401)
