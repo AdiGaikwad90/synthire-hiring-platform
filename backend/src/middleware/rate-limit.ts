@@ -3,6 +3,11 @@ import type { Env } from '../types/bindings'
 import { AppError } from '../types/api'
 
 export const rateLimitMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
+  const path = new URL(c.req.url).pathname
+  if (path === '/api/email/resend-callback' || path === '/health') {
+    return next()
+  }
+
   if (c.env.RATE_LIMIT_ENABLED !== 'true') {
     return await next()
   }
