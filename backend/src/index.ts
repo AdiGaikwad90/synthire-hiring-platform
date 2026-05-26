@@ -47,6 +47,12 @@ app.route('/health', healthRoutes)
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(processEmailQueue(env))
+    ctx.waitUntil(
+      processEmailQueue(env).catch((err) => {
+        console.error('[scheduled] processEmailQueue failed', err)
+        // Sentry capture would go here when SENTRY_DSN is configured:
+        // if (env.SENTRY_DSN) createSentry(new Request('https://worker/scheduled'), ctx, env.SENTRY_DSN).captureException(err)
+      }),
+    )
   },
 }
