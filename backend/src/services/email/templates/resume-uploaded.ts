@@ -1,4 +1,5 @@
 import type { ResumeUploadedTemplateData } from '../../../types/email'
+import { escapeHtml, safeHref } from '../../../utils/html'
 
 function scoreBar(label: string, score: number): string {
   const clampedScore = Math.min(100, Math.max(0, score))
@@ -6,24 +7,24 @@ function scoreBar(label: string, score: number): string {
   return `
     <div style="margin: 8px 0;">
       <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-        <span style="color: #374151; font-size: 13px;">${label}</span>
-        <span style="color: #374151; font-size: 13px; font-weight: 600;">${clampedScore}%</span>
+        <span style="color: #374151; font-size: 13px;">${escapeHtml(label)}</span>
+        <span style="color: #374151; font-size: 13px; font-weight: 600;">${escapeHtml(clampedScore)}%</span>
       </div>
       <div style="background: #E5E7EB; border-radius: 4px; height: 8px; width: 100%;">
-        <div style="background: ${color}; border-radius: 4px; height: 8px; width: ${clampedScore}%;"></div>
+        <div style="background: ${escapeHtml(color)}; border-radius: 4px; height: 8px; width: ${escapeHtml(clampedScore)}%;"></div>
       </div>
     </div>`
 }
 
 export function renderResumeUploaded(data: ResumeUploadedTemplateData): { subject: string; html: string } {
   const subject = `New Candidate: ${data.candidateName} — ${data.overallScore}%`
-  const candidateUrl = `${data.frontendUrl}/candidates/${data.candidateId}`
-  const unsubscribeUrl = `${data.frontendUrl}/unsubscribe`
+  const candidateUrl = `${safeHref(data.frontendUrl)}/candidates/${encodeURIComponent(data.candidateId)}`
+  const unsubscribeUrl = `${safeHref(data.frontendUrl)}/unsubscribe`
 
   const scoreColor = data.overallScore >= 70 ? '#10B981' : data.overallScore >= 40 ? '#F59E0B' : '#EF4444'
 
   const locationSection = data.location
-    ? `<p style="color: #374151; margin: 8px 0;"><strong>Location:</strong> ${data.location}</p>`
+    ? `<p style="color: #374151; margin: 8px 0;"><strong>Location:</strong> ${escapeHtml(data.location)}</p>`
     : ''
 
   const html = `
@@ -37,15 +38,15 @@ export function renderResumeUploaded(data: ResumeUploadedTemplateData): { subjec
     <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">A new resume has been uploaded and scored for your review.</p>
 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
-      <p style="color: #374151; margin: 8px 0;"><strong>Candidate:</strong> ${data.candidateName}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${data.jobTitle}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Candidate:</strong> ${escapeHtml(data.candidateName)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
       ${locationSection}
     </div>
 
     <div style="background: #F9FAFB; border-radius: 8px; padding: 20px; margin: 16px 0;">
       <div style="text-align: center; margin-bottom: 20px;">
-        <div style="display: inline-block; width: 72px; height: 72px; border-radius: 50%; background: ${scoreColor}; line-height: 72px; text-align: center;">
-          <span style="color: #ffffff; font-size: 20px; font-weight: 700;">${data.overallScore}%</span>
+        <div style="display: inline-block; width: 72px; height: 72px; border-radius: 50%; background: ${escapeHtml(scoreColor)}; line-height: 72px; text-align: center;">
+          <span style="color: #ffffff; font-size: 20px; font-weight: 700;">${escapeHtml(data.overallScore)}%</span>
         </div>
         <p style="color: #374151; font-weight: 600; margin: 8px 0 0;">Overall Score</p>
       </div>

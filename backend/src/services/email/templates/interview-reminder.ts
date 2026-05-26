@@ -1,4 +1,5 @@
 import type { InterviewReminderTemplateData } from '../../../types/email'
+import { escapeHtml, safeHref } from '../../../utils/html'
 
 function formatDateTime(isoString: string): string {
   const date = new Date(isoString)
@@ -14,14 +15,14 @@ function formatDateTime(isoString: string): string {
 }
 
 export function renderInterviewReminder(data: InterviewReminderTemplateData): { subject: string; html: string } {
-  const unsubscribeUrl = `${data.frontendUrl}/unsubscribe`
-  const interviewUrl = `${data.frontendUrl}/interviews/${data.interviewId}`
+  const unsubscribeUrl = `${safeHref(data.frontendUrl)}/unsubscribe`
+  const interviewUrl = `${safeHref(data.frontendUrl)}/interviews/${encodeURIComponent(data.interviewId)}`
 
   if (data.recipientRole === 'interviewer') {
     const subject = `Interview Tomorrow: ${data.candidateName}`
 
     const videoSection = data.videoLink
-      ? `<p style="color: #374151; margin: 8px 0;"><strong>Video Link:</strong> <a href="${data.videoLink}" style="color: #6366F1;">${data.videoLink}</a></p>`
+      ? `<p style="color: #374151; margin: 8px 0;"><strong>Video Link:</strong> <a href="${safeHref(data.videoLink)}" style="color: #6366F1;">${escapeHtml(data.videoLink)}</a></p>`
       : ''
 
     const html = `
@@ -32,13 +33,13 @@ export function renderInterviewReminder(data: InterviewReminderTemplateData): { 
   </div>
   <div style="padding: 32px;">
     <h2 style="color: #111827; font-size: 22px; margin: 0 0 8px;">Interview Reminder</h2>
-    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${data.recipientName}, you have an interview scheduled for tomorrow.</p>
+    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${escapeHtml(data.recipientName)}, you have an interview scheduled for tomorrow.</p>
 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
-      <p style="color: #374151; margin: 8px 0;"><strong>Candidate:</strong> ${data.candidateName}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${data.jobTitle}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${formatDateTime(data.scheduledAt)}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${data.durationMinutes} minutes</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Candidate:</strong> ${escapeHtml(data.candidateName)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${escapeHtml(formatDateTime(data.scheduledAt))}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${escapeHtml(data.durationMinutes)} minutes</p>
       ${videoSection}
     </div>
 
@@ -63,7 +64,7 @@ export function renderInterviewReminder(data: InterviewReminderTemplateData): { 
 
   const videoSection = data.videoLink
     ? `<div style="background: #EEF2FF; border-radius: 6px; padding: 12px 16px; margin: 16px 0;">
-        <p style="color: #4338CA; margin: 0; font-size: 14px;"><strong>Join via:</strong> <a href="${data.videoLink}" style="color: #6366F1;">${data.videoLink}</a></p>
+        <p style="color: #4338CA; margin: 0; font-size: 14px;"><strong>Join via:</strong> <a href="${safeHref(data.videoLink)}" style="color: #6366F1;">${escapeHtml(data.videoLink)}</a></p>
       </div>`
     : '<p style="color: #374151; font-size: 14px; margin: 8px 0;">Your interviewer will share the meeting link with you.</p>'
 
@@ -75,13 +76,13 @@ export function renderInterviewReminder(data: InterviewReminderTemplateData): { 
   </div>
   <div style="padding: 32px;">
     <h2 style="color: #111827; font-size: 22px; margin: 0 0 8px;">Your Interview is Tomorrow!</h2>
-    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${data.recipientName}, just a friendly reminder about your upcoming interview.</p>
+    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${escapeHtml(data.recipientName)}, just a friendly reminder about your upcoming interview.</p>
 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
-      <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${data.companyName}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${data.jobTitle}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${formatDateTime(data.scheduledAt)}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${data.durationMinutes} minutes</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${escapeHtml(data.companyName)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${escapeHtml(formatDateTime(data.scheduledAt))}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${escapeHtml(data.durationMinutes)} minutes</p>
     </div>
 
     ${videoSection}

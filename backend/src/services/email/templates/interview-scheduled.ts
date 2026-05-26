@@ -1,4 +1,5 @@
 import type { InterviewScheduledTemplateData } from '../../../types/email'
+import { escapeHtml, safeHref } from '../../../utils/html'
 
 function formatDateTime(isoString: string): string {
   const date = new Date(isoString)
@@ -15,7 +16,7 @@ function formatDateTime(isoString: string): string {
 
 export function renderInterviewScheduled(data: InterviewScheduledTemplateData): { subject: string; html: string } {
   const subject = `Interview Confirmed — ${data.companyName}`
-  const unsubscribeUrl = `${data.frontendUrl}/unsubscribe`
+  const unsubscribeUrl = `${safeHref(data.frontendUrl)}/unsubscribe`
 
   const calendarSubject = encodeURIComponent(`Interview with ${data.companyName} — ${data.jobTitle}`)
   const calendarBody = encodeURIComponent(
@@ -24,7 +25,7 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
   const calendarHref = `mailto:?subject=${calendarSubject}&body=${calendarBody}`
 
   const videoSection = data.videoLink
-    ? `<p style="color: #374151; margin: 8px 0;"><strong>Video Link:</strong> <a href="${data.videoLink}" style="color: #6366F1;">${data.videoLink}</a></p>`
+    ? `<p style="color: #374151; margin: 8px 0;"><strong>Video Link:</strong> <a href="${safeHref(data.videoLink)}" style="color: #6366F1;">${escapeHtml(data.videoLink)}</a></p>`
     : ''
 
   const html = `
@@ -35,13 +36,13 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
   </div>
   <div style="padding: 32px;">
     <h2 style="color: #111827; font-size: 22px; margin: 0 0 8px;">Your Interview is Confirmed</h2>
-    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${data.candidateName}, we look forward to meeting you! Here are the details for your upcoming interview.</p>
+    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${escapeHtml(data.candidateName)}, we look forward to meeting you! Here are the details for your upcoming interview.</p>
 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
-      <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${data.companyName}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${data.jobTitle}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${formatDateTime(data.scheduledAt)}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${data.durationMinutes} minutes</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${escapeHtml(data.companyName)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${escapeHtml(formatDateTime(data.scheduledAt))}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${escapeHtml(data.durationMinutes)} minutes</p>
       ${videoSection}
     </div>
 
