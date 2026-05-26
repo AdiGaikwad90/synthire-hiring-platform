@@ -284,7 +284,29 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
     }).filter(([, v]) => v !== undefined) as [string, string][]
   );
   const { data: candidateData, isLoading: candidatesLoading } = useCandidates(candidateParams);
-  const candidates = candidateData?.items ?? [];
+  const rawCandidates = candidateData?.items ?? [];
+
+  // Client-side filter by individual dimension scores
+  const filtered = rawCandidates.filter(c => {
+    if (filters.minSkills > 0 && (c.skills_score ?? 0) < filters.minSkills) return false;
+    if (filters.minExp > 0 && (c.experience_score ?? 0) < filters.minExp) return false;
+    if (filters.minEdu > 0 && (c.education_score ?? 0) < filters.minEdu) return false;
+    if (filters.minAch > 0 && (c.achievements_score ?? 0) < filters.minAch) return false;
+    return true;
+  });
+
+  // Client-side sort
+  const candidates = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case "skills":     return (b.skills_score ?? 0) - (a.skills_score ?? 0);
+      case "experience": return (b.experience_score ?? 0) - (a.experience_score ?? 0);
+      case "education":  return (b.education_score ?? 0) - (a.education_score ?? 0);
+      case "achievements": return (b.achievements_score ?? 0) - (a.achievements_score ?? 0);
+      case "recent":     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      default:           return (b.overall_score ?? 0) - (a.overall_score ?? 0);
+    }
+  });
+
   const totalCands = candidates.length;
 
   if (view === "pipeline") { router.push("/pipeline"); return null; }
@@ -344,7 +366,9 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
                 <div style={{ fontSize: 13.5, fontWeight: 500 }}>
                   {candidatesLoading ? "…" : totalCands} candidates
                 </div>
-                <div className="small" style={{ color: "var(--muted)" }}>Sorted by overall score</div>
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  {sortBy === "overall" ? "Sorted by overall score" : sortBy === "skills" ? "Sorted by skills match" : sortBy === "experience" ? "Sorted by experience" : sortBy === "education" ? "Sorted by education" : sortBy === "achievements" ? "Sorted by achievements" : sortBy === "recent" ? "Most recently applied" : "Sorted by overall score"}
+                </div>
               </div>
               <div style={{ flex: 1 }}/>
               {!hideUpload && (
@@ -358,8 +382,10 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
                 options={[
                   { value: "overall", label: "Sort: Overall score" },
                   { value: "skills", label: "Sort: Skills match" },
+                  { value: "experience", label: "Sort: Experience" },
+                  { value: "education", label: "Sort: Education" },
+                  { value: "achievements", label: "Sort: Achievements" },
                   { value: "recent", label: "Sort: Recently applied" },
-                  { value: "years", label: "Sort: Years of experience" },
                 ]}
               />
               <div className="tsViewToggle">

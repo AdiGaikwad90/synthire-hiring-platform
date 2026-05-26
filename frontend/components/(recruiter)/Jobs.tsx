@@ -158,7 +158,15 @@ function Jobs() {
                   <div className="mono" style={{ fontWeight: 600 }}>{j.candidate_count ?? '—'}</div>
                   <div className="small">applicants</div>
                 </div>
-                <div><div className="tsPipeBar"/></div>
+                <div>
+                  <div style={{ height: 6, background: "var(--surface-3)", borderRadius: 999, width: 120, overflow: "hidden" }}>
+                    <div style={{
+                      height: "100%", borderRadius: 999, background: "var(--primary)",
+                      width: `${Math.min(100, Math.round(((j.candidate_count ?? 0) / Math.max(1, Math.max(...filtered.map(x => x.candidate_count ?? 0)))) * 100))}%`,
+                      transition: "width 0.4s ease"
+                    }}/>
+                  </div>
+                </div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <JobContextMenu job={j} onEdit={() => router.push(`/jobs/${j.id}/edit`)} onStatusChange={s => handleStatusChange(j.id, s)} />
                 </div>
@@ -381,7 +389,9 @@ const JobCard = ({ job, onClick, onEdit, onStatusChange }: { job: ApiJob; onClic
         <div className="tiny">Applicants</div>
       </div>
     </div>
-    <div className="tsPipeBar"/>
+    <div style={{ height: 6, background: "var(--surface-3)", borderRadius: 999, overflow: "hidden" }}>
+      <div style={{ height: "100%", borderRadius: 999, background: "var(--primary)", width: `${Math.min(100, (job.candidate_count ?? 0) * 10)}%`, transition: "width 0.4s ease" }}/>
+    </div>
     <div className="small" style={{ marginTop: 12, color: "var(--muted)" }}>
       Posted {new Date(job.created_at).toLocaleDateString()}
     </div>
