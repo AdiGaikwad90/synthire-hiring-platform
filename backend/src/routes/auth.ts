@@ -71,13 +71,24 @@ router.post('/signup', zValidator('json', signupSchema), async (c) => {
 router.post('/login', zValidator('json', loginSchema), async (c) => {
   const { email, password } = c.req.valid('json')
 
+  // Per-email rate limiting: 5 failed attempts per 60s
+  const emailNorm = email.trim().toLowerCase()
+  const rlKey = `rl:login:${emailNorm}`
+  const rlRaw = await c.env.KV_CACHE.get(rlKey)
+  const attempts = rlRaw ? parseInt(rlRaw, 10) : 0
+  if (attempts >= 5) {
+    throw new AppError('Too many login attempts. Please try again in a minute.', 429)
+  }
+
   const user = await findUserByEmail(c.env.DB, email)
   if (!user) {
+    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: 60 })
     throw new AppError('Invalid email or password', 401)
   }
 
   const passwordMatch = await compare(password, user.password_hash)
   if (!passwordMatch) {
+    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: 60 })
     throw new AppError('Invalid email or password', 401)
   }
 
@@ -93,6 +104,8 @@ router.post('/login', zValidator('json', loginSchema), async (c) => {
     c.env.JWT_SECRET,
     expirySeconds
   )
+
+  await c.env.KV_CACHE.delete(rlKey)
 
   return c.json(
     apiResponse({
