@@ -153,4 +153,6 @@ export interface EmailQueueRow {
   max_retries: number
   last_error: string | null
   created_at: string
+  claimed_at?: number | null
+  status?: string
 }
