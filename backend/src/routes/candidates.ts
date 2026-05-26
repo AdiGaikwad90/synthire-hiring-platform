@@ -99,7 +99,7 @@ const router = new Hono<{ Bindings: Env }>()
 
 router.use('*', authMiddleware)
 
-// ── POST /upload — SSE streaming candidate processing ─────────────────────────
+// ── POST /upload — async candidate processing (returns candidateId immediately, client polls) ──
 
 router.post('/upload', async (c) => {
   const payload = c.get('user')
@@ -162,42 +162,12 @@ router.post('/upload', async (c) => {
   // Upload to R2 before responding so the file is available for the background pipeline
   await uploadToR2(env, key, buffer, contentType)
 
-  // Emit status events immediately and close the stream — the actual pipeline
-  // runs in background via waitUntil() so the Worker is not kept alive by the
-  // open stream body (which caused timeouts on large PDFs).
-  const encoder = new TextEncoder()
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(encoder.encode(
-        `data: ${JSON.stringify({ candidateId, status: 'parsing' })}\n\n`
-      ))
-      controller.enqueue(encoder.encode(
-        `data: ${JSON.stringify({ candidateId, status: 'scoring' })}\n\n`
-      ))
-      controller.close()
-    },
-  })
-
-  // Run the heavy pipeline in background — Worker stays alive after response via waitUntil
+  // Run pipeline in background — client polls GET /api/candidates/:id for status
   c.executionCtx.waitUntil(
     runPipeline(env, candidateId, jobId, companyId, buffer, fileType, key, job)
   )
 
-  const origin = c.req.header('Origin') || ''
-  const corsOrigin = /^https?:\/\/localhost(:\d+)?$/.test(origin)
-    ? origin
-    : (c.env.FRONTEND_ORIGIN || 'http://localhost:3000')
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': corsOrigin,
-      'Vary': 'Origin',
-    },
-  })
+  return c.json(apiResponse({ candidateId }), 202)
 })
 
 // ── GET / — list candidates ───────────────────────────────────────────────────

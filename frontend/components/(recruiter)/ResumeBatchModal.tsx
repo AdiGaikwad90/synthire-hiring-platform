@@ -4,7 +4,7 @@ import { Icon } from "@/lib/icons";
 import { Modal, Button, Badge, AIPill, Select, useToast } from "@/components/ui";
 import { Dropzone, FileRow } from "./Dropzone";
 import { useJobs } from "@/hooks/queries/useJobs";
-import { getToken } from "@/lib/auth";
+import { apiFetch, apiUpload } from "@/lib/api";
 
 interface BatchFile {
   id: string;
@@ -29,7 +29,6 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
   const [job, setJob] = React.useState(jobId ?? defaultJobId);
   const toast = useToast();
   const { data: jobsData } = useJobs();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
 
   const handleFiles = (fileList: File[]) => {
     const initial: BatchFile[] = fileList.map((f, i) => ({
@@ -44,49 +43,46 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
     setFiles(initial);
     setStage("processing");
 
-    // Upload each file via SSE stream
     initial.forEach((entry) => {
       const file = (entry as BatchFile & { _file: File })._file;
       const fd = new FormData();
       fd.append("file", file);
       fd.append("jobId", job);
-      const token = getToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      fetch(`${apiUrl}/api/candidates/upload`, { method: "POST", headers, body: fd })
-        .then(async (res) => {
-          const reader = res.body?.getReader();
-          if (!reader) return;
-          const decoder = new TextDecoder();
-          let buf = "";
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            const events = buf.split("\n\n");
-            buf = events.pop() ?? "";
-            for (const event of events) {
-              const dataLine = event.replace(/^data: /, "").trim();
-              if (!dataLine) continue;
-              try {
-                const msg = JSON.parse(dataLine);
+      apiUpload<{ candidateId: string }>("/api/candidates/upload", fd)
+        .then(({ candidateId }) => {
+          setFiles((arr) =>
+            arr.map((x) => x.id === entry.id ? { ...x, status: "parsing" } : x)
+          );
+
+          // Poll GET /api/candidates/:id every 2s until complete or failed
+          let ticks = 0;
+          const poll = setInterval(async () => {
+            ticks++;
+            try {
+              const cand = await apiFetch<any>(`/api/candidates/${candidateId}`);
+              const ps = cand?.processing_status;
+              if (ps === "complete") {
+                clearInterval(poll);
                 setFiles((arr) =>
                   arr.map((x) =>
                     x.id === entry.id
-                      ? {
-                          ...x,
-                          status: msg.status === "complete" ? "done" : msg.status,
-                          score: msg.score ?? x.score,
-                          sub: msg.status === "complete" ? `Score: ${msg.score}%` : undefined,
-                          cand: msg.candidate ?? x.cand,
-                        }
+                      ? { ...x, status: "done", score: cand.overall_score ?? null, sub: cand.overall_score != null ? `Score: ${cand.overall_score}%` : undefined, cand }
                       : x
                   )
                 );
-              } catch { /* ignore malformed */ }
-            }
-          }
+              } else if (ps === "failed" || ticks > 60) {
+                clearInterval(poll);
+                setFiles((arr) =>
+                  arr.map((x) => x.id === entry.id ? { ...x, status: "error" } : x)
+                );
+              } else if (ps === "scoring") {
+                setFiles((arr) =>
+                  arr.map((x) => x.id === entry.id && x.status === "parsing" ? { ...x, status: "scoring" } : x)
+                );
+              }
+            } catch { /* network blip — keep polling */ }
+          }, 2000);
         })
         .catch(() => {
           setFiles((arr) =>
