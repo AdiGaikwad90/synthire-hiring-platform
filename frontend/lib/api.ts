@@ -89,30 +89,89 @@ export class ApiError extends Error {
   }
 }
 
+// ── Refresh coalescing ────────────────────────────────────────────────────────
+
+let _isRefreshing = false
+let _refreshQueue: Array<{ resolve: () => void; reject: (e: unknown) => void }> = []
+
+async function attemptRefresh(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+  if (!res.ok) throw new ApiError('Refresh failed', res.status)
+}
+
+async function waitForRefresh(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    _refreshQueue.push({ resolve, reject })
+  })
+}
+
+async function doRefreshOnce(): Promise<void> {
+  if (_isRefreshing) {
+    return waitForRefresh()
+  }
+  _isRefreshing = true
+  try {
+    await attemptRefresh()
+    _refreshQueue.forEach(q => q.resolve())
+  } catch (e) {
+    _refreshQueue.forEach(q => q.reject(e))
+    throw e
+  } finally {
+    _isRefreshing = false
+    _refreshQueue = []
+  }
+}
+
+// ── apiFetch ──────────────────────────────────────────────────────────────────
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const { getToken, removeToken } = await import('./auth')
-  const token = getToken()
+  const { removeToken } = await import('./auth')
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) ?? {}),
   }
-  if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers })
-
-  const json = await res.json() as { success: boolean; data: T; error: string | null }
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
 
   if (res.status === 401) {
-    // Only redirect to login when a token existed (expired session), not on auth endpoints
-    if (token) {
+    // Try to refresh once, then retry the original request
+    try {
+      await doRefreshOnce()
+      const retryRes = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers,
+        credentials: 'include',
+      })
+      if (retryRes.status === 401) {
+        removeToken()
+        if (typeof window !== 'undefined') window.location.href = '/login'
+        throw new ApiError('Session expired', 401)
+      }
+      const retryJson = await retryRes.json() as { success: boolean; data: T; error: string | null }
+      if (!retryRes.ok || !retryJson.success) {
+        throw new ApiError(retryJson.error ?? `HTTP ${retryRes.status}`, retryRes.status, retryJson)
+      }
+      return retryJson.data
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) throw e
+      // Refresh itself failed — clear user and redirect
       removeToken()
       if (typeof window !== 'undefined') window.location.href = '/login'
+      throw new ApiError('Session expired', 401)
     }
-    throw new ApiError(json.error ?? 'Invalid email or password', 401)
   }
+
+  const json = await res.json() as { success: boolean; data: T; error: string | null }
 
   if (!res.ok || !json.success) {
     throw new ApiError(json.error ?? `HTTP ${res.status}`, res.status, json)
@@ -120,18 +179,41 @@ export async function apiFetch<T>(
   return json.data
 }
 
-export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const { getToken, removeToken } = await import('./auth')
-  const token = getToken()
-  const headers: Record<string, string> = {}
-  if (token) headers['Authorization'] = `Bearer ${token}`
+// ── apiUpload ─────────────────────────────────────────────────────────────────
 
-  const res = await fetch(`${API_URL}${path}`, { method: 'POST', headers, body: formData })
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const { removeToken } = await import('./auth')
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  })
+
   if (res.status === 401) {
-    removeToken()
-    if (typeof window !== 'undefined') window.location.href = '/login'
-    throw new ApiError('Unauthorized', 401)
+    try {
+      await doRefreshOnce()
+      const retryRes = await fetch(`${API_URL}${path}`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      })
+      if (retryRes.status === 401) {
+        removeToken()
+        if (typeof window !== 'undefined') window.location.href = '/login'
+        throw new ApiError('Unauthorized', 401)
+      }
+      const retryJson = await retryRes.json() as { success: boolean; data: T; error: string | null }
+      if (!retryRes.ok || !retryJson.success) throw new ApiError(retryJson.error ?? `HTTP ${retryRes.status}`, retryRes.status)
+      return retryJson.data
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) throw e
+      removeToken()
+      if (typeof window !== 'undefined') window.location.href = '/login'
+      throw new ApiError('Unauthorized', 401)
+    }
   }
+
   const json = await res.json() as { success: boolean; data: T; error: string | null }
   if (!res.ok || !json.success) throw new ApiError(json.error ?? `HTTP ${res.status}`, res.status)
   return json.data
@@ -140,14 +222,15 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
 // Group: Auth
 export const authApi = {
   login: (email: string, password: string) =>
-    apiFetch<{ token: string; user: StoredUser }>('/api/auth/login', {
+    apiFetch<{ user: StoredUser }>('/api/auth/login', {
       method: 'POST', body: JSON.stringify({ email, password })
     }),
   signup: (email: string, password: string, name: string, company_name: string) =>
-    apiFetch<{ token: string; user: StoredUser; company: { id: string; name: string } }>('/api/auth/signup', {
+    apiFetch<{ user: StoredUser; company: { id: string; name: string } }>('/api/auth/signup', {
       method: 'POST', body: JSON.stringify({ email, password, name, company_name })
     }),
   me: () => apiFetch<StoredUser>('/api/auth/me'),
+  logout: () => apiFetch<{ message: string }>('/api/auth/logout', { method: 'POST' }),
 }
 
 // Group: Jobs
