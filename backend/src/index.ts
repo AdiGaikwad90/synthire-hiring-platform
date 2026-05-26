@@ -41,14 +41,7 @@ app.route('/api/email', emailRoutes)
 app.route('/api/settings', settingsRoutes)
 
 // Health check
-app.get('/health', (c) =>
-  c.json({
-    status: 'ok',
-    service: 'synthire-backend',
-    timestamp: new Date().toISOString(),
-    environment: c.env.ENVIRONMENT,
-  })
-)
+app.route('/health', healthRoutes)
 
 // Export for Workers + Scheduled trigger
 export default {
