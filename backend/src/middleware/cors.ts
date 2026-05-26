@@ -25,6 +25,7 @@ export const corsMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
         'Access-Control-Allow-Origin': allowed ? origin : '',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key',
+        'Access-Control-Allow-Credentials': 'true',
         'Access-Control-Max-Age': '86400',
         'Vary': 'Origin',
       },
@@ -35,6 +36,7 @@ export const corsMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
 
   if (allowed && origin) {
     c.res.headers.set('Access-Control-Allow-Origin', origin)
+    c.res.headers.set('Access-Control-Allow-Credentials', 'true')
     c.res.headers.set('Vary', 'Origin')
   }
 })

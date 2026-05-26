@@ -82,20 +82,20 @@ export async function hashToken(token: string): Promise<string> {
 
 export function buildAccessCookie(token: string, maxAge: number, secure: boolean): string {
   const secureFlag = secure ? '; Secure' : ''
-  return `synthire_token=${token}; HttpOnly${secureFlag}; SameSite=Strict; Path=/; Max-Age=${maxAge}`
+  return `synthire_token=${token}; HttpOnly${secureFlag}; SameSite=None; Path=/; Max-Age=${maxAge}`
 }
 
 export function buildRefreshCookie(token: string, maxAge: number, secure: boolean): string {
   const secureFlag = secure ? '; Secure' : ''
-  return `synthire_refresh=${token}; HttpOnly${secureFlag}; SameSite=Strict; Path=/api/auth; Max-Age=${maxAge}`
+  return `synthire_refresh=${token}; HttpOnly${secureFlag}; SameSite=None; Path=/api/auth; Max-Age=${maxAge}`
 }
 
 export function clearAccessCookie(secure: boolean): string {
   const secureFlag = secure ? '; Secure' : ''
-  return `synthire_token=; HttpOnly${secureFlag}; SameSite=Strict; Path=/; Max-Age=0`
+  return `synthire_token=; HttpOnly${secureFlag}; SameSite=None; Path=/; Max-Age=0`
 }
 
 export function clearRefreshCookie(secure: boolean): string {
   const secureFlag = secure ? '; Secure' : ''
-  return `synthire_refresh=; HttpOnly${secureFlag}; SameSite=Strict; Path=/api/auth; Max-Age=0`
+  return `synthire_refresh=; HttpOnly${secureFlag}; SameSite=None; Path=/api/auth; Max-Age=0`
 }
