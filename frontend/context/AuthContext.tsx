@@ -1,7 +1,7 @@
 "use client"
 import * as React from "react"
 import { authApi } from "@/lib/api"
-import { removeToken, getStoredUser, setStoredUser } from "@/lib/auth"
+import { setToken, removeToken, getStoredUser, setStoredUser } from "@/lib/auth"
 import type { StoredUser } from "@/lib/auth"
 
 interface AuthContextValue {
@@ -34,13 +34,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string) => {
-    const { user: u } = await authApi.login(email, password)
+    const { user: u, token } = await authApi.login(email, password) as { user: StoredUser; token?: string }
+    if (token) setToken(token)
     setStoredUser(u)
     setUser(u)
   }
 
   const signup = async (email: string, password: string, name: string, company_name: string) => {
-    const { user: u } = await authApi.signup(email, password, name, company_name)
+    const { user: u, token } = await authApi.signup(email, password, name, company_name) as { user: StoredUser; company: unknown; token?: string }
+    if (token) setToken(token)
     setStoredUser(u)
     setUser(u)
   }

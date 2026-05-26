@@ -105,6 +105,7 @@ router.post('/signup', zValidator('json', signupSchema), async (c) => {
     apiResponse({
       user: toPublicUser(user),
       company: { id: company.id, name: company.name },
+      token: accessToken,
     }),
     201
   )
@@ -165,6 +166,7 @@ router.post('/login', zValidator('json', loginSchema), async (c) => {
   return c.json(
     apiResponse({
       user: toPublicUser(user),
+      token: accessToken,
     })
   )
 })

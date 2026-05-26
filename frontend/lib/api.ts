@@ -131,11 +131,13 @@ export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const { removeToken } = await import('./auth')
+  const { getToken, removeToken } = await import('./auth')
+  const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) ?? {}),
   }
+  if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -182,11 +184,15 @@ export async function apiFetch<T>(
 // ── apiUpload ─────────────────────────────────────────────────────────────────
 
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const { removeToken } = await import('./auth')
+  const { getToken, removeToken } = await import('./auth')
+  const token = getToken()
+  const uploadHeaders: Record<string, string> = {}
+  if (token) uploadHeaders['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     body: formData,
+    headers: uploadHeaders,
     credentials: 'include',
   })
 
@@ -196,6 +202,7 @@ export async function apiUpload<T>(path: string, formData: FormData): Promise<T>
       const retryRes = await fetch(`${API_URL}${path}`, {
         method: 'POST',
         body: formData,
+        headers: uploadHeaders,
         credentials: 'include',
       })
       if (retryRes.status === 401) {

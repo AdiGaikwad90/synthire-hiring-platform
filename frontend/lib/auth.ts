@@ -8,30 +8,25 @@ export interface StoredUser {
   company_id: string
 }
 
-/**
- * getToken — stub. The JWT is now stored in an HttpOnly cookie managed by the
- * browser/backend. This returns null so any lingering call-sites are no-ops.
- */
+const TOKEN_KEY = 'synthire_token'
+
 export function getToken(): string | null {
-  return null
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(TOKEN_KEY)
 }
 
-/**
- * setToken — stub. Cookie is set by Set-Cookie response header from backend.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function setToken(_token: string): void {
-  // no-op — cookie is managed by the browser via backend Set-Cookie
+export function setToken(token: string): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(TOKEN_KEY, token)
+  // Also write a non-HttpOnly cookie for Next.js middleware route protection
+  document.cookie = `synthire_token=${token}; path=/; max-age=86400; SameSite=Lax`
 }
 
-/**
- * removeToken — clears cached user profile from localStorage.
- * Does NOT touch the HttpOnly cookie — that is cleared by the backend /logout
- * endpoint via a Set-Cookie: Max-Age=0 response header.
- */
 export function removeToken(): void {
   if (typeof window === 'undefined') return
+  localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  document.cookie = 'synthire_token=; path=/; max-age=0'
 }
 
 export function getStoredUser(): StoredUser | null {
