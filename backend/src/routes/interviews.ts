@@ -19,7 +19,7 @@ import {
 } from '../db/queries/interviews'
 import { getCandidate } from '../db/queries/candidates'
 import { getJob } from '../db/queries/jobs'
-import { findUserById, findUserByEmail } from '../db/queries/users'
+import { findUserById, findUserByEmailInCompany } from '../db/queries/users'
 import { queueEmail } from '../db/queries/email'
 import { processEmailQueue } from '../services/email/queue'
 import { authMiddleware } from '../middleware/auth'
@@ -66,11 +66,8 @@ router.post('/', zv('json', createInterviewSchema), async (c) => {
   let interviewerId = body.interviewer_id
   let resolvedInterviewerEmail = body.interviewer_email
   if (body.interviewer_email && !interviewerId) {
-    const interviewerByEmail = await findUserByEmail(db, body.interviewer_email)
+    const interviewerByEmail = await findUserByEmailInCompany(db, body.interviewer_email, user.company_id)
     if (interviewerByEmail) {
-      if (interviewerByEmail.company_id !== user.company_id) {
-        throw new AppError('Interviewer does not belong to this company', 403)
-      }
       interviewerId = interviewerByEmail.id
     }
     // If not found, we store the email for external interviewers and send an invite

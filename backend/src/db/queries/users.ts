@@ -44,12 +44,12 @@ export async function createUser(
     .prepare(
       'INSERT INTO users (id, company_id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?, ?)'
     )
-    .bind(id, opts.company_id, opts.email, opts.password_hash, opts.name, role)
+    .bind(id, opts.company_id, opts.email.trim().toLowerCase(), opts.password_hash, opts.name, role)
     .run()
   return {
     id,
     company_id: opts.company_id,
-    email: opts.email,
+    email: opts.email.trim().toLowerCase(),
     password_hash: opts.password_hash,
     name: opts.name,
     role,
@@ -62,8 +62,8 @@ export async function findUserByEmail(
   email: string
 ): Promise<UserRow | null> {
   return db
-    .prepare('SELECT * FROM users WHERE email = ? LIMIT 1')
-    .bind(email)
+    .prepare('SELECT * FROM users WHERE email = lower(?) LIMIT 1')
+    .bind(email.trim())
     .first<UserRow>()
 }
 
@@ -74,6 +74,17 @@ export async function findUserById(
   return db
     .prepare('SELECT * FROM users WHERE id = ? LIMIT 1')
     .bind(id)
+    .first<UserRow>()
+}
+
+export async function findUserByEmailInCompany(
+  db: D1Database,
+  email: string,
+  companyId: string,
+): Promise<UserRow | null> {
+  return db
+    .prepare('SELECT * FROM users WHERE email = lower(?) AND company_id = ? LIMIT 1')
+    .bind(email.trim(), companyId)
     .first<UserRow>()
 }
 
