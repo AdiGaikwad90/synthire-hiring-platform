@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { corsMiddleware } from './middleware/cors'
 import { errorHandler } from './middleware/error'
+import { loggerMiddleware } from './middleware/logger'
 import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
@@ -14,10 +15,12 @@ import interviewTypeRoutes from './routes/interview-types'
 import analyticsRoutes from './routes/analytics'
 import emailRoutes from './routes/email'
 import settingsRoutes from './routes/settings'
+import healthRoutes from './routes/health'
 
 const app = new Hono<{ Bindings: Env }>()
 
 // Global middleware
+app.use('*', loggerMiddleware)
 app.use('*', corsMiddleware)
 app.use('/api/*', rateLimitMiddleware)
 app.onError(errorHandler)
