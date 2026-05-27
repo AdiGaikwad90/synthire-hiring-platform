@@ -71,3 +71,8 @@ coverage/
 # ── Misc ──────────────────────────────────────────────────────────────────────
 scripts/
 *.pem
+
+# ── Dev / prototype artefacts ─────────────────────────────────────────────────
+frontend-mock-data/
+.playwright-mcp/
+development_referrences/

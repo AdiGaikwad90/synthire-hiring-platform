@@ -1,193 +1,97 @@
-# Synthire — Production Readiness Issues
+# Synthire — SaaS Production Readiness
 
-Issues that must be resolved before the app goes live. Grouped by category and severity.
-
----
-
-## 🔴 Security Vulnerabilities
-
-### S1. Role-based access control not enforced
-**Risk: High** — An interviewer who knows the URL can access any recruiter route (`/dashboard`, `/jobs`, `/candidates`, `/analytics`, etc.) without restriction.
-
-- `frontend/middleware.ts` only checks that a token exists — it does not check `role`
-- `Sidebar.tsx` shows all recruiter nav items to interviewers
-- `CandidateDetail.tsx` shows Shortlist / Reject / Schedule buttons to interviewers
-- `CommandPalette.tsx` exposes all recruiter routes to interviewers
-
-**Fix:**
-- Decode JWT payload in `middleware.ts`, redirect interviewers away from `/dashboard`, `/jobs`, etc. → `/interviewer`
-- Filter `NAV_ITEMS` in `Sidebar.tsx` by `user.role`
-- Guard action buttons in `CandidateDetail.tsx` with `user.role === 'recruiter'`
+Full audit conducted across backend (Cloudflare Workers / Hono / D1) and frontend (Next.js 14). Implementation plans are in `docs/superpowers/plans/`.
 
 ---
 
-### S2. Fake OAuth buttons bypass authentication
-**Risk: High** — "Continue with Google" and "Continue with LinkedIn" buttons on the login page navigate directly to `/dashboard` without any authentication. Any user can click these to enter the app without credentials.
+## Plan A — Security & Auth  
+`docs/superpowers/plans/2026-05-27-plan-a-security-auth.md`
 
-- `frontend/components/(auth)/LoginForm.tsx` — both buttons call `router.push('/dashboard')`
-
-**Fix:** Remove the buttons entirely, or wire them to a real OAuth provider. A "Coming soon" toast is acceptable only if the buttons do **not** navigate anywhere — they must be fully inert.
-
----
-
-### S3. Accidental logout on user avatar click
-**Risk: Medium** — The entire avatar + name area in the top nav calls `logout()` on click. Any accidental click on the user's own name immediately ends the session with no confirmation.
-
-- `frontend/components/shared/Navigation.tsx` — `onClick={logout}` on the outer div
-
-**Fix:** Replace with a dropdown showing Profile / Settings / Logout. Only the Logout menu item should call `logout()`.
-
----
-
-### S4. No CSRF protection on state-mutating endpoints
-**Risk: Medium** — The API uses Bearer tokens (safe from CSRF by default) but also accepts cookies as a fallback. If a future change re-enables cookie-only auth without a CSRF token, all POST/PATCH/DELETE endpoints become vulnerable to cross-site request forgery.
-
-**Fix:** Keep Bearer token as the primary and only auth path in production. If cookies are ever re-enabled as primary auth, add a `Csrf-Token` double-submit cookie pattern.
+| # | Issue | File | Severity |
+|---|-------|------|----------|
+| A1 | No RBAC — any user can hit any route | `middleware/role.ts` (new), all routes | 🔴 Critical |
+| A2 | Interviewer can access recruiter pages in frontend | `frontend/middleware.ts`, layouts | 🔴 Critical |
+| A3 | Sidebar / CommandPalette shows all routes regardless of role | `Sidebar.tsx`, `CommandPalette.tsx` | 🔴 Critical |
+| A4 | Shortlist / Reject / Schedule buttons visible to interviewers | `CandidateDetail.tsx` | 🔴 Critical |
+| A5 | LLM prompts vulnerable to prompt injection via resume text | `parse-resume.ts`, `score-candidate.ts` | 🔴 High |
+| A6 | Refresh token reuse not detected — token can be replayed | `routes/auth.ts` | 🔴 High |
+| A7 | Resume file served without `Content-Disposition: attachment` | `routes/candidates.ts` | 🔴 High |
+| A8 | No per-company upload rate limiting | `routes/candidates.ts` | 🟠 High |
+| A9 | No signup rate limiting (only login is rate-limited) | `routes/auth.ts` | 🟠 High |
+| A10 | Resend webhook has no timestamp/replay check | `routes/email.ts` | 🟠 High |
+| A11 | Token expiry not tracked — localStorage token lives forever | `lib/auth.ts`, `AuthContext.tsx` | 🟠 High |
+| A12 | `expiresIn` not returned by login/signup | `routes/auth.ts` | 🟡 Medium |
 
 ---
 
-### S5. No account lockout on signup (only login is rate-limited)
-**Risk: Low–Medium** — Login is rate-limited to 5 attempts per 60s per email. Signup has no rate limiting — an attacker can create unlimited accounts for a given domain, exhausting the D1 row budget or Neurons daily limit.
+## Plan B — Core UX + Missing Features  
+`docs/superpowers/plans/2026-05-27-plan-b-core-ux-features.md`
 
-- `backend/src/routes/auth.ts` — `POST /signup` has no rate limit
-
-**Fix:** Apply the same KV-backed rate limiter to signup: max 3 signups per IP per hour.
-
----
-
-## 🟠 Data Integrity / Correctness
-
-### D1. Strengths and Concerns always empty
-Candidate cards and detail pages always show empty Strengths / Concerns sections. The scoring prompt returns only a `summary` string — it never extracts these fields.
-
-- `frontend/components/(recruiter)/CandidateDetail.tsx` — `strengths: []`, `concerns: []` hardcoded
-- `backend/src/services/ai/prompts/score-candidate.ts` — no `strengths`/`concerns` in schema
-
-**Fix:** Add `strengths: string[]` + `concerns: string[]` to the scoring prompt and store them in `ai_analysis` as JSON.
-
----
-
-### D2. Resume parsing field name mismatch
-Parsed education shows blank because the AI prompt returns `school` + `year` but the frontend reads `institution` + `from`/`to`. Experience shows blank stack because the prompt returns `technologies[]` but the frontend reads `stack[]`.
-
-- `backend/src/services/ai/prompts/parse-resume.ts`
-- `frontend/components/(recruiter)/CandidateDetail.tsx`
-
-**Fix:** Align field names in the prompt schema: use `institution`, `from`, `to`, `stack`.
+| # | Issue | File | Severity |
+|---|-------|------|----------|
+| B1 | No forgot-password / reset-password flow | New backend routes + frontend pages | 🔴 Critical |
+| B2 | No team invite flow — can't add recruiters or interviewers | `routes/team.ts` (new), `Settings.tsx` | 🔴 Critical |
+| B3 | Avatar click immediately logs user out (no dropdown) | `Navigation.tsx` | 🔴 Critical |
+| B4 | Settings — 4 of 5 tabs show "Pretend this is configured" | `Settings.tsx` | 🔴 Critical |
+| B5 | Recruiter `/interviews` shows interviewer component | `interviews/page.tsx`, new `InterviewsList.tsx` | 🔴 High |
+| B6 | Dashboard hardcodes "Welcome back, Sarah" | `Dashboard.tsx` | 🔴 High |
+| B7 | Dashboard stat cards show fake trend percentages | `Dashboard.tsx` | 🔴 High |
+| B8 | No profile settings (can't change name/email/password) | `routes/settings.ts`, `Settings.tsx` | 🟠 High |
+| B9 | OAuth buttons navigate to /dashboard (no real auth) | `LoginForm.tsx` | 🟠 High |
+| B10 | "Forgot?" link is dead | `LoginForm.tsx` | 🟠 High |
+| B11 | Terms / Privacy links go nowhere | `LoginForm.tsx`, `SignupForm.tsx` | 🟡 Medium |
+| B12 | Search bar has `onChange={() => {}}` — no-op | `Navigation.tsx` | 🟡 Medium |
+| B13 | Breadcrumb shows raw job ID | `Navigation.tsx` | 🟡 Medium |
+| B14 | Pipeline "Add candidate" buttons do nothing | `PipelineKanban.tsx` | 🟡 Medium |
+| B15 | Settings hardcodes fake template names ("used by 8 jobs") | `Settings.tsx` | 🟡 Medium |
 
 ---
 
-### D3. Analytics shows hardcoded fake data
-Stat cards show fake trend percentages (+15%, +8%, etc.) and hardcoded subtexts ("9 accepted, 1 declined", "5.2 per role on avg") regardless of real data. The Source Effectiveness chart always shows fake percentages.
+## Plan C — Data Integrity & Reliability  
+`docs/superpowers/plans/2026-05-27-plan-c-data-integrity-reliability.md`
 
-- `frontend/components/(recruiter)/Analytics.tsx`
-- `frontend/components/(recruiter)/Dashboard.tsx`
-
-**Fix:** Show `—` or hide trend badges when no prior-period data exists. Remove all hardcoded subtext strings.
-
----
-
-### D4. "Pretend this is configured" placeholder text visible to users
-Four of five Settings sections render debug text: `"Pretend this is configured. Switch to Interview rounds to see the deep-dive."` — this is hard-coded and ships to production.
-
-- `frontend/components/(recruiter)/Settings.tsx`
-
-**Fix:** Replace with proper "Coming soon" empty states.
-
----
-
-## 🟡 Functional Gaps
-
-### F1. Forgot password flow missing
-The "Forgot?" link on the login page does nothing. Users who forget their password have no recovery path.
-
-- `frontend/components/(auth)/LoginForm.tsx`
-
-**Fix:** Implement a password reset flow via email (`magic_link` email type already exists in the backend), or show a "Coming soon" toast and **disable** the link so it is not a dead end.
+| # | Issue | File | Severity |
+|---|-------|------|----------|
+| C1 | Parse prompt uses wrong field names (school/year/technologies) | `parse-resume.ts`, `CandidateDetail.tsx` | 🔴 Critical |
+| C2 | Parse prompt returns sentences instead of keywords for skills | `parse-resume.ts` | 🔴 Critical |
+| C3 | Strengths/Concerns always empty (never extracted from LLM) | `score-candidate.ts`, `pipeline.ts`, `CandidateDetail.tsx` | 🔴 Critical |
+| C4 | `ai_analysis` JSON parse can throw and crash CandidateDetail | `db/queries/candidates.ts`, `CandidateDetail.tsx` | 🔴 Critical |
+| C5 | Analytics source chart is fully hardcoded (fake %) | `Analytics.tsx` | 🔴 Critical |
+| C6 | Analytics time-to-hire spinner never resolves | `Analytics.tsx` | 🟠 High |
+| C7 | R2 file not deleted when pipeline fails (orphaned files) | `routes/candidates.ts` | 🟠 High |
+| C8 | No error state shown when `processing_status = 'error'` | `CandidateDetail.tsx` | 🟠 High |
+| C9 | Shortlist/Reject buttons have no loading state or toast | `Candidates.tsx`, `CandidateDetail.tsx` | 🟠 High |
+| C10 | API refresh logs out on network errors (should retry) | `lib/api.ts` | 🟠 High |
+| C11 | Interview feedback scores have no range validation | `routes/interviews.ts`, migration 0010 | 🟡 Medium |
+| C12 | Upload polling has no timeout — can hang forever | `ResumeBatchModal.tsx` | 🟡 Medium |
+| C13 | No circuit breaker — LLM failures cascade forever | `services/ai/fallback.ts` | 🟡 Medium |
+| C14 | Analytics trend badges show even when no prior-period data | `Analytics.tsx`, `Dashboard.tsx` | 🟡 Medium |
 
 ---
 
-### F2. Terms of Service and Privacy Policy links go nowhere
-Login and Signup pages reference Terms and Privacy Policy with no `href`. Shipping a product with unlinked legal pages is a compliance risk.
+## Plan D — Performance, Scalability & Observability  
+`docs/superpowers/plans/2026-05-27-plan-d-performance-scalability.md`
 
-- `frontend/components/(auth)/LoginForm.tsx`
-- `frontend/components/(auth)/SignupForm.tsx`
-
-**Fix:** Add placeholder policy pages at `/terms` and `/privacy`, or remove the links for MVP.
-
----
-
-### F3. Recruiter Interviews page shows wrong component
-`/interviews` renders `<InterviewerHome />` — designed for interviewers showing only their own assignments. Recruiters see "Your interviews" and see all company interviews by accident with no scheduling CTA.
-
-- `frontend/app/(recruiter)/interviews/page.tsx`
-
-**Fix:** Create a recruiter-scoped `InterviewsList` component with a table layout, filter tabs (All / Today / Upcoming / Completed), and a "Schedule interview" button.
+| # | Issue | File | Severity |
+|---|-------|------|----------|
+| D1 | No composite DB indexes — full scans on every page load | Migration 0011 | 🟠 High |
+| D2 | N+1 query — job title fetched per-candidate on list view | `db/queries/candidates.ts` | 🟠 High |
+| D3 | Neurons budget is global — one company can exhaust all others | `middleware/neurons.ts` (new) | 🟠 High |
+| D4 | No audit log — can't trace who changed what | Migration 0012, `db/queries/audit.ts` (new) | 🟠 High |
+| D5 | `/health` doesn't expose Neurons usage or D1 latency | `routes/health.ts` | 🟡 Medium |
+| D6 | No Sentry — production errors are invisible | `index.ts`, `@sentry/cloudflare` | 🟡 Medium |
+| D7 | Activity feed not wired to real audit data | `useAnalytics.ts`, `Dashboard.tsx` | 🟡 Medium |
 
 ---
 
-### F4. Pipeline "Add candidate" buttons do nothing
-All seven "Add candidate" buttons at the bottom of Kanban columns have no `onClick` handler.
+## Execution order
 
-- `frontend/components/(recruiter)/PipelineKanban.tsx`
+Run plans in parallel where possible:
 
-**Fix:** Link to `/candidates?job_id=...` filtered for that job, or remove the buttons.
-
----
-
-## 🔵 Infrastructure / Operational
-
-### I1. Sentry DSN not configured in production
-`SENTRY_DSN` is optional — if unset, errors in production are invisible. No alerting, no stack traces, no error grouping.
-
-**Fix:** Create a Sentry project, run `wrangler secret put SENTRY_DSN`, and verify errors appear in the Sentry dashboard after deploy.
-
----
-
-### I2. Neurons daily limit may be too low for production load
-`NEURONS_DAILY_LIMIT = "10000"` is a hard stop. A recruiter uploading 50 resumes in one session can consume a significant fraction of the daily budget, blocking all AI calls for the rest of the day.
-
-**Fix:** Monitor actual Neurons consumption for the first week of production use and increase the limit in `wrangler.toml` accordingly. Add a KV key that exposes current usage via `GET /health` so it can be monitored.
-
----
-
-### I3. Staging D1 / KV IDs not provisioned
-`wrangler.toml` still has `REPLACE_WITH_STAGING_DATABASE_ID` and `REPLACE_WITH_STAGING_KV_ID` placeholders. Any deploy to staging will fail.
-
-**Fix:**
-```bash
-wrangler d1 create synthire-staging
-wrangler kv:namespace create KV_CACHE_STAGING
 ```
-Then fill in the IDs in `wrangler.toml`.
+Week 1-2:  Plan A (security) + Plan B tasks B1-B5 (critical UX)
+Week 2-3:  Plan B remainder + Plan C tasks C1-C5 (critical data)
+Week 3-4:  Plan C remainder + Plan D
+```
 
----
-
-### I4. No health check monitoring
-`GET /health` exists but nothing calls it. A silent Worker crash or D1 outage would go undetected until a user reports it.
-
-**Fix:** Set up an uptime monitor (Cloudflare Healthchecks, Better Uptime, or UptimeRobot) pointing to `https://synthire-backend-production.adigaikwad4321.workers.dev/health`.
-
----
-
-## Priority Order
-
-| # | Issue | Severity |
-|---|-------|----------|
-| 1 | S2 — Fake OAuth bypasses auth | 🔴 Critical |
-| 2 | S1 — No role-based access control | 🔴 Critical |
-| 3 | S3 — Avatar click logs out instantly | 🔴 Critical |
-| 4 | D4 — "Pretend this is configured" text | 🔴 Critical |
-| 5 | D2 — Resume field name mismatch | 🔴 Critical |
-| 6 | D1 — Strengths/Concerns always empty | 🔴 Critical |
-| 7 | D3 — Fake analytics data | 🔴 Critical |
-| 8 | F3 — Wrong component on Interviews page | 🟠 High |
-| 9 | F1 — No forgot password flow | 🟠 High |
-| 10 | S5 — No signup rate limit | 🟠 High |
-| 11 | F2 — Terms/Privacy links dead | 🟡 Medium |
-| 12 | F4 — Pipeline Add candidate buttons dead | 🟡 Medium |
-| 13 | S4 — CSRF advisory | 🟡 Medium |
-| 14 | I1 — Sentry not configured | 🔵 Ops |
-| 15 | I4 — No uptime monitoring | 🔵 Ops |
-| 16 | I2 — Neurons limit may be too low | 🔵 Ops |
-| 17 | I3 — Staging not provisioned | 🔵 Ops |
+Plans A and C can be executed entirely in parallel. Plan B depends on B1 (forgot password) before B8 (change password shares the same reset-token infrastructure).

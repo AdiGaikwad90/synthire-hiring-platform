@@ -75,9 +75,13 @@ export function validateParsedResume(data: unknown): data is ParsedResume {
 
   if (typeof d.name !== 'string') return false
   if (PLACEHOLDER_NAMES.has(d.name.trim().toLowerCase())) return false
-  if (!Array.isArray(d.technical_skills)) return false
-  if (!Array.isArray(d.professional_experience)) return false
-  if (!Array.isArray(d.education_details)) return false
+
+  // Coerce null arrays to empty arrays so small models don't fail validation
+  if (!Array.isArray(d.technical_skills)) d.technical_skills = []
+  if (!Array.isArray(d.professional_experience)) d.professional_experience = []
+  if (!Array.isArray(d.education_details)) d.education_details = []
+  if (!Array.isArray(d.certifications)) d.certifications = []
+  if (!Array.isArray(d.achievements)) d.achievements = []
 
   return true
 }

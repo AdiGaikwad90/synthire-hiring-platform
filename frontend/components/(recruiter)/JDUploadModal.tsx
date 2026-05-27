@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, AIPill, Badge } from "@/components/ui";
+import { Modal, Button, AIPill } from "@/components/ui";
 import { Dropzone, FileRow } from "./Dropzone";
 import { apiUpload, apiFetch } from "@/lib/api";
 
@@ -22,18 +22,48 @@ interface JDUploadModalProps {
   onParsed?: (jd: ParsedJD) => void;
 }
 
+const PARSE_STEPS = [
+  { icon: "FileText", label: "Extracting document text…" },
+  { icon: "Cpu",      label: "Reading job structure…" },
+  { icon: "Target",   label: "Identifying required skills…" },
+  { icon: "Sparkles", label: "Extracting role & compensation…" },
+  { icon: "Check",    label: "Structuring extracted data…" },
+];
+
 export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
   const [stage, setStage] = React.useState<"drop" | "parsing" | "done" | "error">("drop");
   const [file, setFile] = React.useState<File | null>(null);
   const [progress, setProgress] = React.useState(0);
   const [parsed, setParsed] = React.useState<ParsedJD | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [stepIdx, setStepIdx] = React.useState(0);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const stepRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Advance steps linearly — stop at last step, never loop
+  React.useEffect(() => {
+    if (stage !== "parsing") {
+      if (stepRef.current) { clearInterval(stepRef.current); stepRef.current = null; }
+      return;
+    }
+    setStepIdx(0);
+    stepRef.current = setInterval(() => {
+      setStepIdx((i) => {
+        if (i >= PARSE_STEPS.length - 1) {
+          clearInterval(stepRef.current!);
+          return i;
+        }
+        return i + 1;
+      });
+    }, 2200);
+    return () => { if (stepRef.current) clearInterval(stepRef.current); };
+  }, [stage]);
 
   // Clear polling on unmount
   React.useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (stepRef.current) clearInterval(stepRef.current);
     };
   }, []);
 
@@ -46,16 +76,13 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
     try {
       const formData = new FormData();
       formData.append("file", f);
-      // Fast upload — returns parseId immediately (202), LLM runs in background
       const { parseId } = await apiUpload<{ parseId: string }>("/api/jobs/parse-jd", formData);
       setProgress(30);
 
-      // Poll every 2s for result
       let ticks = 0;
       pollRef.current = setInterval(async () => {
         ticks++;
-        // Animate progress 30→90 during polling
-        setProgress(Math.min(90, 30 + ticks * 5));
+        setProgress(Math.min(88, 30 + ticks * 6));
 
         try {
           const state = await apiFetch<{ status: string; result?: ParsedJD; error?: string }>(
@@ -74,7 +101,6 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
             setError(state.error ?? "Parsing failed");
             setStage("error");
           }
-          // status === 'processing' → keep polling
         } catch {
           // network error during poll — keep trying
         }
@@ -84,6 +110,8 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
       setStage("error");
     }
   };
+
+  const step = PARSE_STEPS[stepIdx];
 
   return (
     <Modal
@@ -100,9 +128,7 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
       footer={
         stage === "done" ? (
           <>
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button variant="secondary" onClick={() => { setStage("drop"); setParsed(null); setFile(null); }}>
               Re-upload
             </Button>
@@ -111,13 +137,13 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
             </Button>
           </>
         ) : stage === "error" ? (
-          <>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          </>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
         ) : (
           <>
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button variant="secondary" onClick={() => { onParsed?.(null as any); onClose(); }}>Skip — start from scratch</Button>
+            <Button variant="secondary" onClick={() => { onParsed?.(null as any); onClose(); }}>
+              Skip — start from scratch
+            </Button>
           </>
         )
       }
@@ -136,23 +162,64 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
 
       {stage === "parsing" && (
         <div>
-          <FileRow name={file?.name || "job-description.pdf"} size="" status="parsing" sub={`${progress}% · Extracting with AI…`} />
-          <div className="tsBigProgress">
-            <div className="tsBigProgress-fill" style={{ width: `${progress}%` }} />
+          <FileRow
+            name={file?.name || "job-description.pdf"}
+            size=""
+            status="parsing"
+            sub={`${progress}% · ${step.label}`}
+          />
+          <div className="tsBigProgress" style={{ marginTop: 10 }}>
+            <div
+              className="tsBigProgress-fill"
+              style={{ width: `${progress}%`, transition: "width 0.6s ease" }}
+            />
           </div>
-          <div style={{ marginTop: 16, padding: 14, background: "var(--surface-2)", borderRadius: 10, display: "flex", gap: 10, alignItems: "center" }}>
-            <Icon.Sparkles size={14} style={{ color: "var(--primary-3)" }}/>
-            <span className="small" style={{ color: "var(--text-2)" }}>Reading document and extracting job details with AI…</span>
+
+          {/* Animated step list */}
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+            {PARSE_STEPS.map((s, i) => {
+              const done = i < stepIdx;
+              const active = i === stepIdx;
+              return (
+                <div
+                  key={s.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: active ? "var(--surface-2)" : "transparent",
+                    opacity: done ? 0.4 : active ? 1 : 0.25,
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  {done ? (
+                    <Icon.Check size={13} stroke={3} style={{ color: "var(--success)", flexShrink: 0 }} />
+                  ) : active ? (
+                    <span className="tsFileRow-spin" style={{ flexShrink: 0 }} />
+                  ) : (
+                    <span style={{ width: 13, height: 13, flexShrink: 0 }} />
+                  )}
+                  <span className="small" style={{ color: active ? "var(--text)" : "var(--muted)" }}>
+                    {s.label}
+                  </span>
+                  {active && <span style={{ marginLeft: "auto" }}><AIPill>Running</AIPill></span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       {stage === "error" && (
         <div style={{ padding: 32, textAlign: "center" }}>
-          <Icon.X size={32} style={{ color: "var(--danger)", marginBottom: 12 }}/>
+          <Icon.X size={32} style={{ color: "var(--danger)", marginBottom: 12 }} />
           <div style={{ fontWeight: 500, marginBottom: 8 }}>Parsing failed</div>
           <div className="small" style={{ color: "var(--muted)", marginBottom: 16 }}>{error}</div>
-          <Button variant="secondary" onClick={() => { setStage("drop"); setFile(null); setError(null); }}>Try again</Button>
+          <Button variant="secondary" onClick={() => { setStage("drop"); setFile(null); setError(null); }}>
+            Try again
+          </Button>
         </div>
       )}
 
@@ -161,9 +228,7 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
             <Icon.Check size={16} stroke={3} style={{ color: "var(--success)" }} />
             <span style={{ fontWeight: 500 }}>Parsed successfully</span>
-            <span className="small" style={{ color: "var(--muted)" }}>
-              · edit any field on the next steps
-            </span>
+            <span className="small" style={{ color: "var(--muted)" }}>· edit any field on the next steps</span>
           </div>
 
           <div className="tsParsed">
@@ -192,32 +257,30 @@ export function JDUploadModal({ onClose, onParsed }: JDUploadModalProps) {
             {(parsed.employment_type || parsed.experience_level) && (
               <div className="tsParsed-row">
                 <span className="tiny">Type · Level</span>
-                <div>
-                  {[parsed.employment_type, parsed.experience_level].filter(Boolean).join(" · ")}
-                </div>
+                <div>{[parsed.employment_type, parsed.experience_level].filter(Boolean).join(" · ")}</div>
               </div>
             )}
           </div>
 
-          <div style={{ marginTop: 16 }}>
-            <div className="tiny" style={{ marginBottom: 8 }}>
-              Required skills <span style={{ color: "var(--success)" }}>· {parsed.required_skills.length} extracted</span>
+          {parsed.required_skills.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div className="tiny" style={{ marginBottom: 8 }}>
+                Required skills <span style={{ color: "var(--success)" }}>· {parsed.required_skills.length} extracted</span>
+              </div>
+              <div className="tsChips">
+                {parsed.required_skills.map((s) => (
+                  <span key={s} className="tsChip tsChip-required">
+                    <Icon.Check size={10} stroke={3} />
+                    {s}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="tsChips">
-              {parsed.required_skills.map((s) => (
-                <span key={s} className="tsChip tsChip-required">
-                  <Icon.Check size={10} stroke={3} />
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
+          )}
 
           {parsed.nice_to_have_skills.length > 0 && (
             <div style={{ marginTop: 14 }}>
-              <div className="tiny" style={{ marginBottom: 8 }}>
-                Nice-to-have
-              </div>
+              <div className="tiny" style={{ marginBottom: 8 }}>Nice-to-have</div>
               <div className="tsChips">
                 {parsed.nice_to_have_skills.map((s) => (
                   <span key={s} className="tsChip">{s}</span>

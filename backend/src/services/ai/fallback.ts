@@ -14,7 +14,7 @@ export interface LlmConfig {
 }
 
 const DEFAULT_CONFIG: LlmConfig = {
-  models: ['@cf/meta/llama-3.1-8b-instruct', '@cf/meta/llama-3.2-3b-instruct'],
+  models: ['@cf/meta/llama-3.1-8b-instruct-awq', '@cf/moonshotai/kimi-k2.6'],
   temperature: 0.1,
   maxTokens: 2000,
 }

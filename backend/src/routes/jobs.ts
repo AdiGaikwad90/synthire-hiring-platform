@@ -35,9 +35,11 @@ const parsedJdSchema = z.object({
   employment_type: z.string().nullable().optional(),
   experience_level: z.string().nullable().optional(),
   salary_range: z.string().nullable().optional(),
-  required_skills: z.array(z.string()).optional(),
-  nice_to_have_skills: z.array(z.string()).optional(),
-  min_years_experience: z.number().nullable().optional(),
+  // Models often return arrays as null or strings as numbers — coerce both
+  required_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
+  nice_to_have_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
+  min_years_experience: z.union([z.number(), z.string(), z.null()]).optional()
+    .transform(v => (v === null || v === undefined || v === '') ? null : Number(v) || null),
   education_requirement: z.string().nullable().optional(),
 })
 
@@ -57,8 +59,8 @@ CRITICAL RULES — violation is not acceptable:
 - salary_range: return null UNLESS a specific dollar amount, range, or compensation figure is written in the text. Do NOT guess based on title or seniority.
 - min_years_experience: return null UNLESS the text explicitly says "X years" or "X+ years". Do NOT infer from job title.
 - department, location, education_requirement: return null if not mentioned.
-- required_skills: ONLY skills the JD explicitly lists as required. Short keywords only (1-4 words).
-- nice_to_have_skills: ONLY skills explicitly marked as preferred/nice-to-have/bonus.
+- required_skills: ONLY skills the JD explicitly lists as required or analyze and identify the skills which seems to be required. Short keywords only (1-4 words).
+- nice_to_have_skills: ONLY skills explicitly marked as preferred/nice-to-have/bonus/good-to-have or similar. Short keywords only (1-4 words).
 
 JSON structure:
 {
