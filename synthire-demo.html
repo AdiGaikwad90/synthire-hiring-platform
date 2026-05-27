@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Synthire — AI-Powered Hiring on Cloudflare</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg: #0a0c14;
+  --surface: #0f1220;
+  --card: #131929;
+  --card-hi: #1a2238;
+  --border: rgba(255,255,255,0.07);
+  --border-hi: rgba(255,255,255,0.14);
+  --text: #e6e9f2;
+  --muted: #8891a8;
+  --dim: #5a6178;
+  --blue: #4f8ef7;
+  --purple: #7c5cfc;
+  --green: #22d3a5;
+  --pink: #f472b6;
+  --amber: #fbbf24;
+  --grad: linear-gradient(135deg, #4f8ef7, #7c5cfc, #22d3a5);
+  --grad-blue: linear-gradient(135deg, #4f8ef7, #7c5cfc);
+  --grad-green: linear-gradient(135deg, #22d3a5, #4f8ef7);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+code, .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* Background ambient gradients */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(800px 500px at 10% -10%, rgba(79,142,247,0.10), transparent 60%),
+    radial-gradient(700px 500px at 95% 10%, rgba(124,92,252,0.10), transparent 60%),
+    radial-gradient(900px 600px at 50% 110%, rgba(34,211,165,0.06), transparent 60%);
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Navbar */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: rgba(10,12,20,0.65);
+  border-bottom: 1px solid var(--border);
+  transition: background .2s ease;
+}
+.nav-inner {
+  max-width: 1280px; margin: 0 auto;
+  padding: 14px 32px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.logo {
+  font-weight: 800; font-size: 20px; letter-spacing: -0.02em;
+  background: var(--grad);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-mark {
+  width: 26px; height: 26px;
+  background: var(--grad);
+  border-radius: 7px;
+  display: inline-block;
+  position: relative;
+  box-shadow: 0 4px 24px rgba(79,142,247,0.35);
+}
+.logo-mark::after {
+  content: ''; position: absolute; inset: 5px;
+  border: 2px solid #0a0c14;
+  border-radius: 4px;
+  border-top-color: transparent;
+  border-right-color: transparent;
+}
+.nav-links { display: flex; gap: 28px; align-items: center; }
+.nav-links a {
+  color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500;
+  transition: color .15s;
+}
+.nav-links a:hover { color: var(--text); }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 18px; border-radius: 8px;
+  font-weight: 600; font-size: 14px;
+  text-decoration: none;
+  border: 1px solid var(--border-hi);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .2s;
+}
+.btn:hover { background: rgba(255,255,255,0.07); transform: translateY(-1px); }
+.btn-primary {
+  background: var(--grad);
+  border: none;
+  color: white;
+  box-shadow: 0 8px 28px rgba(79,142,247,0.35);
+}
+.btn-primary:hover { box-shadow: 0 12px 36px rgba(79,142,247,0.5); transform: translateY(-1px); }
+
+/* Layout */
+.container { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+section { padding: 120px 0; position: relative; }
+.section-label {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: rgba(79,142,247,0.08);
+  margin-bottom: 20px;
+}
+.section-title {
+  font-size: 44px; font-weight: 800; letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 16px;
+  max-width: 760px;
+}
+.section-subtitle {
+  font-size: 18px; color: var(--muted);
+  max-width: 680px;
+  margin-bottom: 56px;
+}
+.gradient-text {
+  background: var(--grad);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Hero */
+.hero {
+  min-height: 100vh;
+  padding-top: 160px;
+  padding-bottom: 80px;
+  position: relative;
+  display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden;
+}
+#particles {
+  position: absolute; inset: 0;
+  z-index: 0;
+  opacity: 0.6;
+}
+.hero-inner { position: relative; z-index: 2; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-hi);
+  background: rgba(255,255,255,0.03);
+  font-size: 13px; color: var(--muted);
+  margin-bottom: 24px;
+}
+.hero-eyebrow .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 12px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+.hero h1 {
+  font-size: clamp(48px, 6.5vw, 86px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+  margin-bottom: 24px;
+  max-width: 1000px;
+}
+.hero p.lede {
+  font-size: 20px;
+  color: var(--muted);
+  max-width: 680px;
+  margin-bottom: 40px;
+}
+.hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 64px; }
+
+/* Floating stat cards */
+.floating-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  max-width: 1080px;
+}
+.stat-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  animation: float 6s ease-in-out infinite;
+}
+.stat-card:nth-child(2) { animation-delay: -1.5s; }
+.stat-card:nth-child(3) { animation-delay: -3s; }
+.stat-card:nth-child(4) { animation-delay: -4.5s; }
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.stat-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--grad);
+  opacity: 0.05;
+  z-index: 0;
+}
+.stat-card .stat-label {
+  font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-bottom: 8px;
+  position: relative;
+}
+.stat-card .stat-value {
+  font-size: 30px; font-weight: 800; letter-spacing: -0.02em;
+  background: var(--grad);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+}
+.stat-card .stat-meta { font-size: 12px; color: var(--dim); margin-top: 4px; position: relative; }
+
+/* Role cards */
+.roles-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+.role-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 32px;
+  position: relative;
+  transition: all .3s ease;
+  overflow: hidden;
+}
+.role-card::before {
+  content: ''; position: absolute; top:0; left:0; right:0; height: 3px;
+  background: var(--grad);
+  opacity: 0; transition: opacity .3s;
+}
+.role-card:hover {
+  border-color: var(--border-hi);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(79,142,247,0.12);
+}
+.role-card:hover::before { opacity: 1; }
+.role-icon {
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 20px;
+  background: rgba(79,142,247,0.12);
+  border: 1px solid rgba(79,142,247,0.25);
+}
+.role-icon.purple { background: rgba(124,92,252,0.12); border-color: rgba(124,92,252,0.25); }
+.role-icon.green { background: rgba(34,211,165,0.12); border-color: rgba(34,211,165,0.25); }
+.role-icon svg { width: 26px; height: 26px; }
+.role-card h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.01em; }
+.role-card p { color: var(--muted); font-size: 14.5px; margin-bottom: 16px; }
+.role-card ul { list-style: none; }
+.role-card li {
+  color: var(--muted); font-size: 13.5px; padding: 6px 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.role-card li::before {
+  content: ''; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--blue); flex-shrink: 0;
+}
+.role-card.purple li::before { background: var(--purple); }
+.role-card.green li::before { background: var(--green); }
+
+/* Timeline */
+.timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.tl-step {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 28px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 20px;
+  transition: all .3s;
+  margin-bottom: 0;
+}
+.tl-step + .tl-step { margin-top: -1px; border-radius: 0; }
+.tl-step:first-child { border-radius: 16px 16px 0 0; }
+.tl-step:last-child { border-radius: 0 0 16px 16px; margin-top: -1px; }
+.tl-step:only-child { border-radius: 16px; }
+.tl-step:hover { background: var(--card-hi); z-index: 1; border-color: var(--border-hi); }
+.tl-step-connector {
+  position: absolute; left: 47px; top: 100%; width: 2px; height: 0;
+  background: linear-gradient(to bottom, rgba(79,142,247,0.4), transparent);
+}
+.tl-num {
+  flex-shrink: 0;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--grad);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; color: white;
+  box-shadow: 0 4px 16px rgba(79,142,247,0.35);
+  align-self: start;
+  margin-top: 2px;
+}
+.tl-body { display: flex; flex-direction: column; gap: 8px; }
+.tl-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tl-step h4 { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.tl-step p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.tl-step code {
+  background: rgba(79,142,247,0.10);
+  border: 1px solid rgba(79,142,247,0.18);
+  color: #9cc1ff;
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+}
+.tl-tech { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.tech-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
+  border: 1px solid;
+}
+.tech-badge.cf     { background: rgba(248,116,46,0.10); border-color: rgba(248,116,46,0.3); color: #f8742e; }
+.tech-badge.blue   { background: rgba(79,142,247,0.10); border-color: rgba(79,142,247,0.3); color: #7ab4ff; }
+.tech-badge.purple { background: rgba(124,92,252,0.10); border-color: rgba(124,92,252,0.3); color: #a98cff; }
+.tech-badge.green  { background: rgba(34,211,165,0.10); border-color: rgba(34,211,165,0.3); color: #22d3a5; }
+.tech-badge.amber  { background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.3); color: #fbbf24; }
+.tech-badge.pink   { background: rgba(244,114,182,0.10); border-color: rgba(244,114,182,0.3); color: #f472b6; }
+.tech-badge.gray   { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); color: var(--muted); }
+.tech-badge svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+/* Architecture diagram */
+.arch-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+  position: relative;
+  overflow: hidden;
+}
+.arch-svg { width: 100%; height: auto; display: block; }
+.arch-node rect {
+  fill: var(--card);
+  stroke: var(--border-hi);
+  stroke-width: 1;
+}
+.arch-node.accent rect { stroke: var(--blue); stroke-width: 1.5; fill: rgba(79,142,247,0.08); }
+.arch-node.purple rect { stroke: var(--purple); stroke-width: 1.5; fill: rgba(124,92,252,0.08); }
+.arch-node.green rect { stroke: var(--green); stroke-width: 1.5; fill: rgba(34,211,165,0.08); }
+.arch-node text { fill: var(--text); font-family: 'Inter'; font-weight: 600; font-size: 13px; }
+.arch-node text.sub { fill: var(--muted); font-weight: 400; font-size: 11px; }
+.arch-line { stroke: rgba(255,255,255,0.18); stroke-width: 1.4; fill: none; stroke-dasharray: 5 5; }
+.arch-flow {
+  stroke: var(--blue); stroke-width: 2; fill: none;
+  stroke-dasharray: 6 6;
+  animation: flow 1.4s linear infinite;
+}
+@keyframes flow { to { stroke-dashoffset: -24; } }
+.arch-dot {
+  fill: var(--blue);
+  filter: drop-shadow(0 0 6px var(--blue));
+}
+
+/* Tech stack */
+.tech-section { margin-bottom: 60px; }
+.tech-section-title {
+  font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 20px;
+  display: flex; align-items: center; gap: 12px;
+}
+.tech-section-title::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, var(--border-hi), transparent);
+}
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.tech-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  transition: all .25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.tech-card:hover {
+  border-color: var(--border-hi);
+  transform: translateY(-3px);
+  background: var(--card-hi);
+}
+.tech-card::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: var(--grad);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .3s;
+}
+.tech-card:hover::after { transform: scaleX(1); }
+.tech-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px;
+  margin-bottom: 12px;
+  color: var(--blue);
+}
+.tech-card.cf .tech-icon { background: rgba(251,146,60,0.12); border-color: rgba(251,146,60,0.25); color: #fb923c; }
+.tech-card.app .tech-icon { background: rgba(124,92,252,0.12); border-color: rgba(124,92,252,0.25); color: var(--purple); }
+.tech-card.ai .tech-icon { background: rgba(34,211,165,0.12); border-color: rgba(34,211,165,0.25); color: var(--green); }
+.tech-card h4 { font-size: 14.5px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.01em; }
+.tech-card p { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* AI Pipeline */
+.pipeline {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+}
+.pipe-flow {
+  display: flex; align-items: stretch; gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+.pipe-step {
+  flex: 1; min-width: 130px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 12px;
+  text-align: center;
+  position: relative;
+}
+.pipe-step .pipe-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--grad);
+  margin: 0 auto 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: white;
+}
+.pipe-step h5 { font-size: 12.5px; font-weight: 700; margin-bottom: 3px; }
+.pipe-step p { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.pipe-arrow {
+  align-self: center;
+  color: var(--dim);
+  font-size: 18px;
+}
+.fallback-chain {
+  margin-top: 32px;
+  padding: 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.fallback-chain h4 {
+  font-size: 15px; font-weight: 700; margin-bottom: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.fallback-chain h4::before {
+  content: '↻'; color: var(--green); font-size: 18px;
+}
+.chain-models { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.chain-model {
+  flex: 1; min-width: 200px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.chain-model .badge {
+  display: inline-block; padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px; font-weight: 700;
+  background: rgba(34,211,165,0.15);
+  color: var(--green);
+  margin-bottom: 6px;
+}
+.chain-model .name { font-family: 'JetBrains Mono'; font-size: 12.5px; color: var(--text); }
+.chain-model .desc { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.chain-arrow { color: var(--dim); font-size: 20px; }
+
+/* Data model */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.table-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all .25s;
+}
+.table-card:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+.table-name {
+  font-family: 'JetBrains Mono';
+  font-size: 14px; font-weight: 600;
+  color: var(--blue);
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.table-name::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 8px var(--blue);
+}
+.table-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+/* Email system */
+.email-flow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px;
+  margin-bottom: 32px;
+}
+.email-steps {
+  display: flex; gap: 12px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.email-step {
+  flex: 1; min-width: 160px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  position: relative;
+}
+.email-step .num {
+  font-family: 'JetBrains Mono';
+  font-size: 11px; color: var(--blue);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.email-step h5 { font-size: 13.5px; font-weight: 700; margin-bottom: 4px; }
+.email-step p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.email-templates {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+.email-tpl {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  transition: all .25s;
+}
+.email-tpl:hover { border-color: var(--purple); background: var(--card-hi); }
+.email-tpl .icon {
+  width: 36px; height: 36px;
+  margin: 0 auto 10px;
+  border-radius: 8px;
+  background: rgba(124,92,252,0.12);
+  border: 1px solid rgba(124,92,252,0.25);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--purple);
+}
+.email-tpl h5 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.email-tpl p { font-size: 11.5px; color: var(--muted); }
+
+/* Live Demo CTA */
+.demo-cta {
+  background:
+    radial-gradient(600px 300px at 20% 30%, rgba(79,142,247,0.18), transparent 60%),
+    radial-gradient(500px 300px at 80% 70%, rgba(124,92,252,0.18), transparent 60%),
+    var(--card);
+  border: 1px solid var(--border-hi);
+  border-radius: 24px;
+  padding: 64px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.demo-cta::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--grad);
+  opacity: 0.04;
+  z-index: 0;
+}
+.demo-cta > * { position: relative; z-index: 1; }
+.demo-cta h2 {
+  font-size: 48px; font-weight: 800; letter-spacing: -0.03em;
+  margin-bottom: 16px;
+}
+.demo-cta p { font-size: 18px; color: var(--muted); margin-bottom: 32px; max-width: 600px; margin-left: auto; margin-right: auto; }
+.demo-url {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 20px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border-hi);
+  border-radius: 10px;
+  font-family: 'JetBrains Mono';
+  font-size: 14px;
+  color: var(--blue);
+  margin-bottom: 24px;
+}
+.demo-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
+.demo-hint {
+  font-size: 13px; color: var(--dim);
+  font-style: italic;
+}
+
+/* Footer */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 40px 0;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+/* Reveal animation */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .8s ease, transform .8s ease; }
+.reveal.in { opacity: 1; transform: none; }
+.reveal-stagger > * { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+.reveal-stagger.in > * { opacity: 1; transform: none; }
+.reveal-stagger.in > *:nth-child(1) { transition-delay: .05s; }
+.reveal-stagger.in > *:nth-child(2) { transition-delay: .12s; }
+.reveal-stagger.in > *:nth-child(3) { transition-delay: .19s; }
+.reveal-stagger.in > *:nth-child(4) { transition-delay: .26s; }
+.reveal-stagger.in > *:nth-child(5) { transition-delay: .33s; }
+.reveal-stagger.in > *:nth-child(6) { transition-delay: .40s; }
+.reveal-stagger.in > *:nth-child(7) { transition-delay: .47s; }
+.reveal-stagger.in > *:nth-child(8) { transition-delay: .54s; }
+.reveal-stagger.in > *:nth-child(9) { transition-delay: .61s; }
+.reveal-stagger.in > *:nth-child(10) { transition-delay: .68s; }
+
+/* Responsive */
+@media (max-width: 980px) {
+  .nav-links a:not(.btn) { display: none; }
+  .floating-stats { grid-template-columns: repeat(2, 1fr); }
+  .roles-grid { grid-template-columns: 1fr; }
+  .timeline { grid-template-columns: 1fr; }
+  .tech-grid { grid-template-columns: repeat(2, 1fr); }
+  .tables-grid { grid-template-columns: repeat(2, 1fr); }
+  .email-templates { grid-template-columns: repeat(2, 1fr); }
+  .section-title { font-size: 32px; }
+  section { padding: 80px 0; }
+  .container { padding: 0 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="logo"><span class="logo-mark"></span>Synthire</a>
+    <div class="nav-links">
+      <a href="#overview">Overview</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#stack">Tech Stack</a>
+      <a href="#demo">Live Demo</a>
+      <a href="https://synthire-frontend.pages.dev" target="_blank" class="btn btn-primary">View Live App →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero" id="top">
+  <canvas id="particles"></canvas>
+  <div class="container hero-inner">
+    <div class="hero-eyebrow"><span class="dot"></span>Production · Cloudflare Workers · D1 · Vectorize</div>
+    <h1>AI-Powered Hiring,<br /><span class="gradient-text">Built on Cloudflare</span></h1>
+    <p class="lede">End-to-end ATS that parses resumes, scores candidates with AI, and automates recruiter workflows — entirely serverless, globally distributed.</p>
+    <div class="hero-cta">
+      <a href="https://synthire-frontend.pages.dev" target="_blank" class="btn btn-primary">View Live App →</a>
+      <a href="#architecture" class="btn">Explore Architecture</a>
+    </div>
+    <div class="floating-stats">
+      <div class="stat-card">
+        <div class="stat-label">Candidates Scored</div>
+        <div class="stat-value" data-count="247">0</div>
+        <div class="stat-meta">across 14 active jobs</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">AI Parse Time</div>
+        <div class="stat-value"><span data-count="1.2" data-decimal="1">0</span>s</div>
+        <div class="stat-meta">p95, with KV cache hit</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Email Delivered</div>
+        <div class="stat-value"><span data-count="98.7" data-decimal="1">0</span>%</div>
+        <div class="stat-meta">via SendGrid</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Uptime</div>
+        <div class="stat-value"><span data-count="99.99" data-decimal="2">0</span>%</div>
+        <div class="stat-meta">Cloudflare global edge</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Overview -->
+<section id="overview">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Product</span>
+      <h2 class="section-title">Three personas. <span class="gradient-text">One platform.</span></h2>
+      <p class="section-subtitle">Synthire unifies the full hiring loop — from job posting to feedback — across recruiters, interviewers, and the AI engine that powers everything in between.</p>
+    </div>
+    <div class="roles-grid reveal-stagger">
+      <div class="role-card">
+        <div class="role-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        </div>
+        <h3>Recruiter</h3>
+        <p>Owns the hiring pipeline. Posts jobs, reviews ranked candidates, and orchestrates interviews end-to-end.</p>
+        <ul>
+          <li>Post jobs with weighted scoring criteria</li>
+          <li>Upload resumes (drag-drop, bulk)</li>
+          <li>Score &amp; rank candidates by AI fit</li>
+          <li>Schedule interviews with auto emails</li>
+          <li>Full analytics on funnel + sources</li>
+        </ul>
+      </div>
+      <div class="role-card purple">
+        <div class="role-icon purple">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <h3>Interviewer</h3>
+        <p>Scoped access to assigned interviews. Conducts sessions with AI-generated questions and resume context.</p>
+        <ul>
+          <li>View assigned interviews only</li>
+          <li>Conduct timed sessions in-app</li>
+          <li>Submit structured feedback + scores</li>
+          <li>Browse AI-suggested questions live</li>
+          <li>Side-by-side resume + JD viewer</li>
+        </ul>
+      </div>
+      <div class="role-card green">
+        <div class="role-icon green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#22d3a5" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <h3>AI Engine</h3>
+        <p>The autonomous layer running entirely on Workers AI. Turns raw documents into structured, ranked signal without leaving Cloudflare's edge.</p>
+        <ul>
+          <li>Parse resumes into structured JSON</li>
+          <li>Generate 1024-dim embeddings (BGE)</li>
+          <li>Cosine-similarity vector search</li>
+          <li>Weighted dimension scoring (LLM)</li>
+          <li>Auto-generate interview questions</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Workflow Timeline -->
+<section id="workflow">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Workflow</span>
+      <h2 class="section-title">The full hiring loop, <span class="gradient-text">automated end-to-end</span>.</h2>
+      <p class="section-subtitle">From job creation to hire decision — every step is instrumented, cached, and processed asynchronously at the edge.</p>
+    </div>
+    <div class="timeline reveal-stagger">
+
+      <div class="tl-step">
+        <div class="tl-num">01</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Create Job</h4></div>
+          <p>Recruiter fills job title, description, and scoring weights (skills, experience, education, location). Weights must sum to <code>100%</code>. Stored as a row in D1 with JSON scoring config. Optionally upload a JD PDF.</p>
+          <div class="tl-tech">
+            <span class="tech-badge blue">Next.js 15 — UI form</span>
+            <span class="tech-badge cf">Cloudflare Workers — Hono API</span>
+            <span class="tech-badge cf">D1 — jobs table</span>
+            <span class="tech-badge cf">R2 — JD PDF storage</span>
+            <span class="tech-badge purple">React Query — cache + mutation</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">02</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Upload Resumes</h4></div>
+          <p>Drag-drop PDF or DOCX files. Magic byte validation on the Worker (<code>%PDF</code> / <code>PK\x03\x04</code>) rejects misnamed files before any processing. Valid files are stored in R2 at <code>resumes/{companyId}/{timestamp}.ext</code>.</p>
+          <div class="tl-tech">
+            <span class="tech-badge blue">Next.js — ResumeBatchModal</span>
+            <span class="tech-badge cf">Cloudflare Workers — multipart handler</span>
+            <span class="tech-badge cf">R2 — raw file storage</span>
+            <span class="tech-badge gray">Magic bytes — PDF/DOCX validation</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">03</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Text Extraction</h4></div>
+          <p>Worker reads the R2 object and extracts plain text. DOCX uses <code>mammoth</code> (converts Word XML to text). PDF uses <code>unpdf</code> — a Workers-compatible wrapper around <code>pdf.js</code> that runs entirely at the edge without Node.js bindings. Both libraries run inside the Worker via <code>nodejs_compat</code>.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Cloudflare Workers — nodejs_compat</span>
+            <span class="tech-badge gray">mammoth — DOCX → text</span>
+            <span class="tech-badge gray">unpdf (pdf.js) — PDF → text</span>
+            <span class="tech-badge cf">R2 — fetch raw file bytes</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">04</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>LLM Resume Parsing</h4></div>
+          <p>Extracted text is sent to Workers AI with a structured prompt. The LLM returns typed JSON: <code>name</code>, <code>location</code>, <code>technical_skills[]</code>, <code>experience[]</code> (with <code>from</code>/<code>to</code>/<code>stack[]</code>), <code>education[]</code>. KV is checked first — cache hit skips the LLM entirely (TTL: 7 days). Fallback chain: Nemotron-120B → Llama-3.1-8B-AWQ.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Workers AI — native LLM binding</span>
+            <span class="tech-badge green">@cf/nvidia/nemotron-3-120b — primary</span>
+            <span class="tech-badge green">@cf/meta/llama-3.1-8b-instruct-awq — fallback</span>
+            <span class="tech-badge cf">KV — parse result cache (7 days)</span>
+            <span class="tech-badge gray">Neurons budget guard (daily limit)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">05</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Vector Embedding</h4></div>
+          <p>The parsed candidate profile is serialised into a single text block and passed to Workers AI. The <code>bge-large-en-v1.5</code> model returns a 1024-dimensional float vector. This vector is upserted into Vectorize with the candidate ID as metadata — enabling cosine similarity queries against job descriptions.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Workers AI — bge-large-en-v1.5</span>
+            <span class="tech-badge cf">Vectorize — 1024-dim cosine index</span>
+            <span class="tech-badge gray">1024-dim float32 vector</span>
+            <span class="tech-badge gray">Metadata: candidateId, jobId</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">06</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Candidate Scoring</h4></div>
+          <p>Two signals are combined into a final 0–100 score. <strong>Semantic (30%):</strong> cosine similarity between candidate vector and job description vector via Vectorize query. <strong>LLM dimension scores (70%):</strong> a second Workers AI call scores the candidate on each job dimension (skills, experience, education, achievements) × recruiter weights. Both scores are written to the <code>candidates</code> D1 row.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Vectorize — cosine similarity (30%)</span>
+            <span class="tech-badge cf">Workers AI LLM — dimension scores (70%)</span>
+            <span class="tech-badge cf">D1 — write overall_score + dimension_scores</span>
+            <span class="tech-badge gray">Formula: 0.3 × cos + 0.7 × weighted_llm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">07</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Async Background + Polling</h4></div>
+          <p>The upload returns <code>{ candidateId }</code> immediately (202). The pipeline runs in the background via <code>ctx.waitUntil()</code> — no long-lived HTTP connection needed. The frontend polls <code>GET /api/candidates/:id</code> every 2 seconds, reading <code>processing_status</code> to advance each file through <code>parsing → scoring → complete</code>.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Workers — ctx.waitUntil() background task</span>
+            <span class="tech-badge blue">Next.js — 2s polling interval</span>
+            <span class="tech-badge gray">States: parsing · scoring · complete · failed</span>
+            <span class="tech-badge purple">React Query — invalidate on complete</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">08</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Pipeline Management</h4></div>
+          <p>Scored candidates appear in the Kanban pipeline board. Recruiters drag cards between stages: <code>New → Shortlisted → Scheduled → Technical → Culture fit → Hired / Rejected</code>. Each drag fires a <code>PATCH /api/candidates/:id</code> with optimistic UI — the card moves instantly and rolls back on failure.</p>
+          <div class="tl-tech">
+            <span class="tech-badge blue">Next.js — Kanban drag-and-drop</span>
+            <span class="tech-badge purple">React Query — optimistic update + rollback</span>
+            <span class="tech-badge cf">Workers — PATCH /api/candidates/:id</span>
+            <span class="tech-badge cf">D1 — candidates.status column</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">09</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Schedule Interview</h4></div>
+          <p>Recruiter picks interview type (from configurable rounds), interviewer, date/time, and video link. The Worker inserts a row into <code>interviews</code> (D1) then calls <code>queueEmail()</code> which writes three rows to <code>email_queue</code> (D1): interviewer magic link, candidate confirmation, and a 24-hour reminder. All emails are sent asynchronously by cron — zero latency on the API response.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Workers — POST /api/interviews</span>
+            <span class="tech-badge cf">D1 — interviews + email_queue tables</span>
+            <span class="tech-badge cf">Cron Trigger — processEmailQueue every 1 min</span>
+            <span class="tech-badge pink">SendGrid — transactional delivery</span>
+            <span class="tech-badge gray">3 emails queued per schedule action</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">10</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Conduct Interview</h4></div>
+          <p>Interviewer opens their unique link (from the magic-link email). The conduct page loads: candidate resume PDF streamed from R2 via authenticated Worker endpoint, JD PDF from R2, AI-generated questions (LLM prompt → KV cached 7 days), and the original feedback from previous rounds. A session timer starts on click.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">R2 — stream resume + JD PDFs</span>
+            <span class="tech-badge cf">Workers — authenticated stream endpoint</span>
+            <span class="tech-badge cf">Workers AI — AI question generation</span>
+            <span class="tech-badge cf">KV — question cache (7 days)</span>
+            <span class="tech-badge cf">D1 — fetch prior feedback</span>
+            <span class="tech-badge blue">Next.js — in-browser PDF iframe</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-step">
+        <div class="tl-num">11</div>
+        <div class="tl-body">
+          <div class="tl-header"><h4>Feedback &amp; Analytics</h4></div>
+          <p>Interviewer submits structured scores (technical, communication, culture) + hire/no-hire recommendation. Written to <code>interview_feedback</code> (D1). Analytics queries aggregate across all candidates: funnel counts by stage, time-to-hire by month, activity feed (last 20 stage changes), and email delivery stats via SendGrid webhook.</p>
+          <div class="tl-tech">
+            <span class="tech-badge cf">Workers — POST /api/interviews/:id/feedback</span>
+            <span class="tech-badge cf">D1 — interview_feedback table</span>
+            <span class="tech-badge cf">D1 — analytics aggregation queries</span>
+            <span class="tech-badge pink">SendGrid webhook — delivery status (HMAC-SHA256)</span>
+            <span class="tech-badge blue">Next.js — analytics dashboard</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Architecture</span>
+      <h2 class="section-title">A single Worker. <span class="gradient-text">Every Cloudflare primitive.</span></h2>
+      <p class="section-subtitle">No external infrastructure. No VMs. No containers. Just the global edge — D1, R2, KV, Vectorize, Workers AI, and Cron Triggers, orchestrated by Hono.</p>
+    </div>
+    <div class="arch-wrap reveal">
+      <svg class="arch-svg" viewBox="0 0 1200 720" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#4f8ef7"/>
+            <stop offset="50%" stop-color="#7c5cfc"/>
+            <stop offset="100%" stop-color="#22d3a5"/>
+          </linearGradient>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#4f8ef7" />
+          </marker>
+        </defs>
+
+        <!-- Browser -->
+        <g class="arch-node accent">
+          <rect x="480" y="20" width="240" height="60" rx="10"/>
+          <text x="600" y="46" text-anchor="middle">Browser · Next.js 15 Pages</text>
+          <text x="600" y="65" text-anchor="middle" class="sub">React Query · App Router · Edge</text>
+        </g>
+
+        <!-- Edge -->
+        <g class="arch-node">
+          <rect x="480" y="130" width="240" height="50" rx="10"/>
+          <text x="600" y="155" text-anchor="middle">Cloudflare Edge · 330+ Cities</text>
+          <text x="600" y="172" text-anchor="middle" class="sub">TLS · DDoS · WAF · Routing</text>
+        </g>
+
+        <!-- Worker -->
+        <g class="arch-node purple">
+          <rect x="430" y="230" width="340" height="120" rx="12"/>
+          <text x="600" y="258" text-anchor="middle">Hono Worker · /api/*</text>
+          <text x="600" y="282" text-anchor="middle" class="sub">JWT (jose) · Rate Limit · CORS · Routes</text>
+          <text x="600" y="308" text-anchor="middle" class="sub">/auth · /jobs · /candidates · /interviews</text>
+          <text x="600" y="328" text-anchor="middle" class="sub">/feedback · /analytics · /email</text>
+        </g>
+
+        <!-- Bindings row -->
+        <g class="arch-node accent">
+          <rect x="40" y="420" width="170" height="70" rx="10"/>
+          <text x="125" y="448" text-anchor="middle">D1 (SQLite)</text>
+          <text x="125" y="468" text-anchor="middle" class="sub">9 tables · jobs</text>
+          <text x="125" y="482" text-anchor="middle" class="sub">candidates · emails</text>
+        </g>
+
+        <g class="arch-node">
+          <rect x="230" y="420" width="150" height="70" rx="10"/>
+          <text x="305" y="448" text-anchor="middle">R2</text>
+          <text x="305" y="468" text-anchor="middle" class="sub">Resume PDFs</text>
+          <text x="305" y="482" text-anchor="middle" class="sub">JD documents</text>
+        </g>
+
+        <g class="arch-node">
+          <rect x="400" y="420" width="150" height="70" rx="10"/>
+          <text x="475" y="448" text-anchor="middle">KV Cache</text>
+          <text x="475" y="468" text-anchor="middle" class="sub">Parse cache</text>
+          <text x="475" y="482" text-anchor="middle" class="sub">Rate limits</text>
+        </g>
+
+        <g class="arch-node purple">
+          <rect x="570" y="420" width="160" height="70" rx="10"/>
+          <text x="650" y="448" text-anchor="middle">Vectorize</text>
+          <text x="650" y="468" text-anchor="middle" class="sub">1024-dim</text>
+          <text x="650" y="482" text-anchor="middle" class="sub">Cosine metric</text>
+        </g>
+
+        <g class="arch-node green">
+          <rect x="750" y="420" width="170" height="70" rx="10"/>
+          <text x="835" y="448" text-anchor="middle">Workers AI</text>
+          <text x="835" y="468" text-anchor="middle" class="sub">bge-large-en</text>
+          <text x="835" y="482" text-anchor="middle" class="sub">v1.5 embeddings</text>
+        </g>
+
+        <g class="arch-node green">
+          <rect x="940" y="420" width="220" height="70" rx="10"/>
+          <text x="1050" y="448" text-anchor="middle">Workers AI · LLM</text>
+          <text x="1050" y="468" text-anchor="middle" class="sub">Nemotron-120B</text>
+          <text x="1050" y="482" text-anchor="middle" class="sub">→ Llama-3.1-8B-AWQ</text>
+        </g>
+
+        <!-- Cron -->
+        <g class="arch-node green">
+          <rect x="200" y="580" width="280" height="70" rx="10"/>
+          <text x="340" y="608" text-anchor="middle">Cron Trigger · every 1 min</text>
+          <text x="340" y="628" text-anchor="middle" class="sub">processEmailQueue()</text>
+          <text x="340" y="642" text-anchor="middle" class="sub">retry · backoff · dedupe</text>
+        </g>
+
+        <g class="arch-node purple">
+          <rect x="550" y="580" width="180" height="70" rx="10"/>
+          <text x="640" y="608" text-anchor="middle">email_queue (D1)</text>
+          <text x="640" y="628" text-anchor="middle" class="sub">queued · sending</text>
+          <text x="640" y="642" text-anchor="middle" class="sub">sent · failed</text>
+        </g>
+
+        <g class="arch-node">
+          <rect x="800" y="580" width="240" height="70" rx="10"/>
+          <text x="920" y="608" text-anchor="middle">SendGrid · Transactional</text>
+          <text x="920" y="628" text-anchor="middle" class="sub">HMAC webhook callback</text>
+          <text x="920" y="642" text-anchor="middle" class="sub">delivered · opened · bounced</text>
+        </g>
+
+        <!-- Flow lines -->
+        <path class="arch-flow" d="M 600 80 L 600 130" marker-end="url(#arrow)"/>
+        <path class="arch-flow" d="M 600 180 L 600 230" marker-end="url(#arrow)"/>
+
+        <!-- worker to bindings -->
+        <path class="arch-line" d="M 500 350 Q 460 380 125 420"/>
+        <path class="arch-line" d="M 540 350 Q 520 380 305 420"/>
+        <path class="arch-line" d="M 580 350 L 475 420"/>
+        <path class="arch-line" d="M 620 350 L 650 420"/>
+        <path class="arch-line" d="M 660 350 Q 700 380 835 420"/>
+        <path class="arch-line" d="M 700 350 Q 820 380 1050 420"/>
+
+        <!-- cron flow -->
+        <path class="arch-flow" d="M 480 615 L 550 615" marker-end="url(#arrow)"/>
+        <path class="arch-flow" d="M 730 615 L 800 615" marker-end="url(#arrow)"/>
+        <path class="arch-line" d="M 640 580 Q 640 510 600 350"/>
+
+        <!-- moving dots -->
+        <circle class="arch-dot" r="4">
+          <animateMotion dur="2.4s" repeatCount="indefinite" path="M 600 80 L 600 230"/>
+        </circle>
+        <circle class="arch-dot" r="4">
+          <animateMotion dur="3s" repeatCount="indefinite" path="M 600 350 Q 460 380 125 420"/>
+        </circle>
+        <circle class="arch-dot" r="4">
+          <animateMotion dur="3.2s" begin="0.4s" repeatCount="indefinite" path="M 600 350 Q 700 380 835 420"/>
+        </circle>
+        <circle class="arch-dot" r="4">
+          <animateMotion dur="3.4s" begin="0.8s" repeatCount="indefinite" path="M 600 350 Q 820 380 1050 420"/>
+        </circle>
+        <circle class="arch-dot" r="4" style="fill:#22d3a5; filter: drop-shadow(0 0 6px #22d3a5);">
+          <animateMotion dur="2.2s" repeatCount="indefinite" path="M 480 615 L 800 615"/>
+        </circle>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Tech Stack -->
+<section id="stack">
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Tech Stack</span>
+      <h2 class="section-title">Modern, typed, <span class="gradient-text">edge-native</span>.</h2>
+      <p class="section-subtitle">Every layer chosen for type-safety, zero cold starts, and global distribution. No ops. No infra. No bills for idle.</p>
+    </div>
+
+    <div class="tech-section reveal">
+      <div class="tech-section-title">Cloudflare Platform</div>
+      <div class="tech-grid reveal-stagger">
+        <div class="tech-card cf"><div class="tech-icon">W</div><h4>Workers</h4><p>Serverless API runtime running Hono on V8 isolates</p></div>
+        <div class="tech-card cf"><div class="tech-icon">P</div><h4>Pages</h4><p>Frontend hosting for Next.js 15 with edge runtime</p></div>
+        <div class="tech-card cf"><div class="tech-icon">D1</div><h4>D1</h4><p>Serverless SQLite — 9 tables, prepared statements</p></div>
+        <div class="tech-card cf"><div class="tech-icon">R2</div><h4>R2</h4><p>S3-compatible object storage for resumes &amp; JDs</p></div>
+        <div class="tech-card cf"><div class="tech-icon">KV</div><h4>KV</h4><p>Eventually-consistent cache for parse + rate limits</p></div>
+        <div class="tech-card cf"><div class="tech-icon">V</div><h4>Vectorize</h4><p>Vector DB · 1024-dim · cosine similarity index</p></div>
+        <div class="tech-card cf"><div class="tech-icon">AI</div><h4>Workers AI</h4><p>BGE-large-en-v1.5 for inline embedding inference</p></div>
+        <div class="tech-card cf"><div class="tech-icon">⏱</div><h4>Cron Triggers</h4><p>Runs email queue processor every 60 seconds</p></div>
+      </div>
+    </div>
+
+    <div class="tech-section reveal">
+      <div class="tech-section-title">Application Layer</div>
+      <div class="tech-grid reveal-stagger">
+        <div class="tech-card app"><div class="tech-icon">H</div><h4>Hono</h4><p>Ultra-light web framework purpose-built for Workers</p></div>
+        <div class="tech-card app"><div class="tech-icon">N</div><h4>Next.js 15</h4><p>App Router, RSC, edge runtime, streaming SSR</p></div>
+        <div class="tech-card app"><div class="tech-icon">Q</div><h4>React Query v5</h4><p>Server state cache with optimistic mutations</p></div>
+        <div class="tech-card app"><div class="tech-icon">TS</div><h4>TypeScript</h4><p>End-to-end type-safe contracts API ↔ UI</p></div>
+      </div>
+    </div>
+
+    <div class="tech-section reveal">
+      <div class="tech-section-title">AI &amp; External Services</div>
+      <div class="tech-grid reveal-stagger">
+        <div class="tech-card ai"><div class="tech-icon">AI</div><h4>Workers AI · LLM</h4><p>Nemotron-120B (primary) → Llama-3.1-8B-AWQ (fallback) — no external gateway</p></div>
+        <div class="tech-card ai"><div class="tech-icon">@</div><h4>SendGrid</h4><p>Transactional email with event webhook callbacks</p></div>
+        <div class="tech-card ai"><div class="tech-icon">🔐</div><h4>jose</h4><p>JWT signing &amp; verification using HS256</p></div>
+        <div class="tech-card ai"><div class="tech-icon">🔑</div><h4>bcryptjs</h4><p>Password hashing — pure JS, Workers-compatible</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AI Pipeline Deep Dive -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">AI Pipeline</span>
+      <h2 class="section-title">From PDF to ranked candidate <span class="gradient-text">in under 2 seconds</span>.</h2>
+      <p class="section-subtitle">The full resume processing flow runs in a background Worker task via <code>waitUntil()</code>. The API returns immediately; the client polls for status.</p>
+    </div>
+    <div class="pipeline reveal">
+      <div class="pipe-flow">
+        <div class="pipe-step"><div class="pipe-icon">1</div><h5>Upload</h5><p>multipart file + jobId</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">2</div><h5>Magic Bytes</h5><p>PDF/DOCX validation</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">3</div><h5>R2 Store</h5><p>content-addressed key</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">4</div><h5>Extract</h5><p>mammoth · pdf-parse</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">5</div><h5>KV Check</h5><p>cache hit shortcut</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">6</div><h5>LLM Parse</h5><p>structured JSON</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">7</div><h5>Embed</h5><p>bge-large 1024d</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">8</div><h5>Vectorize</h5><p>upsert + metadata</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">9</div><h5>Score</h5><p>0.3·cos + 0.7·llm</p></div>
+        <div class="pipe-arrow">›</div>
+        <div class="pipe-step"><div class="pipe-icon">10</div><h5>Poll</h5><p>client GET /candidates/:id</p></div>
+      </div>
+
+      <div class="fallback-chain">
+        <h4>Workers AI LLM Fallback Chain — schema-validate on response, Neurons budget guard</h4>
+        <div class="chain-models">
+          <div class="chain-model">
+            <span class="badge">PRIMARY · PRODUCTION</span>
+            <div class="name">@cf/nvidia/nemotron-3-120b-a12b</div>
+            <div class="desc">120B — high-quality JSON extraction, handles most parses</div>
+          </div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-model">
+            <span class="badge">FALLBACK · PRODUCTION</span>
+            <div class="name">@cf/meta/llama-3.1-8b-instruct-awq</div>
+            <div class="desc">8B AWQ — fast fallback on schema fail or model error</div>
+          </div>
+          <div class="chain-arrow">→</div>
+          <div class="chain-model">
+            <span class="badge" style="background:rgba(124,92,252,0.15); color:var(--purple);">STAGING ONLY</span>
+            <div class="name">@cf/meta/llama-3.2-3b-instruct</div>
+            <div class="desc">Lightweight staging model — conserves Neurons budget</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Data Model -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Data Model</span>
+      <h2 class="section-title">11 tables. <span class="gradient-text">Zero ORMs.</span></h2>
+      <p class="section-subtitle">Prepared statements on D1 with JSON columns parsed in typed query helpers. Every JSON read is wrapped in try/catch.</p>
+    </div>
+    <div class="tables-grid reveal-stagger">
+      <div class="table-card"><div class="table-name">companies</div><p>One row per workspace. Tenant root — every other row scopes to a company_id.</p></div>
+      <div class="table-card"><div class="table-name">users</div><p>Recruiter, interviewer, or admin. Bcrypt-hashed passwords, scoped to a company.</p></div>
+      <div class="table-card"><div class="table-name">jobs</div><p>Job postings with weighted scoring criteria. Weights stored as JSON and must sum to 100.</p></div>
+      <div class="table-card"><div class="table-name">candidates</div><p>Parsed resume JSON + AI scores + processing status. R2 key + Vectorize ID stored here.</p></div>
+      <div class="table-card"><div class="table-name">interview_types</div><p>Configurable rounds — Phone Screen, Technical, Culture Fit — defined per company.</p></div>
+      <div class="table-card"><div class="table-name">interviews</div><p>Scheduled sessions linking candidate × interviewer × type, with email tracking columns.</p></div>
+      <div class="table-card"><div class="table-name">interview_feedback</div><p>Per-interviewer structured scores and hire recommendation. Aggregated for analytics.</p></div>
+      <div class="table-card"><div class="table-name">email_logs</div><p>SendGrid send log with delivery status updated via event webhook callbacks.</p></div>
+      <div class="table-card"><div class="table-name">email_queue</div><p>Async send queue with atomic <code>UPDATE…RETURNING</code> dequeue, retry, and exponential backoff. <code>status</code> + <code>claimed_at</code> prevent double-send on concurrent cron runs.</p></div>
+      <div class="table-card"><div class="table-name">refresh_tokens</div><p>Long-lived (30-day) opaque tokens stored SHA-256 hashed. Rotated on use. Enables silent re-auth without re-login — access tokens expire in 15 minutes.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Email System -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <span class="section-label">Email System</span>
+      <h2 class="section-title">Decoupled, durable, <span class="gradient-text">async by default</span>.</h2>
+      <p class="section-subtitle">No request ever blocks on email delivery. Inserts hit D1 in milliseconds; cron handles the rest.</p>
+    </div>
+    <div class="email-flow reveal">
+      <div class="email-steps">
+        <div class="email-step"><div class="num">STEP 01</div><h5>API call</h5><p>Recruiter schedules an interview or uploads a resume.</p></div>
+        <div class="email-step"><div class="num">STEP 02</div><h5>Insert email_queue</h5><p>Row written to D1 with type, payload, and recipient.</p></div>
+        <div class="email-step"><div class="num">STEP 03</div><h5>Return 200</h5><p>Client gets an instant response — zero email latency in hot path.</p></div>
+        <div class="email-step"><div class="num">STEP 04</div><h5>Cron every 1 min</h5><p>processEmailQueue() pulls queued rows in batches.</p></div>
+        <div class="email-step"><div class="num">STEP 05</div><h5>SendGrid API</h5><p>Templates rendered, mail sent, log row created.</p></div>
+        <div class="email-step"><div class="num">STEP 06</div><h5>Webhook</h5><p>HMAC-verified status updates: delivered · opened · bounced.</p></div>
+      </div>
+    </div>
+    <div class="email-templates reveal-stagger">
+      <div class="email-tpl">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+        <h5>Magic Link</h5><p>Passwordless sign-in</p>
+      </div>
+      <div class="email-tpl">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <h5>Resume Uploaded</h5><p>Confirmation + AI score</p>
+      </div>
+      <div class="email-tpl">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+        <h5>Interview Scheduled</h5><p>Calendar + .ics attached</p>
+      </div>
+      <div class="email-tpl">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <h5>Feedback Reminder</h5><p>Nudge for pending review</p>
+      </div>
+      <div class="email-tpl">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <h5>Interview Reminder</h5><p>1-hour heads-up</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Live Demo -->
+<section id="demo">
+  <div class="container">
+    <div class="demo-cta reveal">
+      <h2>See it live.</h2>
+      <p>The full Synthire app is deployed on Cloudflare Pages + Workers. Sign up with any email to create your own workspace — no waitlist, no credit card.</p>
+      <div class="demo-url">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3a5" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/></svg>
+        https://synthire-frontend.pages.dev
+      </div>
+      <div class="demo-actions">
+        <a href="https://synthire-frontend.pages.dev" target="_blank" class="btn btn-primary">Try it now →</a>
+        <a href="#" class="btn">View on GitHub</a>
+      </div>
+      <div class="demo-hint">Sign up with any email to create your workspace. No credentials required.</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    Synthire · Built on Cloudflare Workers · D1 · R2 · KV · Vectorize · Workers AI · Cron Triggers
+  </div>
+</footer>
+
+<script>
+/* ---------- Particle network on hero ---------- */
+(function(){
+  const cv = document.getElementById('particles');
+  const ctx = cv.getContext('2d');
+  let w, h, particles;
+  function resize() {
+    const rect = cv.parentElement.getBoundingClientRect();
+    w = cv.width = rect.width * devicePixelRatio;
+    h = cv.height = rect.height * devicePixelRatio;
+    cv.style.width = rect.width + 'px';
+    cv.style.height = rect.height + 'px';
+  }
+  function init() {
+    resize();
+    const count = Math.min(90, Math.floor(w * h / 30000));
+    particles = Array.from({length: count}, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.3 * devicePixelRatio,
+      vy: (Math.random() - 0.5) * 0.3 * devicePixelRatio,
+      r: (Math.random() * 1.4 + 0.6) * devicePixelRatio
+    }));
+  }
+  function step() {
+    ctx.clearRect(0, 0, w, h);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+    }
+    // connections
+    const maxD = 140 * devicePixelRatio;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d = Math.sqrt(dx*dx + dy*dy);
+        if (d < maxD) {
+          const o = 1 - d / maxD;
+          ctx.strokeStyle = `rgba(79,142,247,${o * 0.35})`;
+          ctx.lineWidth = 0.6 * devicePixelRatio;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+    }
+    // dots
+    for (const p of particles) {
+      ctx.fillStyle = 'rgba(124,92,252,0.85)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+    }
+    requestAnimationFrame(step);
+  }
+  window.addEventListener('resize', init);
+  init(); step();
+})();
+
+/* ---------- Reveal on scroll ---------- */
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  }
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => io.observe(el));
+
+/* ---------- Animated number counters ---------- */
+const counterIo = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const el = e.target;
+    const target = parseFloat(el.dataset.count);
+    const decimals = parseInt(el.dataset.decimal || '0', 10);
+    const dur = 1400;
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = (target * eased).toFixed(decimals);
+      if (t < 1) requestAnimationFrame(tick);
+      else el.textContent = target.toFixed(decimals);
+    }
+    requestAnimationFrame(tick);
+    counterIo.unobserve(el);
+  }
+}, { threshold: 0.4 });
+document.querySelectorAll('[data-count]').forEach(el => counterIo.observe(el));
+</script>
+</body>
+</html>
