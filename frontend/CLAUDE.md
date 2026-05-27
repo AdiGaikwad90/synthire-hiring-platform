@@ -111,9 +111,11 @@ frontend/
 
 ## Auth
 
-- **Storage**: JWT in `localStorage` key `synthire_token` (API calls) AND cookie `synthire_token` (Next.js middleware)
-- **`lib/auth.ts`**: `setToken` writes both; `removeToken` clears both; all functions guard `typeof window !== 'undefined'`
-- **`context/AuthContext.tsx`**: verifies token on mount via `GET /api/auth/me`; provides `user`, `login()`, `logout()`, `signup()`, `isLoading`
+- **Primary storage**: JWT in `localStorage` key `synthire_token` — sent as `Authorization: Bearer <token>` on every request
+- **Secondary storage**: non-HttpOnly cookie `synthire_token` written by `setToken()` — used only by Next.js middleware for server-side route protection
+- **`lib/auth.ts`**: `getToken()` reads localStorage; `setToken()` writes localStorage + cookie; `removeToken()` clears both
+- **`lib/api.ts`**: `apiFetch` reads token from localStorage via `getToken()` and injects Bearer header. On 401, tries `POST /api/auth/refresh` once (coalesced), then redirects to `/login`
+- **`context/AuthContext.tsx`**: on login/signup, receives `token` in response body and calls `setToken(token)`. Verifies session on mount via `GET /api/auth/me`
 - **`middleware.ts`**: reads cookie `synthire_token`; redirects to `/login?from=<path>` if missing; protects all recruiter + interviewer routes
 - **`useAuth()`** is the only place to call `login`, `logout`, `signup` — never call `api.ts` functions directly from components
 
@@ -151,17 +153,11 @@ Key exported types: `PaginatedData<T>`, `ApiJob`, `ApiCandidate`, `ApiInterview`
 
 ---
 
-## Resume upload (SSE)
+## Resume upload (polling)
 
-`ResumeBatchModal` posts to `POST /api/candidates/upload` (multipart: `file`, `jobId`) and reads the response as an SSE stream:
+`ResumeBatchModal` posts to `POST /api/candidates/upload` (multipart: `file`, `jobId`), receives `{ candidateId }` immediately (202), then polls `GET /api/candidates/:id` every 2 seconds until `processing_status` is `complete` or `failed` (or 60 ticks = 2 minutes timeout).
 
-```
-data: {"candidateId":"x","status":"parsing"}\n\n
-data: {"candidateId":"x","status":"scoring"}\n\n
-data: {"candidateId":"x","status":"complete","score":87,"candidate":{...}}\n\n
-```
-
-File state updates on each event. Stage advances to "done" when all files reach `done` or `error`.
+File state progression: `queued` → `parsing` → `scoring` → `done` / `error`. Stage advances to "done" when all files settle.
 
 ---
 

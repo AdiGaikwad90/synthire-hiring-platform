@@ -35,10 +35,14 @@ Synthire uses two tiers of configuration:
 Copy from `.dev.vars.example` and fill in:
 
 ```ini
-JWT_SECRET=           # min 32 chars; node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-RESEND_API_KEY=       # re_... from resend.com → API Keys
+JWT_SECRET=            # min 32 chars; node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SENDGRID_API_KEY=      # SG.xxx from sendgrid.com (production email)
+RESEND_API_KEY=        # re_... from resend.com (staging/dev email)
 RESEND_WEBHOOK_SECRET= # whsec_... from Resend → Webhooks (leave blank for local dev)
+SENTRY_DSN=            # optional, from sentry.io project settings
 ```
+
+> **OpenRouter is no longer used.** LLM calls use the `AI` Workers AI binding directly via `src/services/ai/workers-ai.ts`.
 
 For production, use `wrangler secret put <NAME>` instead of `.dev.vars`.
 
@@ -55,36 +59,29 @@ ENVIRONMENT = "development"
 FRONTEND_ORIGIN = "http://localhost:3000"   # change in [env.production.vars]
 
 # Auth
-JWT_EXPIRY_SECONDS = "86400"               # 24 hours
+JWT_EXPIRY_SECONDS = "900"                 # 15 minutes (short-lived access token)
+REFRESH_TOKEN_EXPIRY_SECONDS = "2592000"   # 30 days (long-lived refresh token)
 
 # File upload
 MAX_UPLOAD_BYTES = "10485760"              # 10 MB
-ALLOWED_FILE_TYPES = "pdf,docx"
 
 # LLM — Workers AI native models (change in wrangler.toml without touching code)
-LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+# Dev:        @cf/nvidia/nemotron-3-120b-a12b  → @cf/meta/llama-3.1-8b-instruct
+# Production: @cf/nvidia/nemotron-3-120b-a12b  → @cf/meta/llama-3.1-8b-instruct-awq
+# Staging:    @cf/meta/llama-3.1-8b-instruct   → @cf/meta/llama-3.2-3b-instruct
+LLM_MODEL_PRIMARY  = "@cf/nvidia/nemotron-3-120b-a12b"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.1-8b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "10000"   # hard stop — AI calls blocked when reached
 
-# Scoring composition — must sum to 1.0
-SCORE_LLM_WEIGHT = "0.70"          # weight for LLM dimension scores
-SCORE_SEMANTIC_WEIGHT = "0.30"     # weight for cosine similarity score
-SCORE_HIGH_THRESHOLD = "80"        # ≥80 = "strong match" in UI
-SCORE_MEDIUM_THRESHOLD = "60"      # ≥60 = "medium match" in UI
-
-# KV cache TTLs (seconds)
-CACHE_PARSE_TTL = "2592000"        # 30 days — parsed resume structure
-CACHE_EMBED_TTL = "2592000"        # 30 days — embeddings
-CACHE_SCORE_TTL = "604800"         # 7 days — candidate scores
-
-# Email queue
-RESEND_FROM_EMAIL = "noreply@synthire.io"
+# Email — provider switch
+EMAIL_PROVIDER = "resend"                  # "sendgrid" in production
+RESEND_FROM_EMAIL = "onboarding@resend.dev"
 RESEND_FROM_NAME = "Synthire"
-EMAIL_QUEUE_BATCH_SIZE = "10"      # emails processed per cron tick
+SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
+EMAIL_QUEUE_INTERVAL_SECONDS = "30"
 EMAIL_MAX_RETRIES = "3"
-EMAIL_RETRY_BACKOFF_SECONDS = "60" # base for exponential backoff
 
 # Rate limiting (KV-backed, fixed window, per IP)
 RATE_LIMIT_ENABLED = "true"
@@ -92,7 +89,7 @@ RATE_LIMIT_REQUESTS = "100"        # requests per window
 RATE_LIMIT_WINDOW_SECONDS = "60"
 ```
 
-Production overrides live in `[env.production.vars]` in `wrangler.toml` — `RATE_LIMIT_REQUESTS = "200"` is already set there.
+Production overrides live in `[env.production.vars]` in `wrangler.toml`.
 
 ---
 
@@ -258,11 +255,16 @@ Each query file exports a `toX()` deserializer (e.g. `toJob`, `toCandidate`) tha
 
 ## Auth
 
-- Algorithm: HS256 via `jose`
+- Algorithm: HS256 via `jose`; issuer `https://api.synthire.io`, audience `https://app.synthire.io`
 - JWT payload: `{ sub, email, name, role, company_id, iat, exp }`
-- Expiry: `JWT_EXPIRY_SECONDS` from `wrangler.toml` (default 86400 = 24 h)
+- Access token expiry: 15 minutes (`JWT_EXPIRY_SECONDS = "900"`)
+- Refresh token: 30-day opaque token, stored SHA-256 hashed in `refresh_tokens` D1 table
+- `POST /api/auth/login` and `POST /api/auth/signup` return `{ user, token }` in JSON body AND set HttpOnly cookies
+- `POST /api/auth/refresh` rotates the refresh token and issues a new access token
+- Auth middleware reads `Authorization: Bearer <token>` first, falls back to `synthire_token` cookie
 - Role scoping: interviewers can only read their own interviews (routes enforce this with a 403, not 404)
 - Signup auto-creates `email_preferences` with all notifications enabled and a random `unsubscribe_token`
+- Login rate limit: 5 attempts per 60s per email (KV key `rl:login:{email}`)
 
 ---
 
@@ -270,27 +272,21 @@ Each query file exports a `toX()` deserializer (e.g. `toJob`, `toCandidate`) tha
 
 `POST /api/candidates/upload` (multipart: `file`, `jobId`)
 
-Streams SSE events back to the client:
+Returns `{ candidateId }` immediately (202). Client polls `GET /api/candidates/:id` every 2 seconds until `processing_status` is `complete` or `failed`.
 
-```
-data: {"candidateId":"x","status":"parsing"}\n\n
-data: {"candidateId":"x","status":"scoring"}\n\n
-data: {"candidateId":"x","status":"complete","score":87,"candidate":{...}}\n\n
-```
-
-Internal steps:
+Internal steps (background via `ctx.waitUntil`):
 
 1. Validate MIME type via magic bytes + file size (`MAX_UPLOAD_BYTES`)
 2. Create D1 candidate row (`processing_status = 'parsing'`)
 3. Upload file to R2 → `resume_url`
-4. Extract text (mammoth for DOCX, pdf-parse for PDF) — requires `nodejs_compat` flag
-5. Parse resume structure via LLM (Workers AI fallback chain)
-6. Update D1 with parsed fields (`processing_status = 'scoring'`)
-7. Generate embedding via Workers AI
-8. Upsert embedding to Vectorize
-9. Run scoring pipeline → update D1 with scores (`processing_status = 'complete'`)
-10. Queue `resume_uploaded` email to recruiter
-11. Send SSE `complete` event
+4. Return 202 immediately — remaining steps run in background
+5. Extract text (mammoth for DOCX, pdf-parse for PDF) — requires `nodejs_compat` flag
+6. Parse resume structure via Workers AI LLM fallback chain
+7. Update D1 with parsed fields (`processing_status = 'scoring'`)
+8. Generate embedding via Workers AI `@cf/baai/bge-large-en-v1.5`
+9. Upsert embedding to Vectorize
+10. Run scoring pipeline → update D1 with scores (`processing_status = 'complete'`)
+11. Queue `resume_uploaded` email to recruiter
 
 ---
 
@@ -300,22 +296,22 @@ Internal steps:
 src/services/ai/fallback.ts
 
 Model chain (from wrangler.toml — change without touching code):
-  1. LLM_MODEL_PRIMARY  = @cf/meta/llama-3.1-8b-instruct
-  2. LLM_MODEL_FALLBACK = @cf/meta/llama-3.2-3b-instruct
+  Production:  @cf/nvidia/nemotron-3-120b-a12b  →  @cf/meta/llama-3.1-8b-instruct-awq
+  Dev:         @cf/nvidia/nemotron-3-120b-a12b  →  @cf/meta/llama-3.1-8b-instruct
+  Staging:     @cf/meta/llama-3.1-8b-instruct   →  @cf/meta/llama-3.2-3b-instruct
 
 Budget guard: checkNeuronBudget() hard-stops at NEURONS_DAILY_LIMIT (default 10000/day)
-On budget exceeded: throw AppError(503) with reset time — does NOT try next model
+On budget exceeded: throw AppError(503) — does NOT try next model
 temperature = LLM_TEMPERATURE   (default: 0.1)
 max_tokens  = LLM_MAX_TOKENS    (default: 2000)
 
-On bad JSON:  try next model
-On invalid schema (Zod):  try next model
-On other error:  try next model
-
-Exhausted:  throw AppError('All AI models exhausted without a valid response', 503)
+On bad JSON:           try next model
+On schema validation:  try next model
+On other error:        try next model
+Exhausted:             throw AppError('All AI models exhausted without a valid response', 503)
 ```
 
-Call sites use `buildLlmConfig(env)` to read model names and params from the environment, then pass the config as the 4th argument to `callWithFallback`. The `validateFn` is a Zod validator exported from the relevant prompt file.
+Call sites use `buildLlmConfig(env)` to read model names from env, then pass the config to `callWithFallback`. The `validateFn` is a Zod validator exported from the relevant prompt file.
 
 ---
 
@@ -358,12 +354,15 @@ Emails are **never sent inline** — they go into `email_queue` (D1) and the cro
 
 ```
 Route calls queueEmail(db, { recipientEmail, emailType, templateData, scheduledFor? })
-  → INSERT into email_queue
+  → INSERT into email_queue (status = 'pending')
 
 Cron (every 1 min) runs processEmailQueue(env):
-  → SELECT up to 10 pending rows where scheduled_for <= now
+  → Atomic UPDATE...RETURNING to claim up to 10 pending rows (status → 'claimed')
+    prevents double-send on concurrent cron executions
   → renderTemplate(emailType, templateData) → { subject, html }
-  → sendEmail(env, ...) → POST to Resend API → log to email_logs
+  → sendEmail(env, ...) → routes to SendGrid (production) or Resend (staging/dev)
+    controlled by EMAIL_PROVIDER env var
+  → log to email_logs
   → On failure: exponential backoff, max_retries exhausted → mark failed_at
 ```
 
