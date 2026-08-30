@@ -40,7 +40,7 @@ cd frontend && npm run deploy     # next-on-pages build + wrangler pages deploy
 
 Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and fill it in, and set `NEXT_PUBLIC_API_URL=http://localhost:8787` in `frontend/.env.local`. Cloudflare resource IDs are already provisioned and committed in `backend/wrangler.toml`.
 
-`@cloudflare/workers-types` vs `@types/node` duplicate-identifier warnings inside `node_modules` are pre-existing and harmless. Only errors in `src/` matter.
+Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own code — a non-zero exit is a real error in `src/`, not dependency noise. Don't turn it off: `unpdf`, `mammoth`, and `tinybench` ship `.d.ts` files that produce ~88 errors under this repo's `lib`/`types` settings.
 
 **CI** (`.github/workflows/ci.yml`, on push to `main`/`feature/**` and PRs to `main`): backend typecheck + test, frontend typecheck. Don't push work that fails these.
 
