@@ -84,7 +84,7 @@ LLM calls go through Workers AI (not OpenRouter) with a two-model fallback chain
 Invalid JSON or schema failure → next model. Hard stop at `NEURONS_DAILY_LIMIT` (10000/day prod) → throws 503. See `backend/src/services/ai/fallback.ts`.
 
 Resume text extraction: `unpdf` for PDF, `mammoth` for DOCX (file type validated by magic bytes, not extension).
-Embeddings: `@cf/baai/bge-large-en-v1.5` → 1024-dim → Vectorize. Score = cosine similarity (30%) + LLM dimension scores × job weights (70%); job weights must sum to 100.
+Embeddings: `@cf/baai/bge-large-en-v1.5` → 1024-dim → Vectorize. Score = cosine similarity (30%) + LLM dimension scores (70%). Scoring is v2: each dimension's importance is set independently 0–100 and the backend normalizes by weighted average — there is **no** "must sum to 100" rule.
 
 ---
 
@@ -92,9 +92,10 @@ Embeddings: `@cf/baai/bge-large-en-v1.5` → 1024-dim → Vectorize. Score = cos
 
 Leave these as-is unless asked — they are known placeholders, not bugs:
 
-- Analytics **Sources** chart (hardcoded — source tracking not implemented)
-- Analytics **Round Performance** chart (returns empty array)
-- **AI interview question generation** in InterviewConduct
+- Analytics **Sources** chart — `GET /api/analytics/sources` returns all-zero stubs; nothing tracks candidate source, and the frontend doesn't render it
+- Analytics **Round Performance** chart — no per-round aggregation endpoint
+
+AI interview question generation **is** wired (`POST /api/candidates/:id/questions`, KV-cached, `useGenerateQuestions` in InterviewConduct) — earlier docs called it a placeholder.
 
 ---
 

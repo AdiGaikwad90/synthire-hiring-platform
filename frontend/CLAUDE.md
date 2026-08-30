@@ -1,218 +1,117 @@
 # CLAUDE.md — Synthire Frontend
 
-Next.js 14 App Router UI for the Synthire AI-powered ATS. Fully wired to the Cloudflare Workers backend — no mock data is in active use.
+Next.js 15 App Router UI (React 18) for the Synthire ATS. Fully wired to the Workers backend — no mock data in active use.
 
 ---
 
-## Running locally
+## Commands
 
 ```bash
-cd frontend
-npm install
-npm run dev    # http://localhost:3000
+npm run dev        # http://localhost:3000 — backend must be up on :8787
+npm run typecheck  # tsc --noEmit — must exit 0
+npm run lint       # next lint — currently clean, keep it that way
+npm run deploy     # next-on-pages build + wrangler pages deploy
 ```
 
-Backend must be running at `http://localhost:8787` (see `backend/CLAUDE.md`).
+Only one env var, in `.env.local` (gitignored): `NEXT_PUBLIC_API_URL=http://localhost:8787`.
 
----
-
-## Configuration
-
-### `frontend/.env.local` (gitignored)
-
-```ini
-NEXT_PUBLIC_API_URL=http://localhost:8787
-```
-
-That is the only variable needed. Copy from `.env.example`:
-```bash
-cp .env.example .env.local
-```
-
-For production, change the value to your deployed worker URL.
-
----
-
-## Folder structure
-
-```
-frontend/
-├── app/                                # Next.js App Router
-│   ├── layout.tsx                      # Root layout — fonts, providers, globals.css
-│   ├── globals.css                     # ALL design tokens + component styles (~80 KB)
-│   ├── providers.tsx                   # QueryClientProvider → AuthProvider → ToastProvider
-│   ├── page.tsx                        # / → Landing
-│   ├── (auth)/
-│   │   ├── login/page.tsx
-│   │   └── signup/page.tsx
-│   ├── (recruiter)/                    # Route group — Sidebar + Topbar layout
-│   │   ├── layout.tsx
-│   │   ├── dashboard/page.tsx
-│   │   ├── jobs/page.tsx
-│   │   ├── jobs/new/page.tsx
-│   │   ├── jobs/[jobId]/page.tsx       # passes jobId → <Candidates jobId={...} />
-│   │   ├── candidates/page.tsx
-│   │   ├── candidates/[candidateId]/page.tsx  # passes candidateId → <CandidateDetail>
-│   │   ├── pipeline/page.tsx
-│   │   ├── interviews/page.tsx
-│   │   ├── analytics/page.tsx
-│   │   └── settings/page.tsx
-│   └── (interviewer)/
-│       ├── layout.tsx
-│       ├── interviewer/page.tsx
-│       └── interviews/[interviewId]/page.tsx  # passes interviewId → <InterviewConduct>
-│
-├── components/
-│   ├── ui/                             # Design system primitives (barrel: @/components/ui)
-│   ├── shared/
-│   │   ├── Sidebar.tsx                 # NAV_ITEMS (exported, used by CommandPalette)
-│   │   ├── Navigation.tsx              # Top bar — real user name from useAuth()
-│   │   ├── CommandPalette.tsx          # ⌘K — uses useJobs() + useCandidates()
-│   │   └── TweaksPanel.tsx             # Theme/density switcher (localStorage)
-│   ├── (auth)/
-│   │   ├── LoginForm.tsx               # useAuth().login()
-│   │   └── SignupForm.tsx              # useAuth().signup()
-│   ├── (recruiter)/
-│   │   ├── Dashboard.tsx               # useAnalyticsSummary, useFunnel, useActivity, useInterviews
-│   │   ├── Jobs.tsx                    # useJobs()
-│   │   ├── JobForm.tsx                 # 4-step wizard → useCreateJob() on final step
-│   │   ├── Candidates.tsx              # useCandidates(filters) + useJob(id); accepts jobId prop
-│   │   ├── CandidateDetail.tsx         # useCandidate(id); accepts candidateId prop
-│   │   ├── PipelineKanban.tsx          # useCandidates() + useUpdateCandidateStage() (optimistic)
-│   │   ├── Analytics.tsx               # useFunnel, useTimeToHire, useAnalyticsSummary
-│   │   ├── Settings.tsx                # useInterviewTypes + mutation hooks
-│   │   ├── ScheduleModal.tsx           # useInterviewTypes + useScheduleInterview
-│   │   └── ResumeBatchModal.tsx        # SSE fetch to POST /api/candidates/upload
-│   └── (interviewer)/
-│       ├── InterviewerHome.tsx         # useInterviews() — filtered by role
-│       └── InterviewConduct.tsx        # useInterview(id) + useSubmitFeedback; accepts interviewId prop
-│
-├── context/
-│   └── AuthContext.tsx                 # AuthProvider + useAuth() hook
-├── hooks/queries/
-│   ├── useJobs.ts                      # useJobs, useJob, useCreateJob, useUpdateJob
-│   ├── useCandidates.ts                # useCandidates, useCandidate, useUpdateCandidateStage
-│   ├── useInterviews.ts                # useInterviews, useInterview, useScheduleInterview, useSubmitFeedback
-│   ├── useAnalytics.ts                 # useFunnel, useTimeToHire, useAnalyticsSummary, useActivity, useEmailStats
-│   ├── useSettings.ts                  # useInterviewTypes, useCreateInterviewType, useUpdateInterviewType, useDeleteInterviewType
-│   └── useEmail.ts                     # useEmailLogs, useEmailPreferences, useUpdateEmailPreferences
-├── lib/
-│   ├── api.ts                          # Typed API client — all endpoint groups + ApiError
-│   ├── auth.ts                         # getToken/setToken/removeToken + cookie sync
-│   ├── types.ts                        # Domain types (Job, Candidate, Stage, …)
-│   ├── utils.ts                        # cn(), initials(), formatDate()
-│   ├── icons.tsx                       # Inline SVG icon set
-│   └── data.ts                         # Mock data — kept for demo reference; nothing imports it
-├── middleware.ts                        # Route protection via synthire_token cookie
-└── .env.example                        # → copy to .env.local
-```
-
----
-
-## Auth
-
-- **Primary storage**: JWT in `localStorage` key `synthire_token` — sent as `Authorization: Bearer <token>` on every request
-- **Secondary storage**: non-HttpOnly cookie `synthire_token` written by `setToken()` — used only by Next.js middleware for server-side route protection
-- **`lib/auth.ts`**: `getToken()` reads localStorage; `setToken()` writes localStorage + cookie; `removeToken()` clears both
-- **`lib/api.ts`**: `apiFetch` reads token from localStorage via `getToken()` and injects Bearer header. On 401, tries `POST /api/auth/refresh` once (coalesced), then redirects to `/login`
-- **`context/AuthContext.tsx`**: on login/signup, receives `token` in response body and calls `setToken(token)`. Verifies session on mount via `GET /api/auth/me`
-- **`middleware.ts`**: reads cookie `synthire_token`; redirects to `/login?from=<path>` if missing; protects all recruiter + interviewer routes
-- **`useAuth()`** is the only place to call `login`, `logout`, `signup` — never call `api.ts` functions directly from components
-
----
-
-## Data fetching
-
-All API calls go through hooks in `hooks/queries/`. Never call `apiFetch` directly from a component.
-
-```typescript
-// Pattern for every data-dependent component
-const { data, isLoading, isError } = useJobs()
-if (isLoading) return <Skeleton />
-if (isError)   return <ErrorState />
-```
-
-**React Query v5** — cache keys, stale times, and invalidation are managed inside the hooks. `useActivity()` refetches every 30 s.
-
-### Optimistic updates
-
-`useUpdateCandidateStage()` applies optimistic updates on drag-drop and rolls back on error. Follow this pattern for any other mutation that needs immediate UI feedback.
-
----
-
-## API client — `lib/api.ts`
-
-`apiFetch<T>(path, options)`:
-- Adds `Authorization: Bearer <token>` header
-- On 401: calls `removeToken()` then `router.push('/login')`
-- Throws `ApiError` (extends Error, has `.status`) on non-2xx
-
-Grouped exports: `authApi`, `jobsApi`, `candidatesApi`, `interviewsApi`, `analyticsApi`, `settingsApi`, `emailApi`
-
-Key exported types: `PaginatedData<T>`, `ApiJob`, `ApiCandidate`, `ApiInterview`, `ApiInterviewType`, `AnalyticsSummary`, `ActivityItem`, `EmailStats`, `ApiEmailLog`, `ApiEmailPreferences`
-
----
-
-## Resume upload (polling)
-
-`ResumeBatchModal` posts to `POST /api/candidates/upload` (multipart: `file`, `jobId`), receives `{ candidateId }` immediately (202), then polls `GET /api/candidates/:id` every 2 seconds until `processing_status` is `complete` or `failed` (or 60 ticks = 2 minutes timeout).
-
-File state progression: `queued` → `parsing` → `scoring` → `done` / `error`. Stage advances to "done" when all files settle.
-
----
-
-## Route map
-
-| URL | Component | Data source |
-|---|---|---|
-| `/` | `Landing` | Static |
-| `/login` | `LoginForm` | `useAuth().login()` |
-| `/signup` | `SignupForm` | `useAuth().signup()` |
-| `/dashboard` | `Dashboard` | `useAnalyticsSummary`, `useFunnel`, `useActivity`, `useInterviews` |
-| `/jobs` | `Jobs` | `useJobs()` |
-| `/jobs/new` | `JobForm` | `useCreateJob()` |
-| `/jobs/[jobId]` | `Candidates` | `useCandidates({ job_id })` |
-| `/candidates` | `Candidates` | `useCandidates()` |
-| `/candidates/[candidateId]` | `CandidateDetail` | `useCandidate(id)` |
-| `/pipeline` | `PipelineKanban` | `useCandidates()` + `useUpdateCandidateStage()` |
-| `/analytics` | `Analytics` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary` |
-| `/settings` | `Settings` | `useInterviewTypes()` |
-| `/interviewer` | `InterviewerHome` | `useInterviews()` |
-| `/interviews/[interviewId]` | `InterviewConduct` | `useInterview(id)` + `useSubmitFeedback` |
-
----
-
-## What is NOT wired (known gaps)
-
-| Feature | Status |
-|---|---|
-| Analytics Sources chart | Hardcoded placeholder — source tracking not implemented in backend |
-| Analytics Round Performance | Returns empty array — no per-round aggregation in backend |
-| AI interview question generation | Button shows placeholder message — `generate-questions.ts` prompt exists but no route |
-| JD upload (`JDUploadModal`) | Simulated with setTimeout — no `/api/jobs/parse-jd` endpoint |
-
----
-
-## Design system
-
-All tokens are CSS custom properties in `app/globals.css`. Components use the `ts*` class prefix. Themes and density switch via `data-theme` and `data-density` on `<html>`, persisted in `localStorage` by `TweaksPanel`.
-
-AI-surface utilities: `.ai-text` (gradient text), `.ai-border` (gradient ring), `.ai-surface` (glow background).
+> `next lint` is deprecated and removed in Next.js 16. Migrate with `npx @next/codemod@canary next-lint-to-eslint-cli .` when convenient — the backend already uses the flat-config ESLint CLI.
 
 ---
 
 ## Conventions
 
-- **Imports**: use `@/` alias; UI primitives from `@/components/ui` (barrel)
-- **Client components**: all `components/` files are `'use client'`; app pages are server components
-- **TypeScript**: `strict: false` — don't fight existing `any` props; type new code properly
-- **Styling**: prefer existing `ts*` class names; inline `style={{}}` for one-offs; add new classes to `globals.css`
-- **Re-exports**: `CandidateCard`, `FilterPanel`, `JobCard`, `FeedbackForm`, `ScoreDisplay` are thin re-export stubs — the actual component bodies live inside the screen file they're named after
+- **Never call `apiFetch` directly from a component** — always go through `hooks/queries/`.
+- **Never call `lib/api.ts` auth functions directly** — `useAuth()` is the only entry point for `login` / `logout` / `signup`.
+- Every data-dependent component needs a loading and an error guard:
+  ```tsx
+  const { data, isLoading, isError } = useJobs()
+  if (isLoading) return <Skeleton />
+  if (isError)   return <ErrorState />
+  ```
+- Imports use the `@/` alias; UI primitives come from the `@/components/ui` barrel.
+- Every file in `components/` is `'use client'`; pages under `app/` are server components and export `runtime = "edge"` (19 of them — required by next-on-pages).
+- `strict: false` — don't fight `any` in existing components, but type new code properly.
+- Styling: prefer existing `ts*` class names, inline `style={{}}` for one-offs, new classes go in `app/globals.css`.
+- `CandidateCard`, `FilterPanel`, `JobCard`, `FeedbackForm`, `ScoreDisplay` are thin re-export stubs — the real component bodies live in the screen file they're named after.
 
 ---
 
-## Typecheck
+## Auth
 
-```bash
-npm run typecheck    # tsc --noEmit — target 0 errors
-```
+- **Primary**: JWT in `localStorage` under `synthire_token`, sent as `Authorization: Bearer`.
+- **Secondary**: a non-HttpOnly cookie of the same name, written by `setToken()`. It exists solely so `middleware.ts` can gate routes server-side; it only works same-domain.
+- `lib/api.ts` injects the Bearer header, and on a 401 attempts `POST /api/auth/refresh` **once** (coalesced across concurrent requests) before redirecting to `/login`.
+- `middleware.ts` redirects to `/login?from=<path>` when the cookie is absent; matcher excludes `_next/*`, `favicon.ico`, and `api`.
+- `AuthContext` verifies the session on mount via `GET /api/auth/me`.
+
+---
+
+## Data fetching
+
+React Query v5. Cache keys, stale times, and invalidation live inside the hooks in `hooks/queries/`:
+
+| Hook file | Exports |
+|---|---|
+| `useJobs.ts` | `useJobs`, `useJob`, `useCreateJob`, `useUpdateJob` |
+| `useCandidates.ts` | `useCandidates`, `useCandidate`, `useUpdateCandidateStage`, `useGenerateQuestions`, `useInterviewQuestions` |
+| `useInterviews.ts` | `useInterviews`, `useInterview`, `useScheduleInterview`, `useSubmitFeedback`, `useInterviewFeedback` |
+| `useAnalytics.ts` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary`, `useActivity`, `useEmailStats` |
+| `useSettings.ts` | `useInterviewTypes` + create/update/delete |
+| `useEmail.ts` | `useEmailLogs`, `useEmailPreferences`, `useUpdateEmailPreferences` |
+
+`useActivity()` refetches every 30s. `useUpdateCandidateStage()` does an optimistic update with rollback on error — copy that pattern for any mutation needing instant feedback.
+
+---
+
+## Async backend operations
+
+Both long-running backend calls return a job id at 202 and are polled from the client — neither uses SSE:
+
+- **Resume upload** — `ResumeBatchModal` posts to `POST /api/candidates/upload`, gets `{ candidateId }`, then polls `GET /api/candidates/:id` every 2s until `processing_status` settles (60 ticks / 2 min timeout). Per-file state: `queued` → `parsing` → `scoring` → `done` / `error`.
+- **JD parsing** — `JDUploadModal` posts to `POST /api/jobs/parse-jd`, gets `{ parseId }`, then polls `GET /api/jobs/parse-jd/:parseId` until it stops returning `{ status: 'processing' }`.
+
+---
+
+## Route map
+
+| URL | Component | Data |
+|---|---|---|
+| `/` | `Landing` | static |
+| `/login` · `/signup` | `LoginForm` · `SignupForm` | `useAuth()` |
+| `/dashboard` | `Dashboard` | `useAnalyticsSummary`, `useFunnel`, `useActivity`, `useInterviews` |
+| `/jobs` | `Jobs` | `useJobs()` |
+| `/jobs/new` | `JobForm` | `useCreateJob()` |
+| `/jobs/[jobId]` | `Candidates` | `useCandidates({ job_id })` |
+| `/jobs/[jobId]/edit` | `JobEditForm` | `useJob()` + `useUpdateJob()` |
+| `/candidates` | `Candidates` | `useCandidates()` |
+| `/candidates/[candidateId]` | `CandidateDetail` | `useCandidate(id)` |
+| `/pipeline` | `PipelineKanban` | `useCandidates()` + `useUpdateCandidateStage()` |
+| `/interviews` | `InterviewerHome` (reused by the recruiter route) | `useInterviews()` |
+| `/analytics` | `Analytics` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary` |
+| `/settings` | `Settings` | `useInterviewTypes()` |
+| `/interviewer` | `InterviewerHome` | `useInterviews()` — role-filtered |
+| `/interviews/[interviewId]` | `InterviewConduct` | `useInterview(id)`, `useCandidate`, `useGenerateQuestions` |
+
+`app/(recruiter)/layout.tsx` wraps recruiter routes in Sidebar + Topbar; `app/(interviewer)/layout.tsx` bounces recruiters to `/dashboard` unless the path starts with `/interviews/`.
+
+Provider order in `app/providers.tsx`: `QueryClientProvider` → `AuthProvider` → `ToastProvider`.
+
+---
+
+## Design system
+
+Tokens are CSS custom properties in `app/globals.css` (~80 KB, holds all component styles). Themes and density switch via `data-theme` / `data-density` on `<html>`, persisted to localStorage by `TweaksPanel`. AI-surface utilities: `.ai-text`, `.ai-border`, `.ai-surface`.
+
+See `FE_DESIGN_GUIDELINES.md` before building new UI.
+
+---
+
+## Known gaps
+
+| Feature | Status |
+|---|---|
+| Analytics **Sources** chart | `GET /api/analytics/sources` exists but returns all-zero stubs; no source tracking in the pipeline. The frontend doesn't render it. |
+| Analytics **Round Performance** | No per-round aggregation endpoint |
+| `lib/data.ts` | Dead mock data, kept for demo reference — nothing imports it |
+| `components/(recruiter)/InterviewsList.tsx` | Dead — not imported anywhere; `/interviews` renders `InterviewerHome` instead |
