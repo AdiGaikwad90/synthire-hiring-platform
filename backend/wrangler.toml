@@ -18,7 +18,7 @@ EMAIL_MAX_RETRIES = "3"
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-awq"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
-LLM_MAX_TOKENS = "2000"
+LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
 
 # After running: wrangler d1 create synthire-prod
@@ -71,7 +71,7 @@ EMAIL_MAX_RETRIES = "3"
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-awq"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
-LLM_MAX_TOKENS = "2000"
+LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
 
 [[env.production.d1_databases]]
@@ -102,6 +102,7 @@ crons = ["* * * * *"]
 ENVIRONMENT = "staging"
 FRONTEND_ORIGIN = "https://synthire-staging.pages.dev"
 JWT_EXPIRY_SECONDS = "86400"
+REFRESH_TOKEN_EXPIRY_SECONDS = "2592000"
 MAX_UPLOAD_BYTES = "10485760"
 EMAIL_PROVIDER = "resend"
 RESEND_FROM_EMAIL = "onboarding@resend.dev"
@@ -121,7 +122,7 @@ EMAIL_MAX_RETRIES = "3"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "synthire-staging"
-database_id = "REPLACE_WITH_STAGING_DATABASE_ID"
+database_id = "6f8de672-8c19-482b-af2d-4c648ca9cd31"
 migrations_dir = "src/db/migrations"
 
 [[env.staging.r2_buckets]]
@@ -130,8 +131,8 @@ bucket_name = "synthire-resumes-staging"
 
 [[env.staging.kv_namespaces]]
 binding = "KV_CACHE"
-id = "REPLACE_WITH_STAGING_KV_ID"
-preview_id = "REPLACE_WITH_STAGING_KV_PREVIEW_ID"
+id = "493f80d7aee04746b49ca0c79523acf3"
+preview_id = "39cec25e6bae4510808fe1aeb4294aba"
 
 [[env.staging.vectorize]]
 binding = "VECTORIZE"
