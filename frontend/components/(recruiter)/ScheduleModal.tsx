@@ -163,7 +163,7 @@ The Hiring Team`
             placeholder="e.g. john.smith@company.com"
           />
           <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
-            Must be a registered Synthire user. They'll receive a magic link to conduct the interview.
+            Must be a registered Synthire user. They’ll receive a magic link to conduct the interview.
           </div>
         </div>
 
@@ -321,7 +321,7 @@ The Hiring Team`
                   <b style={{ color: "var(--text)" }}>Subject:</b> Interview Assignment{jobTitle ? ` — ${jobTitle}` : ''}
                 </div>
                 <div className="small" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-                  They will receive a magic link to access the candidate's profile and submit feedback after the interview.
+                  They will receive a magic link to access the candidate’s profile and submit feedback after the interview.
                 </div>
               </>
             )}

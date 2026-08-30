@@ -138,7 +138,7 @@ function Analytics() {
               <Icon.PieChart size={18}/>
             </div>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-2)" }}>Source tracking coming soon</div>
-            <div className="small" style={{ color: "var(--muted)" }}>We'll track which channels bring your best candidates.</div>
+            <div className="small" style={{ color: "var(--muted)" }}>We’ll track which channels bring your best candidates.</div>
           </div>
         </Card>
 

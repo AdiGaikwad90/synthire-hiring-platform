@@ -64,7 +64,7 @@ router.post('/', zv('json', createInterviewSchema), async (c) => {
 
   // Resolve interviewer_id from interviewer_email if provided
   let interviewerId = body.interviewer_id
-  let resolvedInterviewerEmail = body.interviewer_email
+  const resolvedInterviewerEmail = body.interviewer_email
   if (body.interviewer_email && !interviewerId) {
     const interviewerByEmail = await findUserByEmailInCompany(db, body.interviewer_email, user.company_id)
     if (interviewerByEmail) {

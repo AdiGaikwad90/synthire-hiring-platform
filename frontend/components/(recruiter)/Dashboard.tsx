@@ -108,7 +108,7 @@ function Dashboard() {
           {/* Today's interviews */}
           <Card padded={false}>
             <div className="tsCardHead">
-              <div className="h3">Today's interviews</div>
+              <div className="h3">Today’s interviews</div>
               <Badge variant="warning">5 scheduled</Badge>
             </div>
             <div style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -199,7 +199,7 @@ const AIInsightsCard = () => { const router = useRouter(); return (
         <span className="ai-text">3 high-potential candidates</span> match your <b>Senior Software Engineer</b> role above 85%.
       </div>
       <div className="small" style={{ color: "var(--text-2)", marginBottom: 18, maxWidth: 520 }}>
-        Marcus Chen, Priya Sharma, and Diego Vargas all have strong React + Python + AWS overlap with the role's required stack. Diego additionally has prior Stripe payments experience.
+        Marcus Chen, Priya Sharma, and Diego Vargas all have strong React + Python + AWS overlap with the role’s required stack. Diego additionally has prior Stripe payments experience.
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <Button variant="ai" icon={<Icon.Sparkles size={14}/>} onClick={() => router.push("/candidates")}>Review candidates</Button>

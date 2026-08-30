@@ -16,7 +16,7 @@ export default function InterviewerLayout({ children }: { children: React.ReactN
         router.replace('/dashboard');
       }
     }
-  }, [user, isLoading]);
+  }, [user, isLoading, router]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg)" }}>

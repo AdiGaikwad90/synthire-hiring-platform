@@ -106,7 +106,7 @@ function Login() {
       <div className="tsLogin-right">
         <form className="tsLogin-form" onSubmit={submit}>
           <div className="tsLogin-formH">Sign in to your account</div>
-          <div className="tsLogin-formSub">Welcome back — let's get hiring.</div>
+          <div className="tsLogin-formSub">Welcome back — let’s get hiring.</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ position: "relative" }}>
@@ -158,7 +158,7 @@ function Login() {
           </div>
 
           <div className="tsLogin-foot">
-            Don't have an account? <a onClick={() => router.push("/signup")} style={{ cursor: "pointer", color: "var(--primary-3)" }}>Sign up free</a>
+            Don’t have an account? <a onClick={() => router.push("/signup")} style={{ cursor: "pointer", color: "var(--primary-3)" }}>Sign up free</a>
             <div style={{ marginTop: 12, color: "var(--faint)", fontSize: 11 }}>
               By signing in you agree to our <a>Terms of Service</a> and <a>Privacy Policy</a>.
             </div>

@@ -387,7 +387,7 @@ function StepBasics({
   return (
     <Card padded style={{ display: "flex", flexDirection: "column", gap: 18, padding: 28 }}>
       <div className="h3" style={{ marginBottom: 4 }}>Job basics</div>
-      <div className="small" style={{ color: "var(--muted)", marginTop: -8 }}>What's the role?</div>
+      <div className="small" style={{ color: "var(--muted)", marginTop: -8 }}>What’s the role?</div>
 
       <Input label="Job title *" value={form.title} onChange={e => update("title", e.target.value)}
         placeholder="e.g. Senior Backend Engineer" error={errors.title}/>
@@ -555,7 +555,7 @@ function StepScoring({
           <div>
             <div className="h3">Scoring priorities</div>
             <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
-              Set each dimension's importance independently (0-100%). The backend normalizes — no need to make them sum to 100.
+              Set each dimension’s importance independently (0-100%). The backend normalizes — no need to make them sum to 100.
             </div>
           </div>
           <div style={{ textAlign: "right" }}>

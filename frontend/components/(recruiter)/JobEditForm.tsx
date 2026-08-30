@@ -43,23 +43,24 @@ export function JobEditForm({ jobId }: { jobId: string }) {
   const [skillInput, setSkillInput] = React.useState("");
   const [niceInput, setNiceInput] = React.useState("");
 
+  // Seed the form once from the fetched job. Functional update so a refetch
+  // never clobbers edits in progress, and so the effect needn't depend on `form`.
   React.useEffect(() => {
-    if (job && !form) {
-      setForm({
-        title: job.title ?? "",
-        department: job.department ?? "",
-        location: job.location ?? "",
-        employment_type: job.employment_type ?? "",
-        experience_level: job.experience_level ?? "",
-        salary_range: job.salary_range ?? "",
-        description: job.description ?? "",
-        required_skills: job.required_skills ?? [],
-        nice_to_have_skills: job.nice_to_have_skills ?? [],
-        min_years_experience: job.min_years_experience ?? "",
-        education_requirement: job.education_requirement ?? "",
-        status: job.status ?? "active",
-      });
-    }
+    if (!job) return;
+    setForm((prev: any) => prev ?? {
+      title: job.title ?? "",
+      department: job.department ?? "",
+      location: job.location ?? "",
+      employment_type: job.employment_type ?? "",
+      experience_level: job.experience_level ?? "",
+      salary_range: job.salary_range ?? "",
+      description: job.description ?? "",
+      required_skills: job.required_skills ?? [],
+      nice_to_have_skills: job.nice_to_have_skills ?? [],
+      min_years_experience: job.min_years_experience ?? "",
+      education_requirement: job.education_requirement ?? "",
+      status: job.status ?? "active",
+    });
   }, [job]);
 
   if (isLoading) return <div className="tsPage"><div style={{ padding: 32, color: "var(--muted)" }}>Loading...</div></div>;

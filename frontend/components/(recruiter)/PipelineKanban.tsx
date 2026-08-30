@@ -13,18 +13,18 @@ const SORT_OPTIONS = [
   { value: "name_desc", label: "Name: Z → A" },
 ];
 
+const COLUMNS = [
+  { id: "new", label: "New", color: "var(--stage-new)" },
+  { id: "shortlisted", label: "Shortlisted", color: "var(--stage-shortlisted)" },
+  { id: "scheduled", label: "Scheduled", color: "var(--stage-scheduled)" },
+  { id: "inprogress", label: "Technical", color: "var(--stage-inprogress)" },
+  { id: "feedback", label: "Culture fit", color: "var(--stage-feedback)" },
+  { id: "hired", label: "Hired", color: "var(--stage-hired)" },
+  { id: "rejected", label: "Rejected", color: "var(--stage-rejected)" },
+];
+
 function Pipeline() {
   const router = useRouter();
-
-  const columns = [
-    { id: "new", label: "New", color: "var(--stage-new)" },
-    { id: "shortlisted", label: "Shortlisted", color: "var(--stage-shortlisted)" },
-    { id: "scheduled", label: "Scheduled", color: "var(--stage-scheduled)" },
-    { id: "inprogress", label: "Technical", color: "var(--stage-inprogress)" },
-    { id: "feedback", label: "Culture fit", color: "var(--stage-feedback)" },
-    { id: "hired", label: "Hired", color: "var(--stage-hired)" },
-    { id: "rejected", label: "Rejected", color: "var(--stage-rejected)" },
-  ];
 
   const [search, setSearch] = React.useState("");
   const [selectedJob, setSelectedJob] = React.useState("");
@@ -42,7 +42,7 @@ function Pipeline() {
 
   const board = React.useMemo(() => {
     const map: Record<string, any[]> = {};
-    columns.forEach(col => { map[col.id] = []; });
+    COLUMNS.forEach(col => { map[col.id] = []; });
 
     let items = candidateData?.items ?? [];
 
@@ -166,7 +166,7 @@ function Pipeline() {
       )}
 
       <div className="tsKanban">
-        {columns.map(col => (
+        {COLUMNS.map(col => (
           <div key={col.id}
             className={`tsKanban-col ${dropTarget === col.id ? "tsKanban-col-drop" : ""}`}
             onDragOver={e => { e.preventDefault(); setDropTarget(col.id); }}
