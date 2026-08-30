@@ -23,7 +23,7 @@ export function zv<T extends keyof ValidationTargets>(
   })
 }
 
-export function apiResponse<T>(data: T, status = 200) {
+export function apiResponse<T>(data: T) {
   return {
     success: true as const,
     data,

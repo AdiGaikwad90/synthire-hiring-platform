@@ -165,7 +165,7 @@ function Settings() {
             <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 14px", background: "var(--surface-2)", borderRadius: 8 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>Required round</div>
-                <div className="small" style={{ color: "var(--muted)" }}>Required rounds can't be skipped for any candidate.</div>
+                <div className="small" style={{ color: "var(--muted)" }}>Required rounds can’t be skipped for any candidate.</div>
               </div>
               <Toggle checked={draft.required} onChange={v => setDraft(d => ({ ...d, required: v }))}/>
             </div>

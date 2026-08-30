@@ -498,7 +498,7 @@ function AIQuestionsTab({ candidateId, candidateName }: { candidateId: string; c
       {questions.length === 0 && !isPending && (
         <div style={{ padding: "32px 0", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
           <Icon.Sparkles size={28} style={{ display: "block", margin: "0 auto 10px", opacity: 0.4 }}/>
-          Click "Generate questions" to get AI-tailored interview questions<br/>based on this candidate's resume and the job requirements.
+          Click “Generate questions” to get AI-tailored interview questions<br/>based on this candidate’s resume and the job requirements.
         </div>
       )}
 

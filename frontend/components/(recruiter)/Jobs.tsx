@@ -25,7 +25,7 @@ function JobContextMenu({ job, onEdit, onStatusChange }: { job: ApiJob; onEdit: 
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  }, [open, setOpen]);
 
   return (
     <div ref={ref} style={{ position: "relative" }}>

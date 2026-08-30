@@ -515,7 +515,7 @@ function AITab({ c }: any) {
         <div style={{ padding: "0 24px 22px", display: "flex", flexDirection: "column", gap: 10 }}>
           {questions.length === 0 && !isPending && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div className="small" style={{ color: 'var(--muted)', flex: 1 }}>Generate tailored questions based on this candidate's profile and the job requirements.</div>
+              <div className="small" style={{ color: 'var(--muted)', flex: 1 }}>Generate tailored questions based on this candidate’s profile and the job requirements.</div>
               <Button variant="secondary" size="sm" icon={<Icon.Sparkles size={12}/>} onClick={handleGenerate}>Generate</Button>
             </div>
           )}
