@@ -5,6 +5,9 @@ import { loggerMiddleware } from './middleware/logger'
 import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
+import { meterD1, meterKV, newTally } from './services/budget/meters'
+import { flushUsage } from './services/budget/quotas'
+import { quotaMiddleware } from './middleware/quota'
 
 // Route imports (implemented in later phases)
 import authRoutes from './routes/auth'
@@ -23,6 +26,7 @@ const app = new Hono<{ Bindings: Env }>()
 app.use('*', loggerMiddleware)
 app.use('*', corsMiddleware)
 app.use('/api/*', rateLimitMiddleware)
+app.use('/api/*', quotaMiddleware)
 app.onError(errorHandler)
 
 // Public routes
@@ -43,9 +47,34 @@ app.route('/api/settings', settingsRoutes)
 // Health check
 app.route('/health', healthRoutes)
 
+/**
+ * Wrap D1 + KV in per-request meters, run the handler, then flush one
+ * aggregate row of usage. A FRESH env object is spread per request — the real
+ * `env` is shared across requests in an isolate and must not be mutated.
+ * The flush deliberately uses the RAW db, or it would count itself.
+ */
+async function fetchWithQuotaMetering(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const tally = newTally()
+  const metered: Env = {
+    ...env,
+    DB: meterD1(env.DB, tally),
+    KV_CACHE: meterKV(env.KV_CACHE, tally),
+  }
+
+  try {
+    return await app.fetch(request, metered, ctx)
+  } finally {
+    ctx.waitUntil(flushUsage(env.DB, tally))
+  }
+}
+
 // Export for Workers + Scheduled trigger
 export default {
-  fetch: app.fetch,
+  fetch: fetchWithQuotaMetering,
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(
       processEmailQueue(env).catch((err) => {

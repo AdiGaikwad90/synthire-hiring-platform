@@ -17,6 +17,7 @@ import {
 } from '../services/ai/prompts/parse-resume'
 import { buildQuestionMessages, validateQuestions } from '../services/ai/prompts/generate-questions'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
+import { buildNeuronLimitConfig } from '../services/budget/neurons'
 import { runScoringPipeline } from '../services/scoring/pipeline'
 import {
   createCandidate,
@@ -58,7 +59,7 @@ async function runPipeline(
     const parsedResume = await callWithFallback(
       env.AI,
       env.KV_CACHE,
-      parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+      buildNeuronLimitConfig(env),
       messages,
       validateParsedResume,
       'LLM_PARSE',
@@ -286,7 +287,7 @@ router.post('/:id/questions', async (c) => {
   const result = await callWithFallback(
     c.env.AI,
     c.env.KV_CACHE,
-    parseInt(c.env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+    buildNeuronLimitConfig(c.env),
     messages,
     validateQuestions,
     'LLM_QUESTIONS',

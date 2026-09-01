@@ -1,7 +1,21 @@
 import type { KVNamespace } from '@cloudflare/workers-types'
 import { AppError } from '../../types/api'
+import type { Env } from '../../types/bindings'
+import { isGuardrailEnabled } from '../../utils/env'
 
 export type NeuronOperation = 'LLM_PARSE' | 'LLM_SCORE' | 'LLM_QUESTIONS' | 'EMBEDDING'
+
+export interface NeuronLimitConfig {
+  enabled: boolean      // false → usage is still counted, but never blocked
+  dailyLimit: number
+}
+
+export function buildNeuronLimitConfig(env: Env): NeuronLimitConfig {
+  return {
+    enabled: isGuardrailEnabled(env.LLM_LIMITS_ENABLED),
+    dailyLimit: parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+  }
+}
 
 export const NEURON_COSTS: Record<NeuronOperation, number> = {
   LLM_PARSE: 100,
@@ -24,8 +38,13 @@ function secondsUntilMidnightUTC(): number {
 export async function checkNeuronBudget(
   kv: KVNamespace,
   operation: NeuronOperation,
-  dailyLimit: number
+  config: NeuronLimitConfig
 ): Promise<void> {
+  // Kill switch: stop enforcing, but deductNeurons() keeps counting so the
+  // usage snapshot stays accurate while the cap is off.
+  if (!config.enabled) return
+
+  const { dailyLimit } = config
   const key = todayKey()
   const current = parseInt((await kv.get(key)) ?? '0', 10)
   const cost = NEURON_COSTS[operation]
@@ -55,20 +74,22 @@ export async function deductNeurons(
   return newTotal
 }
 
-export async function getNeuronStatus(kv: KVNamespace, dailyLimit: number): Promise<{
+export async function getNeuronStatus(kv: KVNamespace, config: NeuronLimitConfig): Promise<{
   used: number
   limit: number
   remaining: number
   date: string
   resetInSeconds: number
+  limits_enabled: boolean
 }> {
   const date = new Date().toISOString().slice(0, 10)
   const used = parseInt((await kv.get(`neurons:daily:${date}`)) ?? '0', 10)
   return {
     used,
-    limit: dailyLimit,
-    remaining: Math.max(0, dailyLimit - used),
+    limit: config.dailyLimit,
+    remaining: Math.max(0, config.dailyLimit - used),
     date,
     resetInSeconds: secondsUntilMidnightUTC(),
+    limits_enabled: config.enabled,
   }
 }

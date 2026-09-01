@@ -116,24 +116,31 @@ router.post('/signup', zValidator('json', signupSchema), async (c) => {
 router.post('/login', zValidator('json', loginSchema), async (c) => {
   const { email, password } = c.req.valid('json')
 
-  // Per-email rate limiting: 5 failed attempts per 60s
+  // Per-email brute-force limiting. Deliberately has NO kill switch: this is a
+  // security control, not a Cloudflare quota guard. Thresholds are tunable so
+  // they can be tightened or loosened without a code change.
+  const maxAttempts = parseInt(c.env.LOGIN_MAX_ATTEMPTS ?? '5', 10)
+  const attemptWindow = parseInt(c.env.LOGIN_ATTEMPT_WINDOW_SECONDS ?? '60', 10)
   const emailNorm = email.trim().toLowerCase()
   const rlKey = `rl:login:${emailNorm}`
   const rlRaw = await c.env.KV_CACHE.get(rlKey)
   const attempts = rlRaw ? parseInt(rlRaw, 10) : 0
-  if (attempts >= 5) {
-    throw new AppError('Too many login attempts. Please try again in a minute.', 429)
+  if (attempts >= maxAttempts) {
+    throw new AppError(
+      `Too many login attempts. Please try again in ${Math.ceil(attemptWindow / 60)} minute(s).`,
+      429,
+    )
   }
 
   const user = await findUserByEmail(c.env.DB, emailNorm)
   if (!user) {
-    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: 60 })
+    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: attemptWindow })
     throw new AppError('Invalid email or password', 401)
   }
 
   const passwordMatch = await compare(password, user.password_hash)
   if (!passwordMatch) {
-    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: 60 })
+    await c.env.KV_CACHE.put(rlKey, String(attempts + 1), { expirationTtl: attemptWindow })
     throw new AppError('Invalid email or password', 401)
   }
 

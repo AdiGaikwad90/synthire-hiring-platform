@@ -23,6 +23,7 @@ import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
 import { uploadToR2, getFromR2 } from '../services/storage/r2'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
+import { buildNeuronLimitConfig } from '../services/budget/neurons'
 import type { WorkersAIRequest } from '../services/ai/workers-ai'
 
 // ── JD parse schema ───────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ router.post('/parse-jd', async (c) => {
         const parsed = await callWithFallback(
           env.AI,
           env.KV_CACHE,
-          parseInt(env.NEURONS_DAILY_LIMIT ?? '10000', 10),
+          buildNeuronLimitConfig(env),
           messages,
           validateParsedJd,
           'LLM_PARSE',
