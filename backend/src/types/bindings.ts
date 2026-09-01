@@ -7,6 +7,7 @@ export interface Env {
   KV_CACHE: KVNamespace
   VECTORIZE: VectorizeIndex
   AI: Ai
+  RATE_LIMITER?: RateLimit   // [[ratelimits]] binding — optional so tests/old configs still boot
 
   // ── Secrets (.dev.vars locally / wrangler secret put in production) ────────
   JWT_SECRET: string
@@ -34,6 +35,7 @@ export interface Env {
   LLM_TEMPERATURE: string            // default: "0.1"
   LLM_MAX_TOKENS: string             // default: "2000"
   NEURONS_DAILY_LIMIT: string        // default: "10000" — hard cap, stops AI calls when reached
+  LLM_LIMITS_ENABLED: string         // default: "true" — "false" keeps counting Neurons but never blocks
 
   // Scoring composition
   SCORE_LLM_WEIGHT: string           // default: "0.70"  (LLM dimension scores %)
@@ -55,10 +57,21 @@ export interface Env {
   EMAIL_MAX_RETRIES: string          // default: "3"
   EMAIL_RETRY_BACKOFF_SECONDS: string // default: "60"
 
-  // Rate limiting (KV-backed, fixed window)
+  // Rate limiting — native [[ratelimits]] binding, NOT KV (see middleware/rate-limit.ts)
   RATE_LIMIT_ENABLED: string         // default: "true"
-  RATE_LIMIT_REQUESTS: string        // default: "100" (per window)
-  RATE_LIMIT_WINDOW_SECONDS: string  // default: "60"
+  RATE_LIMIT_REQUESTS: string        // mirrors [[ratelimits]] simple.limit (for Retry-After/docs)
+  RATE_LIMIT_WINDOW_SECONDS: string  // mirrors [[ratelimits]] simple.period
+
+  // Login brute-force limiter (security control — intentionally has no kill switch)
+  LOGIN_MAX_ATTEMPTS: string           // default: "5"
+  LOGIN_ATTEMPT_WINDOW_SECONDS: string // default: "60"
+
+  // D1 + KV daily quota guardrails (~90% of Workers Free allowances)
+  QUOTA_LIMITS_ENABLED: string       // default: "true"
+  D1_MAX_ROWS_READ_DAILY: string     // default: "4500000"  (free tier: 5,000,000/day)
+  D1_MAX_ROWS_WRITTEN_DAILY: string  // default: "90000"    (free tier:   100,000/day)
+  KV_MAX_READS_DAILY: string         // default: "90000"    (free tier:   100,000/day)
+  KV_MAX_WRITES_DAILY: string        // default: "900"      (free tier:     1,000/day)
 
   // R2 budget guardrails — prevents accidental overage on free tier
   // Class A (PutObject)  = paid: $4.50/million, 1M free/month

@@ -20,6 +20,35 @@ LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
+LLM_LIMITS_ENABLED = "true"
+
+# ── Quota guardrails ─────────────────────────────────────────────────────────
+# Every *_ENABLED flag below is a kill switch: set "false" to stop ENFORCING
+# the cap. Usage counters keep incrementing either way, so /api/analytics
+# usage snapshots stay accurate while a limit is off.
+# Rate limiting uses the native [[ratelimits]] binding below, not KV.
+# The short-poll endpoints (candidate status, JD parse status) are exempted in
+# middleware/rate-limit.ts, so batch uploads are unaffected.
+RATE_LIMIT_ENABLED = "true"
+RATE_LIMIT_REQUESTS = "300"          # keep in sync with [[ratelimits]] simple.limit
+RATE_LIMIT_WINDOW_SECONDS = "60"     # keep in sync with [[ratelimits]] simple.period
+
+# Login brute-force limiter (no kill switch — security control, not a quota).
+LOGIN_MAX_ATTEMPTS = "5"
+LOGIN_ATTEMPT_WINDOW_SECONDS = "60"
+
+# D1 + KV daily quotas — ~90% of Workers Free, so we fail fast with a 503
+# instead of hitting Cloudflare's own hard error. Resets 00:00 UTC.
+# KV writes are the tightest constraint on the whole app: 1,000/day.
+QUOTA_LIMITS_ENABLED = "true"
+D1_MAX_ROWS_READ_DAILY = "4500000"   # free tier: 5,000,000/day
+D1_MAX_ROWS_WRITTEN_DAILY = "90000"  # free tier:   100,000/day
+KV_MAX_READS_DAILY = "90000"         # free tier:   100,000/day
+KV_MAX_WRITES_DAILY = "900"          # free tier:     1,000/day
+R2_LIMITS_ENABLED = "true"
+R2_MAX_STORAGE_BYTES = "10737418240"       # 10 GB free tier
+R2_MAX_CLASS_A_OPS_MONTHLY = "900000"      # 90% of 1M free Class A ops
+R2_MAX_CLASS_B_OPS_MONTHLY = "9000000"     # 90% of 10M free Class B ops
 
 # After running: wrangler d1 create synthire-prod
 # Replace REPLACE_WITH_YOUR_DATABASE_ID with the output database_id
@@ -52,6 +81,13 @@ index_name = "synthire-embeddings"
 [ai]
 binding = "AI"
 
+# Native rate limiter — local colo counters, costs no KV writes.
+# namespace_id must be unique per environment. period must be 10 or 60.
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 300, period = 60 }
+
 # Scheduled worker for email queue processor (runs every minute)
 [triggers]
 crons = ["* * * * *"]
@@ -73,6 +109,35 @@ LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
+LLM_LIMITS_ENABLED = "true"
+
+# ── Quota guardrails ─────────────────────────────────────────────────────────
+# Every *_ENABLED flag below is a kill switch: set "false" to stop ENFORCING
+# the cap. Usage counters keep incrementing either way, so /api/analytics
+# usage snapshots stay accurate while a limit is off.
+# Rate limiting uses the native [[ratelimits]] binding below, not KV.
+# The short-poll endpoints (candidate status, JD parse status) are exempted in
+# middleware/rate-limit.ts, so batch uploads are unaffected.
+RATE_LIMIT_ENABLED = "true"
+RATE_LIMIT_REQUESTS = "300"          # keep in sync with [[ratelimits]] simple.limit
+RATE_LIMIT_WINDOW_SECONDS = "60"     # keep in sync with [[ratelimits]] simple.period
+
+# Login brute-force limiter (no kill switch — security control, not a quota).
+LOGIN_MAX_ATTEMPTS = "5"
+LOGIN_ATTEMPT_WINDOW_SECONDS = "60"
+
+# D1 + KV daily quotas — ~90% of Workers Free, so we fail fast with a 503
+# instead of hitting Cloudflare's own hard error. Resets 00:00 UTC.
+# KV writes are the tightest constraint on the whole app: 1,000/day.
+QUOTA_LIMITS_ENABLED = "true"
+D1_MAX_ROWS_READ_DAILY = "4500000"   # free tier: 5,000,000/day
+D1_MAX_ROWS_WRITTEN_DAILY = "90000"  # free tier:   100,000/day
+KV_MAX_READS_DAILY = "90000"         # free tier:   100,000/day
+KV_MAX_WRITES_DAILY = "900"          # free tier:     1,000/day
+R2_LIMITS_ENABLED = "true"
+R2_MAX_STORAGE_BYTES = "10737418240"       # 10 GB free tier
+R2_MAX_CLASS_A_OPS_MONTHLY = "900000"      # 90% of 1M free Class A ops
+R2_MAX_CLASS_B_OPS_MONTHLY = "9000000"     # 90% of 10M free Class B ops
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -95,6 +160,11 @@ index_name = "synthire-embeddings"
 [env.production.ai]
 binding = "AI"
 
+[[env.production.ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1002"
+simple = { limit = 300, period = 60 }
+
 [env.production.triggers]
 crons = ["* * * * *"]
 
@@ -113,6 +183,35 @@ LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "1000"
+LLM_LIMITS_ENABLED = "true"
+
+# ── Quota guardrails ─────────────────────────────────────────────────────────
+# Every *_ENABLED flag below is a kill switch: set "false" to stop ENFORCING
+# the cap. Usage counters keep incrementing either way, so /api/analytics
+# usage snapshots stay accurate while a limit is off.
+# Rate limiting uses the native [[ratelimits]] binding below, not KV.
+# The short-poll endpoints (candidate status, JD parse status) are exempted in
+# middleware/rate-limit.ts, so batch uploads are unaffected.
+RATE_LIMIT_ENABLED = "true"
+RATE_LIMIT_REQUESTS = "300"          # keep in sync with [[ratelimits]] simple.limit
+RATE_LIMIT_WINDOW_SECONDS = "60"     # keep in sync with [[ratelimits]] simple.period
+
+# Login brute-force limiter (no kill switch — security control, not a quota).
+LOGIN_MAX_ATTEMPTS = "5"
+LOGIN_ATTEMPT_WINDOW_SECONDS = "60"
+
+# D1 + KV daily quotas — ~90% of Workers Free, so we fail fast with a 503
+# instead of hitting Cloudflare's own hard error. Resets 00:00 UTC.
+# KV writes are the tightest constraint on the whole app: 1,000/day.
+QUOTA_LIMITS_ENABLED = "true"
+D1_MAX_ROWS_READ_DAILY = "4500000"   # free tier: 5,000,000/day
+D1_MAX_ROWS_WRITTEN_DAILY = "90000"  # free tier:   100,000/day
+KV_MAX_READS_DAILY = "90000"         # free tier:   100,000/day
+KV_MAX_WRITES_DAILY = "900"          # free tier:     1,000/day
+R2_LIMITS_ENABLED = "true"
+R2_MAX_STORAGE_BYTES = "10737418240"       # 10 GB free tier
+R2_MAX_CLASS_A_OPS_MONTHLY = "900000"      # 90% of 1M free Class A ops
+R2_MAX_CLASS_B_OPS_MONTHLY = "9000000"     # 90% of 10M free Class B ops
 EMAIL_QUEUE_INTERVAL_SECONDS = "30"
 EMAIL_MAX_RETRIES = "3"
 
@@ -140,6 +239,11 @@ index_name = "synthire-embeddings-staging"
 
 [env.staging.ai]
 binding = "AI"
+
+[[env.staging.ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1003"
+simple = { limit = 300, period = 60 }
 
 [env.staging.triggers]
 crons = ["* * * * *"]

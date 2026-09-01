@@ -10,6 +10,8 @@ import {
   getEmailStats,
 } from '../db/queries/analytics'
 import { getR2Usage } from '../services/storage/r2-limits'
+import { buildR2LimitConfig } from '../services/storage/r2'
+import { buildQuotaConfig, getQuotaSnapshot } from '../services/budget/quotas'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -73,15 +75,19 @@ router.get('/r2-usage', async (c) => {
     throw new AppError('Forbidden: insufficient permissions', 403)
   }
 
-  const config = {
-    enabled: (c.env.R2_LIMITS_ENABLED ?? 'true') === 'true',
-    maxStorageBytes: parseInt(c.env.R2_MAX_STORAGE_BYTES ?? '10737418240', 10),
-    maxClassAOpsMonthly: parseInt(c.env.R2_MAX_CLASS_A_OPS_MONTHLY ?? '900000', 10),
-    maxClassBOpsMonthly: parseInt(c.env.R2_MAX_CLASS_B_OPS_MONTHLY ?? '9000000', 10),
+  const usage = await getR2Usage(c.env.KV_CACHE, buildR2LimitConfig(c.env))
+  return c.json(apiResponse(usage))
+})
+
+// GET /api/analytics/quota-usage  (recruiter/admin only — D1 + KV daily quotas)
+router.get('/quota-usage', async (c) => {
+  const user = c.get('user')
+  if (user.role === 'interviewer') {
+    throw new AppError('Forbidden: insufficient permissions', 403)
   }
 
-  const usage = await getR2Usage(c.env.KV_CACHE, config)
-  return c.json(apiResponse(usage))
+  const snapshot = await getQuotaSnapshot(c.env.DB, buildQuotaConfig(c.env))
+  return c.json(apiResponse(snapshot))
 })
 
 export default router

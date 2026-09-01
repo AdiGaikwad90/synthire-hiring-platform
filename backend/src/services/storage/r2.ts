@@ -7,10 +7,11 @@ import {
   recordDeletion,
   type R2LimitConfig,
 } from './r2-limits'
+import { isGuardrailEnabled } from '../../utils/env'
 
 export function buildR2LimitConfig(env: Env): R2LimitConfig {
   return {
-    enabled: (env.R2_LIMITS_ENABLED ?? 'true') === 'true',
+    enabled: isGuardrailEnabled(env.R2_LIMITS_ENABLED),
     maxStorageBytes: parseInt(env.R2_MAX_STORAGE_BYTES ?? '10737418240', 10),
     maxClassAOpsMonthly: parseInt(env.R2_MAX_CLASS_A_OPS_MONTHLY ?? '900000', 10),
     maxClassBOpsMonthly: parseInt(env.R2_MAX_CLASS_B_OPS_MONTHLY ?? '9000000', 10),

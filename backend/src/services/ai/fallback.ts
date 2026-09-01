@@ -5,7 +5,7 @@ import { callWorkersAI } from './workers-ai'
 import type { WorkersAIRequest } from './workers-ai'
 import type { Env } from '../../types/bindings'
 import { checkNeuronBudget, deductNeurons } from '../budget/neurons'
-import type { NeuronOperation } from '../budget/neurons'
+import type { NeuronOperation, NeuronLimitConfig } from '../budget/neurons'
 
 export interface LlmConfig {
   models: string[]
@@ -49,14 +49,14 @@ function extractJson(raw: string): string {
 export async function callWithFallback(
   ai: Ai,
   kv: KVNamespace,
-  dailyLimit: number,
+  neuronConfig: NeuronLimitConfig,
   messages: WorkersAIRequest['messages'],
   validateFn: (parsed: unknown) => boolean,
   operation: NeuronOperation,
   config: LlmConfig = DEFAULT_CONFIG
 ): Promise<unknown> {
   // Hard stop — check budget before attempting any model
-  await checkNeuronBudget(kv, operation, dailyLimit)
+  await checkNeuronBudget(kv, operation, neuronConfig)
 
   const errors: string[] = []
 
