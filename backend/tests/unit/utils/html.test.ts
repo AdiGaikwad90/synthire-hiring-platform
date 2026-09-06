@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { escapeHtml, safeHref } from '../utils/html'
+import { escapeHtml, safeHref } from '../../../src/utils/html'
 
 describe('escapeHtml', () => {
   it('escapes & < > " \' /', () => {

@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src"
+    "lint": "eslint src tests",
+    "test:unit": "vitest run --project unit",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.0",
@@ -32,6 +34,7 @@
     "@cloudflare/workers-types": "^4.20241106.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/pdf-parse": "^1.1.4",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^9.39.5",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.68.0",

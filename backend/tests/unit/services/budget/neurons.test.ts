@@ -5,8 +5,8 @@ import {
   deductNeurons,
   buildNeuronLimitConfig,
   NEURON_COSTS,
-} from '../services/budget/neurons'
-import type { Env } from '../types/bindings'
+} from '../../../../src/services/budget/neurons'
+import type { Env } from '../../../../src/types/bindings'
 
 // Minimal KV stand-in — checkNeuronBudget only needs get/put.
 function stubKV(seed: Record<string, string> = {}) {

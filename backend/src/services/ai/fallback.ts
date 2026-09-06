@@ -32,7 +32,7 @@ export function buildLlmConfig(env: Env): LlmConfig {
 
 // Strip markdown code fences and find the first {...} or [...] JSON object in the response.
 // Many smaller models wrap their JSON in ```json ... ``` or add prose before/after.
-function extractJson(raw: string): string {
+export function extractJson(raw: string): string {
   // Remove ```json ... ``` or ``` ... ``` fences
   const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenceMatch) return fenceMatch[1].trim()
