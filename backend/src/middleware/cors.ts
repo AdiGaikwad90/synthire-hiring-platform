@@ -7,10 +7,18 @@ const ALLOWED_ORIGINS = new Set([
   // 'https://app.synthire.io',
 ])
 
-function isAllowedOrigin(origin: string, env: Env): boolean {
+export function isAllowedOrigin(origin: string, env: Env): boolean {
+  if (!origin) return false
+
   if (env.ENVIRONMENT !== 'production') {
     if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true
   }
+
+  // Honour the per-environment FRONTEND_ORIGIN. Without this, staging's own
+  // frontend is CORS-blocked by the staging backend, because the hardcoded
+  // list only knows the production Pages URL.
+  if (env.FRONTEND_ORIGIN && origin === env.FRONTEND_ORIGIN) return true
+
   return ALLOWED_ORIGINS.has(origin)
 }
 
