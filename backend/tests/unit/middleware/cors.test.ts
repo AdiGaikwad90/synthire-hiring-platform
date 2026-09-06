@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { isAllowedOrigin } from '../middleware/cors'
-import type { Env } from '../types/bindings'
+import { isAllowedOrigin } from '../../../src/middleware/cors'
+import type { Env } from '../../../src/types/bindings'
 
 const PROD = 'https://synthire-frontend.pages.dev'
 const STAGING = 'https://staging.synthire-frontend.pages.dev'

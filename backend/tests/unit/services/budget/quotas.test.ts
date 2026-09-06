@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
-import { meterD1, meterKV, newTally } from '../services/budget/meters'
+import { meterD1, meterKV, newTally } from '../../../../src/services/budget/meters'
 import {
   buildQuotaConfig,
   assertQuotaAvailable,
   readUsage,
   QUOTA_DEFAULTS,
   utcDay,
-} from '../services/budget/quotas'
-import type { Env } from '../types/bindings'
+} from '../../../../src/services/budget/quotas'
+import type { Env } from '../../../../src/types/bindings'
 
 // ── Stubs ────────────────────────────────────────────────────────────────────
 

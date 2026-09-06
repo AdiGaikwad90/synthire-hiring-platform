@@ -44,8 +44,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      - name: Test
-        run: npm test
+      - name: Test + coverage thresholds
+        run: npm run test:coverage
 
   frontend:
     name: Frontend — typecheck
