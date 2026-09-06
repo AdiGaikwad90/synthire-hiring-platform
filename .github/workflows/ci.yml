@@ -199,7 +199,15 @@ jobs:
   deploy-frontend-production:
     name: Deploy frontend → production
     needs: [deploy-backend-production]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # always() is required here too. An `if:` without a status function gets an
+    # implicit success(), and success() checks ALL TRANSITIVE ancestors — the
+    # skipped staging jobs are ancestors via deploy-backend-production, so this
+    # job was skipped even though its direct dependency succeeded.
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
+      && needs['deploy-backend-production'].result == 'success'
     runs-on: ubuntu-latest
     environment: production
     defaults:
