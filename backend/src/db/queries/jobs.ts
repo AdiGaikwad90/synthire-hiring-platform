@@ -96,7 +96,7 @@ export async function listJobs(
 
 // ── Create job ────────────────────────────────────────────────────────────────
 
-type CreateJobData = {
+export type CreateJobData = {
   company_id: string
   recruiter_id: string
   title: string

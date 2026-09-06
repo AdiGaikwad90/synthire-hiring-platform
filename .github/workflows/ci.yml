@@ -44,7 +44,10 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      - name: Test + coverage thresholds
+      - name: Test (unit + integration)
+        run: npm test
+      - name: Coverage thresholds
+        # Unit project only — v8 coverage cannot instrument workerd.
         run: npm run test:coverage
 
   frontend:

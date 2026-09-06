@@ -1,0 +1,81 @@
+# Wrangler config used ONLY by the vitest `integration` project.
+# Never deployed — see package.json deploy scripts, which use wrangler.toml.
+#
+# Why this file exists instead of reusing wrangler.toml:
+#   [ai] and [[vectorize]] have NO local Miniflare simulator. They only accept
+#   a remote proxy connection, and pointing the test pool at them makes workerd
+#   segfault on startup. Omitting them here is the fix; tests stub env.AI and
+#   env.VECTORIZE explicitly instead.
+#
+# D1 / KV / R2 below ARE real implementations backed by local storage, so
+# SQLite semantics (constraints, type affinity, UPDATE...RETURNING) behave as
+# they do in production. Ids are placeholders — Miniflare never contacts
+# Cloudflare and creates fresh local storage per run.
+
+name = "synthire-backend-test"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "test"
+FRONTEND_ORIGIN = "http://localhost:3000"
+JWT_EXPIRY_SECONDS = "900"
+REFRESH_TOKEN_EXPIRY_SECONDS = "2592000"
+MAX_UPLOAD_BYTES = "10485760"
+
+EMAIL_PROVIDER = "resend"
+RESEND_FROM_EMAIL = "test@synthire.test"
+RESEND_FROM_NAME = "Synthire Test"
+SENDGRID_FROM_EMAIL = "test@synthire.test"
+EMAIL_QUEUE_INTERVAL_SECONDS = "30"
+EMAIL_MAX_RETRIES = "3"
+EMAIL_QUEUE_BATCH_SIZE = "10"
+EMAIL_RETRY_BACKOFF_SECONDS = "60"
+
+LLM_MODEL_PRIMARY = "@cf/meta/llama-3.1-8b-instruct-awq"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+LLM_TEMPERATURE = "0.1"
+LLM_MAX_TOKENS = "800"
+NEURONS_DAILY_LIMIT = "10000"
+LLM_LIMITS_ENABLED = "true"
+
+# Off by default so tests are not throttled; the rate-limit tests turn it on
+# per-test with their own env override.
+RATE_LIMIT_ENABLED = "false"
+RATE_LIMIT_REQUESTS = "100"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+
+LOGIN_MAX_ATTEMPTS = "5"
+LOGIN_ATTEMPT_WINDOW_SECONDS = "60"
+
+QUOTA_LIMITS_ENABLED = "true"
+D1_MAX_ROWS_READ_DAILY = "4500000"
+D1_MAX_ROWS_WRITTEN_DAILY = "90000"
+KV_MAX_READS_DAILY = "90000"
+KV_MAX_WRITES_DAILY = "900"
+
+R2_LIMITS_ENABLED = "true"
+R2_MAX_STORAGE_BYTES = "10737418240"
+R2_MAX_CLASS_A_OPS_MONTHLY = "900000"
+R2_MAX_CLASS_B_OPS_MONTHLY = "9000000"
+
+# Test-only fake secrets. Real ones live in .dev.vars / wrangler secret put;
+# tests must not depend on a developer's local .dev.vars existing.
+JWT_SECRET = "test-jwt-secret-at-least-32-characters-long-xxxxx"
+RESEND_API_KEY = "re_test_key"
+RESEND_WEBHOOK_SECRET = "whsec_test"
+SENDGRID_API_KEY = "SG.test"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "synthire-test"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "src/db/migrations"
+
+[[kv_namespaces]]
+binding = "KV_CACHE"
+id = "test_kv_namespace"
+
+[[r2_buckets]]
+binding = "RESUME_BUCKET"
+bucket_name = "synthire-resumes-test"
