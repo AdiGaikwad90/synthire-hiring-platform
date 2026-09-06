@@ -25,7 +25,13 @@ export async function processEmailQueue(env: Env): Promise<void> {
      WHERE id IN (
        SELECT id FROM email_queue
        WHERE status = 'pending'
-         AND scheduled_for <= datetime('now')
+         -- datetime() is REQUIRED on both sides. scheduled_for holds a JS
+         -- toISOString() value ("2026-09-06T21:18:28.110Z") while
+         -- datetime('now') returns "2026-09-06 21:19:28". Comparing them as
+         -- raw strings puts 'T' (0x54) after ' ' (0x20), so a row scheduled a
+         -- minute ago compares as GREATER than now and is never claimed --
+         -- emails only became eligible once the UTC date rolled over.
+         AND datetime(scheduled_for) <= datetime('now')
          AND retry_count < max_retries
          AND sent_at IS NULL
          AND failed_at IS NULL
