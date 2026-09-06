@@ -170,7 +170,7 @@ crons = ["* * * * *"]
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-FRONTEND_ORIGIN = "https://synthire-staging.pages.dev"
+FRONTEND_ORIGIN = "https://staging.synthire-frontend.pages.dev"  # Pages branch preview, not a separate project
 JWT_EXPIRY_SECONDS = "86400"
 REFRESH_TOKEN_EXPIRY_SECONDS = "2592000"
 MAX_UPLOAD_BYTES = "10485760"

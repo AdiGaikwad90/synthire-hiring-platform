@@ -6,7 +6,26 @@ on:
   pull_request:
     branches: [main]
 
+# Never run two deploys of the same environment at once, and never cancel one
+# mid-flight — a cancelled run can leave a migration applied with no Worker.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# ── Staging toggle ───────────────────────────────────────────────────────────
+# Repository variable DEPLOY_STAGING controls whether the staging rehearsal runs
+# (Settings → Secrets and variables → Actions → Variables).
+#   "true"            → main pushes deploy staging first, then production
+#   anything else/unset → staging is skipped, production deploys directly
+# Unset means OFF, so staging never burns free-tier quota by accident.
+# Production is NOT skipped when staging is: see its `if:` below.
+
+env:
+  STAGING_API_URL: https://synthire-backend-staging.adigaikwad4321.workers.dev
+  PRODUCTION_API_URL: https://synthire-backend-production.adigaikwad4321.workers.dev
+
 jobs:
+  # ── Tests ───────────────────────────────────────────────────────────────────
   backend:
     name: Backend — typecheck + test
     runs-on: ubuntu-latest
@@ -21,6 +40,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Test
@@ -40,5 +61,166 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+
+  # ── Staging ─────────────────────────────────────────────────────────────────
+  deploy-backend-staging:
+    name: Deploy backend → staging
+    needs: [backend, frontend]
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
+      && vars.DEPLOY_STAGING == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+
+      - name: Pending migrations
+        run: npx wrangler d1 migrations list synthire-staging --remote --env staging
+
+      # Separate from the deploy so a migration failure is unmistakable in the
+      # log rather than buried in an `&&` chain.
+      - name: Apply migrations (staging DB)
+        run: npx wrangler d1 migrations apply synthire-staging --remote --env staging
+
+      - name: Deploy Worker
+        run: npx wrangler deploy --env staging
+
+      - name: Smoke test /health
+        run: |
+          for i in $(seq 1 6); do
+            body=$(curl -fsS --max-time 10 "$STAGING_API_URL/health" || true)
+            echo "attempt $i: $body"
+            case "$body" in *'"ok":true'*) echo "staging healthy"; exit 0;; esac
+            sleep 5
+          done
+          echo "::error::staging /health never reported ok:true — halting before production"
+          exit 1
+
+  deploy-frontend-staging:
+    name: Deploy frontend → staging preview
+    needs: [deploy-backend-staging]
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
+      && vars.DEPLOY_STAGING == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+
+      # Points the staging UI at the staging API. Must match [env.staging.vars]
+      # FRONTEND_ORIGIN in wrangler.toml or the backend will CORS-block it.
+      - name: Build (against staging API)
+        run: npm run build:cf
+        env:
+          NEXT_PUBLIC_API_URL: ${{ env.STAGING_API_URL }}
+
+      - name: Deploy to Pages branch preview
+        run: npx wrangler pages deploy --branch staging
+
+  # ── Production ──────────────────────────────────────────────────────────────
+  deploy-backend-production:
+    name: Deploy backend → production
+    needs: [backend, frontend, deploy-backend-staging, deploy-frontend-staging]
+    if: >-
+      always()
+      && github.ref == 'refs/heads/main'
+      && github.event_name == 'push'
+      && needs.backend.result == 'success'
+      && needs.frontend.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs['deploy-backend-staging'].result)
+      && contains(fromJSON('["success","skipped"]'), needs['deploy-frontend-staging'].result)
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+
+      - name: Pending migrations
+        run: npx wrangler d1 migrations list synthire-prod --remote
+
+      - name: Apply migrations (production DB)
+        run: npx wrangler d1 migrations apply synthire-prod --remote
+
+      - name: Deploy Worker
+        run: npx wrangler deploy --env production
+
+      - name: Smoke test /health
+        run: |
+          for i in $(seq 1 6); do
+            body=$(curl -fsS --max-time 10 "$PRODUCTION_API_URL/health" || true)
+            echo "attempt $i: $body"
+            case "$body" in *'"ok":true'*) echo "production healthy"; exit 0;; esac
+            sleep 5
+          done
+          echo "::error::production /health never reported ok:true — consider: npx wrangler rollback --env production"
+          exit 1
+
+  deploy-frontend-production:
+    name: Deploy frontend → production
+    needs: [deploy-backend-production]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+
+      - name: Build (against production API)
+        run: npm run build:cf
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+
+      - name: Deploy to Pages production
+        run: npx wrangler pages deploy --branch main

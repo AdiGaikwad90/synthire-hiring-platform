@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "export $(grep -v '^#' .env.production 2>/dev/null | xargs) 2>/dev/null; npx @cloudflare/next-on-pages",
+    "build:cf": "set -a; [ -f .env.production ] && . ./.env.production; set +a; npm run check:env && npx @cloudflare/next-on-pages",
     "deploy": "npm run build:cf && wrangler pages deploy",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:env": "node -e \"if(!process.env.NEXT_PUBLIC_API_URL){console.error('\\n  NEXT_PUBLIC_API_URL is not set.\\n'+'  Local: put it in frontend/.env.local (or .env.production).\\n'+'  CI:    set the NEXT_PUBLIC_API_URL repository variable.\\n');process.exit(1)}else{console.log('NEXT_PUBLIC_API_URL =',process.env.NEXT_PUBLIC_API_URL)}\""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.11",
