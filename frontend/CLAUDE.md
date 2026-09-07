@@ -9,7 +9,7 @@ Next.js 15 App Router UI (React 18) for the Synthire ATS. Fully wired to the Wor
 ```bash
 npm run dev        # http://localhost:3000 — backend must be up on :8787
 npm run typecheck  # tsc --noEmit — must exit 0
-npm run lint       # next lint — currently clean, keep it that way
+npm run lint       # eslint . (flat config) — clean, keep it that way
 npm test           # vitest — LOGIC only (lib/, middleware). No component rendering.
 npm run test:coverage
 npm run deploy     # next-on-pages build + wrangler pages deploy
@@ -17,7 +17,10 @@ npm run deploy     # next-on-pages build + wrangler pages deploy
 
 Only one env var, in `.env.local` (gitignored): `NEXT_PUBLIC_API_URL=http://localhost:8787`.
 
-> `next lint` is deprecated and removed in Next.js 16. Migrate with `npx @next/codemod@canary next-lint-to-eslint-cli .` when convenient — the backend already uses the flat-config ESLint CLI.
+> Migrated off `next lint` (removed in Next 16). Both projects now run the
+> ESLint 9 flat-config CLI. `eslint-config-next` still ships legacy
+> `.eslintrc`-shaped configs, so `eslint.config.mjs` bridges it through
+> `FlatCompat` — importing it directly gives a CJS/ESM resolution error.
 
 ---
 
