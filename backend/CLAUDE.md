@@ -61,7 +61,8 @@ Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullabl
 - Access token 15 min (`JWT_EXPIRY_SECONDS`); refresh token 30 days, stored SHA-256 hashed in `refresh_tokens`, rotated on every use by `POST /api/auth/refresh`
 - Middleware reads `Authorization: Bearer` first, falls back to the `synthire_token` cookie
 - Login/signup return `{ user, token }` in the body **and** set HttpOnly cookies
-- **Interviewers are scoped to their own interviews** — routes enforce this with 403, not 404. Preserve it in new queries.
+- **Role guards live in `src/middleware/authorize.ts`** — `requireRecruiter()`, `requireAdmin()`, `requireOwnInterview()`. Use them; do not hand-roll `if (user.role === 'interviewer')` again. They are fail-closed allowlists, so an unrecognised role is denied.
+- **Interviewers are scoped to their own interviews** — 403, not 404. The whole `/api/analytics` router is recruiter/admin only via a router-level `requireRecruiter`, registered **after** `authMiddleware` (`c.get('user')` is empty before it). A new analytics endpoint inherits the guard automatically.
 - Signup auto-creates `email_preferences` with a random `unsubscribe_token`
 - Login rate limit: `LOGIN_MAX_ATTEMPTS` (5) per `LOGIN_ATTEMPT_WINDOW_SECONDS` (60) per email, KV key `rl:login:{email}`. **No kill switch by design** — it is a security control, not a quota guard.
 

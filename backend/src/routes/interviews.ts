@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zv } from '../types/api'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
+import { requireOwnInterview } from '../middleware/authorize'
 import {
   createInterviewSchema,
   submitFeedbackSchema,
@@ -230,10 +231,7 @@ router.get('/:id', async (c) => {
     throw new AppError('Interview not found', 404)
   }
 
-  // Interviewers can only see their own interviews
-  if (user.role === 'interviewer' && interview.interviewer_id !== user.sub) {
-    throw new AppError('Access denied', 403)
-  }
+  requireOwnInterview(user, interview.interviewer_id)
 
   return c.json(apiResponse(interview))
 })
@@ -264,9 +262,7 @@ router.get('/:id/feedback', async (c) => {
   const interviewId = c.req.param('id')
   const interview = await getInterview(c.env.DB, interviewId, user.company_id)
   if (!interview) throw new AppError('Interview not found', 404)
-  if (user.role === 'interviewer' && interview.interviewer_id !== user.sub) {
-    throw new AppError('Forbidden', 403)
-  }
+  requireOwnInterview(user, interview.interviewer_id)
   const feedback = await getFeedback(c.env.DB, interviewId)
   return c.json(apiResponse(feedback))
 })
@@ -284,9 +280,7 @@ router.post('/:id/feedback', zv('json', submitFeedbackSchema), async (c) => {
   }
 
   // Interviewers can only submit feedback for their own interviews
-  if (user.role === 'interviewer' && interview.interviewer_id !== user.sub) {
-    throw new AppError('Forbidden: you can only submit feedback for your own interviews', 403)
-  }
+  requireOwnInterview(user, interview.interviewer_id)
 
   const feedback = await createFeedback(db, {
     interview_id: interviewId,

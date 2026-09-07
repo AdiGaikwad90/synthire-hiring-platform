@@ -141,22 +141,32 @@ describe('role scoping', () => {
     expect(res.status).toBe(200)
   })
 
-  /**
-   * FINDING, not a passing contract: only 3 of 8 analytics routes carry the
-   * interviewer guard. /funnel, /time-to-hire, /summary, /activity and
-   * /sources are all reachable by an interviewer, who is documented elsewhere
-   * as scoped to their own interviews — so company-wide hiring analytics are
-   * currently visible to that role.
-   *
-   * This asserts TODAY'S behaviour so the gap is visible and measured rather
-   * than forgotten. If you tighten the guard, this test SHOULD fail — flip the
-   * expectation to 403 at that point and delete this comment.
-   */
-  it('currently does NOT scope company-wide analytics away from interviewers', async () => {
+  // Previously only 3 of 8 analytics routes carried the guard, so /funnel,
+  // /time-to-hire, /summary, /activity and /sources were reachable by an
+  // interviewer — a role scoped to its own interviews. The guard now sits on
+  // the router, so a new endpoint inherits it and cannot be missed.
+  it('403s an interviewer on EVERY analytics route', async () => {
     const token = await asInterviewer()
-    for (const path of ['/api/analytics/summary', '/api/analytics/funnel', '/api/analytics/activity']) {
+    const routes = [
+      '/api/analytics/summary',
+      '/api/analytics/funnel',
+      '/api/analytics/time-to-hire',
+      '/api/analytics/activity',
+      '/api/analytics/sources',
+      '/api/analytics/email-stats',
+      '/api/analytics/r2-usage',
+      '/api/analytics/quota-usage',
+    ]
+    for (const path of routes) {
       const res = await SELF.fetch(`https://test.local${path}`, { headers: authHeader(token) })
-      expect(res.status, `${path} — update this test if the guard is added`).toBe(200)
+      expect(res.status, `${path} leaks company-wide analytics to an interviewer`).toBe(403)
+    }
+  })
+
+  it('still allows a recruiter through all of them', async () => {
+    for (const path of ['/api/analytics/summary', '/api/analytics/funnel', '/api/analytics/activity']) {
+      const res = await SELF.fetch(`https://test.local${path}`, { headers: authHeader(recruiterToken) })
+      expect(res.status, `${path} broke for recruiters`).toBe(200)
     }
   })
 })

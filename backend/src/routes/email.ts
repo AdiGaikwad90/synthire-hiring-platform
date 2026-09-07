@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
+import { requireRecruiter } from '../middleware/authorize'
 import { apiResponse, paginatedResponse, AppError, updateEmailPreferencesSchema } from '../types/api'
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -215,9 +216,7 @@ router.get(
   async (c) => {
     const user = c.get('user')
 
-    if (user.role === 'interviewer') {
-      throw new AppError('Forbidden', 403)
-    }
+    requireRecruiter(user)
 
     const { type, status, page, limit } = c.req.valid('query')
 
