@@ -1,6 +1,8 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import type { CreateJobData } from '../../src/db/queries/jobs'
 import { DEFAULT_SCORING_DIMENSIONS } from '../../src/services/scoring/dimensions'
+import { signToken } from '../../src/middleware/auth'
+import type { JWTPayload } from '../../src/types/auth'
 
 /**
  * Row builders for integration tests.
@@ -118,3 +120,28 @@ export function makeJobData(
     ...over,
   }
 }
+
+// ── Auth helpers for SELF-based route tests ──────────────────────────────────
+
+/**
+ * Mints a real HS256 token with the test JWT_SECRET, so route tests exercise
+ * the actual auth middleware rather than bypassing it.
+ */
+export async function signTestToken(
+  secret: string,
+  over: Partial<Omit<JWTPayload, 'iat' | 'exp'>> = {},
+): Promise<string> {
+  return signToken(
+    {
+      sub: over.sub ?? testId('usr'),
+      email: over.email ?? 'test@synthire.test',
+      name: over.name ?? 'Test User',
+      role: over.role ?? 'recruiter',
+      company_id: over.company_id ?? testId('co'),
+    },
+    secret,
+    900,
+  )
+}
+
+export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` })
