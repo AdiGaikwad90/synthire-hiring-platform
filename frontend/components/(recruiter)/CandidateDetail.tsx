@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Card, Badge, Avatar, ScoreRing, ScoreBar, ScorePill, StagePill, AIPill } from "@/components/ui";
+import { AIPill, Avatar, Badge, Button, Card, IconButton, Modal, ScoreBar, ScorePill, ScoreRing, StagePill } from "@/components/ui";
 import { useCandidate, useUpdateCandidateStage, useGenerateQuestions } from "@/hooks/queries/useCandidates";
 import { useJob } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
@@ -10,6 +10,7 @@ import { ScheduleModal } from "./ScheduleModal";
 import { ActivityRow } from "./Dashboard";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
+import { formatDate } from "@/lib/utils";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd, useEffect: useE_cd } = React;
@@ -108,7 +109,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
       {/* Header */}
       <div className="tsCD-header">
         <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, minWidth: 0 }}>
-          <button className="tsIconBtn" onClick={() => router.push("/candidates")}><Icon.ArrowLeft size={16}/></button>
+          <IconButton icon={<Icon.ArrowLeft size={16}/>} label="Back to candidates" onClick={() => router.push("/candidates")} />
           <Avatar name={c.name} color={c.avatar} size={42}/>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -265,7 +266,7 @@ function OverviewTab({ c }: any) {
         <div style={{ padding: 22, position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <AIPill>AI score breakdown</AIPill>
-            <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${new Date(c.updated_at).toLocaleDateString()}` : 'Scored recently'}</span>
+            <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${formatDate(c.updated_at)}` : 'Scored recently'}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
             <ScoreRing score={c.score} size={132} stroke={9} label="Match"/>

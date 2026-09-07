@@ -2,13 +2,14 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Avatar, Badge, AIPill, Textarea, useToast, ScorePill } from "@/components/ui";
+import { AIPill, Avatar, Badge, Button, IconButton, Modal, ScorePill, Textarea, useToast } from "@/components/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useInterview, useSubmitFeedback, useInterviewFeedback } from "@/hooks/queries/useInterviews";
 import { useCandidate, useGenerateQuestions, useInterviewQuestions } from "@/hooks/queries/useCandidates";
 import { useJob } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 const { useState: useS_ic, useEffect: useE_ic, useRef: useR_ic } = React;
 
@@ -67,12 +68,12 @@ function InterviewConduct({ interviewId }: { interviewId?: string }) {
   };
 
   const scheduledDate = new Date(interview.scheduled_at);
-  const formattedDate = scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const formattedDate = formatDateTime(scheduledDate);
 
   return (
     <div className="tsConduct">
       <div className="tsConduct-head">
-        <button className="tsIconBtn" onClick={() => router.back()}><Icon.ArrowLeft size={16}/></button>
+        <IconButton icon={<Icon.ArrowLeft size={16}/>} label="Go back" onClick={() => router.back()} />
         <Avatar name={c.name} size={36}/>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -574,7 +575,7 @@ function PrevFeedbackTab({ feedback }: { feedback: any }) {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14, background: "var(--surface-2)", borderRadius: 10 }}>
         <div style={{ flex: 1 }}>
-          <div className="small" style={{ color: "var(--muted)", marginBottom: 2 }}>Submitted {new Date(feedback.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+          <div className="small" style={{ color: "var(--muted)", marginBottom: 2 }}>Submitted {formatDate(feedback.created_at)}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontWeight: 600, fontSize: 15, color: recColors[feedback.recommendation] ?? "var(--text)" }}>
               {recLabels[feedback.recommendation] ?? feedback.recommendation}

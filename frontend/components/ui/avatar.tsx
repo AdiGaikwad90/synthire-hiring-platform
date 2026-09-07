@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import { initials } from "@/lib/utils";
 
 export interface AvatarProps {
   name: string;
@@ -10,12 +11,7 @@ export interface AvatarProps {
 }
 
 export function Avatar({ name, color, size = 32, ring }: AvatarProps) {
-  const ini = (name || "??")
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const ini = initials(name) || "??";
   const c = color || "#6366F1";
   return (
     <div

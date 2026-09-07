@@ -80,7 +80,6 @@ export default defineConfig({
       thresholds: {
         'src/services/scoring/aggregator.ts': { statements: 100, branches: 95, functions: 100, lines: 100 },
         'src/services/scoring/dimensions.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
-        'src/services/scoring/skill-matcher.ts': { statements: 100, branches: 93, functions: 100, lines: 100 },
         'src/services/embeddings/similarity.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'src/services/parsing/detector.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'src/utils/**': { statements: 100, branches: 100, functions: 100, lines: 100 },

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { Icon } from "@/lib/icons";
-import { Modal, Button, Card, Badge, Avatar, Input, Textarea, Toggle, Select, useToast } from "@/components/ui";
+import { Avatar, Badge, Button, Card, IconButton, Input, Modal, Select, Textarea, Toggle, useToast } from "@/components/ui";
 import { useInterviewTypes, useCreateInterviewType, useUpdateInterviewType, useDeleteInterviewType } from "@/hooks/queries/useSettings";
 
 // Settings — Interview Rounds Configuration
@@ -115,7 +115,7 @@ function Settings() {
                     <Card key={t.name} hoverable>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
                         <Icon.FileText size={20} style={{ color: "var(--muted)" }}/>
-                        <button className="tsIconBtn"><Icon.MoreH size={14}/></button>
+                        <IconButton icon={<Icon.MoreH size={14}/>} label="More options" />
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 14 }}>{t.name}</div>
                       <div className="small" style={{ color: "var(--muted)" }}>{t.rounds} rounds · used by {t.used} jobs</div>

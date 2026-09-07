@@ -73,23 +73,3 @@ export async function deductNeurons(
   console.info(`[neurons] ${operation} cost=${cost} total=${newTotal}`)
   return newTotal
 }
-
-export async function getNeuronStatus(kv: KVNamespace, config: NeuronLimitConfig): Promise<{
-  used: number
-  limit: number
-  remaining: number
-  date: string
-  resetInSeconds: number
-  limits_enabled: boolean
-}> {
-  const date = new Date().toISOString().slice(0, 10)
-  const used = parseInt((await kv.get(`neurons:daily:${date}`)) ?? '0', 10)
-  return {
-    used,
-    limit: config.dailyLimit,
-    remaining: Math.max(0, config.dailyLimit - used),
-    date,
-    resetInSeconds: secondsUntilMidnightUTC(),
-    limits_enabled: config.enabled,
-  }
-}
