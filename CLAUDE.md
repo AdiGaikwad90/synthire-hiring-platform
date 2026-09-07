@@ -42,13 +42,24 @@ Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and f
 
 Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own code — a non-zero exit is a real error in `src/`, not dependency noise. Don't turn it off: `unpdf`, `mammoth`, and `tinybench` ship `.d.ts` files that produce ~88 errors under this repo's `lib`/`types` settings.
 
-**CI** (`.github/workflows/ci.yml`, on push to `main`/`feature/**` and PRs to `main`): backend typecheck + test, frontend typecheck. Don't push work that fails these.
+**CI/CD** (`.github/workflows/ci.yml`). On every push to `main`/`feature/**` and PRs to `main`: backend lint + typecheck + tests (unit *and* integration) + coverage thresholds, frontend lint + typecheck.
+
+**A push to `main` deploys automatically** — backend to Cloudflare Workers (migrations first), then the frontend to Pages. Set repository variable `DEPLOY_STAGING=true` to rehearse against staging first; unset means staging is skipped. A green run is not proof everything shipped — check the deploy jobs say `success`, not `skipped`.
 
 ---
 
 ## Testing
 
-@TESTING_RULES.md
+@TESTING.md
+
+`TESTING_RULES.md` is the manual pre-release browser checklist. `TESTING.md` is
+the automated strategy CI enforces — read that one before writing a test.
+
+## UI conventions
+
+Before adding or changing UI, read `UI_CONVENTIONS.md` (which primitive to use,
+where it lives, what not to hand-roll) alongside
+`frontend/FE_DESIGN_GUIDELINES.md` (visual direction).
 
 ---
 
