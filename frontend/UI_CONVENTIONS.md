@@ -1,11 +1,18 @@
 # UI_CONVENTIONS.md — Synthire frontend conventions
 
 The rules for building UI so a screen added in six months looks and behaves like
-one added today. `frontend/FE_DESIGN_GUIDELINES.md` covers *visual* direction
+one added today. `FE_DESIGN_GUIDELINES.md` covers *visual* direction
 (colour, spacing, tone); this file covers **which component to reach for, where
 it lives, and what not to hand-roll**.
 
 Read this before adding a screen or a component.
+
+> **Keep this file current.** Adding a `components/ui/` primitive, adding
+> anything reusable to `lib/` or `components/shared/`, or changing an existing
+> component's API means updating this doc **in the same PR** — the catalogue in
+> §2 and the layout in §3 are the parts that go stale first. Fixing a row in the
+> known-drift table in §9 means **deleting that row**. See "Keeping these docs
+> current" in the root `CLAUDE.md`.
 
 ---
 
@@ -26,7 +33,7 @@ Never deep-import (`@/components/ui/button`). The barrel is the public surface.
 
 ## 2. The primitive catalogue
 
-Everything in `frontend/components/ui/`. This is the complete list — if you are
+Everything in `components/ui/`. This is the complete list — if you are
 about to build something not on it, that is the moment to ask whether it belongs
 here rather than in a screen file.
 
@@ -61,7 +68,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
 ## 3. Where things live
 
 ```
-frontend/
+(frontend/)
 ├── app/                      # routes only — thin. A page renders ONE component.
 │   ├── (auth)/ (recruiter)/ (interviewer)/    # route groups = layout boundaries
 │   └── globals.css           # ALL styling: 71 tokens, 431 .ts* classes
@@ -164,7 +171,7 @@ Same rule for initials: `initials()` from `@/lib/utils`, or just use `Avatar`.
 5. Every control from `@/components/ui`. Zero raw `<button>`, `<select>`, `<input>`.
 6. Colours from tokens; check it in both themes and both densities.
 7. Dates via `formatDate()`.
-8. Add the route to the table in `frontend/CLAUDE.md`.
+8. Add the route to the table in `CLAUDE.md` (this folder).
 9. `npm run lint` and `npm run typecheck` clean.
 10. Walk it in the browser per `TESTING_RULES.md` before calling it done.
 

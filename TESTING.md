@@ -6,6 +6,10 @@ pre-release browser checklist**; this file is the automated strategy CI enforces
 Read this before writing a test. If a rule here and a rule there disagree, this
 file wins for anything CI runs.
 
+> **Keep this file current.** Changing the suites, the tier assignments, the
+> coverage thresholds, or the workers-pool constraints means updating this doc
+> **in the same PR**. See "Keeping these docs current" in the root `CLAUDE.md`.
+
 ---
 
 ## The suites

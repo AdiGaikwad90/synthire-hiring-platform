@@ -55,11 +55,32 @@ Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own co
 `TESTING_RULES.md` is the manual pre-release browser checklist. `TESTING.md` is
 the automated strategy CI enforces — read that one before writing a test.
 
-## UI conventions
+## Keeping these docs current
 
-Before adding or changing UI, read `UI_CONVENTIONS.md` (which primitive to use,
-where it lives, what not to hand-roll) alongside
-`frontend/FE_DESIGN_GUIDELINES.md` (visual direction).
+**Docs are part of the change, not a follow-up.** A PR that makes any of the
+changes below and does not update the matching doc is incomplete — stale docs
+are worse than none, because they get trusted.
+
+| You changed | Update |
+|---|---|
+| Added a `components/ui/` primitive | primitive catalogue in `frontend/UI_CONVENTIONS.md` |
+| Added anything reusable to `frontend/lib/` or `components/shared/` | `frontend/UI_CONVENTIONS.md` (§3 where things live, §6 formatting) |
+| Changed an existing component's props or behaviour | `frontend/UI_CONVENTIONS.md`, and `frontend/CLAUDE.md` if a screen's data source moved |
+| Added a route or a `hooks/queries/` hook | route map / hooks table in `frontend/CLAUDE.md` |
+| Added a backend service, route, or `src/` folder | `backend/CLAUDE.md` |
+| Added an env var or binding | `src/types/bindings.ts`, all three `wrangler.toml` env blocks, and `backend/CLAUDE.md` |
+| Added a D1 migration | table list + count in `backend/CLAUDE.md` |
+| Changed a guardrail or its default | guardrails table in `backend/CLAUDE.md` |
+| Changed testing setup, tiers, or thresholds | `TESTING.md` |
+| **Fixed** something in a "known drift" table | **delete that row** — the table must shrink as it is worked off |
+| Wired up something previously listed as a placeholder | "Not yet wired" section below |
+
+Two rules that keep this honest:
+
+- **Verify before documenting.** Read the source, don't describe it from
+  memory. Most stale lines in this repo came from trusting an older doc.
+- **Delete rather than let a section rot.** A removed section is recoverable
+  from git; a confidently wrong one costs an hour of someone's day.
 
 ---
 
