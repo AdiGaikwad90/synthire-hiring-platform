@@ -21,6 +21,16 @@ Only one env var, in `.env.local` (gitignored): `NEXT_PUBLIC_API_URL=http://loca
 
 ## Conventions
 
+**Read `UI_CONVENTIONS.md` before adding or changing UI.** It is the binding
+reference for which primitive to reach for, where a component belongs
+(`ui/` vs `shared/` vs a role folder), styling and token rules, and the
+new-screen checklist. `FE_DESIGN_GUIDELINES.md` covers visual direction;
+`UI_CONVENTIONS.md` covers structure.
+
+If you add a `components/ui/` primitive, add anything reusable to `lib/`, or
+change an existing component's API, **update `UI_CONVENTIONS.md` in the same
+PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
+
 - **Never call `apiFetch` directly from a component** — always go through `hooks/queries/`.
 - **Never call `lib/api.ts` auth functions directly** — `useAuth()` is the only entry point for `login` / `logout` / `signup`.
 - Every data-dependent component needs a loading and an error guard:
@@ -33,7 +43,7 @@ Only one env var, in `.env.local` (gitignored): `NEXT_PUBLIC_API_URL=http://loca
 - Every file in `components/` is `'use client'`; pages under `app/` are server components and export `runtime = "edge"` (19 of them — required by next-on-pages).
 - `strict: false` — don't fight `any` in existing components, but type new code properly.
 - Styling: prefer existing `ts*` class names, inline `style={{}}` for one-offs, new classes go in `app/globals.css`.
-- `CandidateCard`, `FilterPanel`, `JobCard`, `FeedbackForm`, `ScoreDisplay` are thin re-export stubs — the real component bodies live in the screen file they're named after.
+- `CandidateCard`, `FilterPanel`, `JobCard`, `FeedbackForm`, `ScoreDisplay` are thin re-export stubs whose bodies live in the screen file they're named after. **Do not add more** — import from the real file. They are listed as drift in `UI_CONVENTIONS.md` §9 and should be deleted when touched.
 
 ---
 
@@ -103,7 +113,7 @@ Provider order in `app/providers.tsx`: `QueryClientProvider` → `AuthProvider` 
 
 Tokens are CSS custom properties in `app/globals.css` (~80 KB, holds all component styles). Themes and density switch via `data-theme` / `data-density` on `<html>`, persisted to localStorage by `TweaksPanel`. AI-surface utilities: `.ai-text`, `.ai-border`, `.ai-surface`.
 
-See `FE_DESIGN_GUIDELINES.md` before building new UI.
+See `FE_DESIGN_GUIDELINES.md` for visual direction and `UI_CONVENTIONS.md` for structure before building new UI.
 
 ---
 
