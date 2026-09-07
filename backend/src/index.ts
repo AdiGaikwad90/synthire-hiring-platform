@@ -17,7 +17,6 @@ import interviewRoutes from './routes/interviews'
 import interviewTypeRoutes from './routes/interview-types'
 import analyticsRoutes from './routes/analytics'
 import emailRoutes from './routes/email'
-import settingsRoutes from './routes/settings'
 import healthRoutes from './routes/health'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -42,7 +41,6 @@ app.route('/api/interviews', interviewRoutes)
 app.route('/api/interview-types', interviewTypeRoutes)
 app.route('/api/analytics', analyticsRoutes)
 app.route('/api/email', emailRoutes)
-app.route('/api/settings', settingsRoutes)
 
 // Health check
 app.route('/health', healthRoutes)

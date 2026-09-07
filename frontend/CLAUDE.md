@@ -10,6 +10,8 @@ Next.js 15 App Router UI (React 18) for the Synthire ATS. Fully wired to the Wor
 npm run dev        # http://localhost:3000 — backend must be up on :8787
 npm run typecheck  # tsc --noEmit — must exit 0
 npm run lint       # next lint — currently clean, keep it that way
+npm test           # vitest — LOGIC only (lib/, middleware). No component rendering.
+npm run test:coverage
 npm run deploy     # next-on-pages build + wrangler pages deploy
 ```
 
@@ -43,7 +45,9 @@ PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
 - Every file in `components/` is `'use client'`; pages under `app/` are server components and export `runtime = "edge"` (19 of them — required by next-on-pages).
 - `strict: false` — don't fight `any` in existing components, but type new code properly.
 - Styling: prefer existing `ts*` class names, inline `style={{}}` for one-offs, new classes go in `app/globals.css`.
-- `CandidateCard`, `FilterPanel`, `JobCard`, `FeedbackForm`, `ScoreDisplay` are thin re-export stubs whose bodies live in the screen file they're named after. **Do not add more** — import from the real file. They are listed as drift in `UI_CONVENTIONS.md` §9 and should be deleted when touched.
+- **No thin re-export stubs.** The five that existed are deleted — import components from the file that defines them.
+- **Dates go through `formatDate` / `formatDateLong` / `formatTime` / `formatDateTime`** in `@/lib/utils`. Never call `toLocaleDateString()` in a component — a bare call follows the viewer's browser locale.
+- **Icon-only buttons use `IconButton`**, which requires a `label` and applies it as `aria-label`.
 
 ---
 
@@ -123,5 +127,3 @@ See `FE_DESIGN_GUIDELINES.md` for visual direction and `UI_CONVENTIONS.md` for s
 |---|---|
 | Analytics **Sources** chart | `GET /api/analytics/sources` exists but returns all-zero stubs; no source tracking in the pipeline. The frontend doesn't render it. |
 | Analytics **Round Performance** | No per-round aggregation endpoint |
-| `lib/data.ts` | Dead mock data, kept for demo reference — nothing imports it |
-| `components/(recruiter)/InterviewsList.tsx` | Dead — not imported anywhere; `/interviews` renders `InterviewerHome` instead |

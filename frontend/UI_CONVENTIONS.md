@@ -179,18 +179,14 @@ Same rule for initials: `initials()` from `@/lib/utils`, or just use `Avatar`.
 
 ## 9. Known drift — fix when you touch these files
 
-Recorded so it is a decision rather than an accident:
+Recorded so it is a decision rather than an accident. **Fixing a row means
+deleting it** — this table must shrink, or it becomes the next stale doc.
 
 | Drift | Where | Fix |
 |---|---|---|
-| 23 raw `<button className="tsIconBtn">` | across screens | swap to `IconButton` (gains `aria-label`) |
-| 21 inline `toLocaleDateString()`, 4 different formats | 7 screen files | swap to `formatDate()` |
-| `formatDate()` / `initials()` exported but never imported | `lib/utils.ts` | they are the fix for the two rows above |
-| `Avatar` hand-rolls initials | `components/ui/avatar.tsx` | call `initials()` |
-| Re-export stubs: `CandidateCard`, `JobCard`, `FilterPanel`, `FeedbackForm` | `components/(role)/` | delete; import from the real file |
-| `ScoreDisplay.tsx` | `components/(recruiter)/` | dead — zero importers |
-| `InterviewsList.tsx` | `components/(recruiter)/` | dead — `/interviews` renders `InterviewerHome` |
-| `lib/data.ts` | 194 lines of mock data | dead — nothing imports it |
+| 15 raw `<button className="tsIconBtn">` that already carry `title`/`aria-label` | across screens | swap to `IconButton` for consistency (not an a11y bug — they have accessible names) |
 
-None of these break anything today. They are the cheapest possible cleanups and
-each removes a way for the next screen to drift further.
+Recently cleared: the 7 icon buttons with **no** accessible name are now
+`IconButton`; all 11 inline `toLocaleDateString()` calls now use the shared
+formatters; `Avatar` uses `initials()`; and the dead files (`lib/data.ts`,
+`InterviewsList`, `ScoreDisplay`, and the four re-export stubs) are deleted.

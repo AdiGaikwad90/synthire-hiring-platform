@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Button, Input, AIPill, Avatar, ScorePill, useToast } from "@/components/ui";
+import { AIPill, Avatar, Button, IconButton, Input, ScorePill, useToast } from "@/components/ui";
 import { Logo } from "@/components/shared/Logo";
 
 // Landing page (condensed)
@@ -164,8 +164,8 @@ function Landing() {
             <Logo/>
             <p className="small" style={{ color: "var(--muted)", marginTop: 14, maxWidth: 280 }}>AI-native applicant tracking, built for hiring teams that want to move fast without missing great people.</p>
             <div className="tsLanding-social">
-              <button className="tsIconBtn"><Icon.Linkedin size={15}/></button>
-              <button className="tsIconBtn"><Icon.Twitter size={15}/></button>
+              <IconButton icon={<Icon.Linkedin size={15}/>} label="Synthire on LinkedIn" />
+              <IconButton icon={<Icon.Twitter size={15}/>} label="Synthire on X" />
               <button className="tsIconBtn"><Icon.Github size={15}/></button>
             </div>
           </div>

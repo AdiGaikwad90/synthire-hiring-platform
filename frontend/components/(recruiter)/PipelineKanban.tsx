@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Button, Avatar, ScorePill, SearchInput, Select } from "@/components/ui";
+import { Avatar, Button, IconButton, ScorePill, SearchInput, Select } from "@/components/ui";
 import { useCandidates, useUpdateCandidateStage } from "@/hooks/queries/useCandidates";
 import { useJobs } from "@/hooks/queries/useJobs";
 
@@ -178,7 +178,7 @@ function Pipeline() {
                 <span style={{ fontWeight: 500, fontSize: 13 }}>{col.label}</span>
                 <span className="tsKanban-count mono">{(board[col.id] ?? []).length}</span>
               </div>
-              <button className="tsIconBtn"><Icon.MoreH size={13}/></button>
+              <IconButton icon={<Icon.MoreH size={13}/>} label="Column options" />
             </div>
             <div className="tsKanban-list">
               {(board[col.id] ?? []).map(c => (

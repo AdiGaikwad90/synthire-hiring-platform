@@ -68,6 +68,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Test (logic only — no component rendering)
+        run: npm run test:coverage
 
   # ── Staging ─────────────────────────────────────────────────────────────────
   deploy-backend-staging:

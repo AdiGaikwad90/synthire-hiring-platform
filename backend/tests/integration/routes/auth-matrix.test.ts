@@ -22,7 +22,6 @@ const PROTECTED = [
   '/api/interviews',
   '/api/interview-types',
   '/api/analytics/summary',
-  '/api/settings',
 ] as const
 
 let secret: string

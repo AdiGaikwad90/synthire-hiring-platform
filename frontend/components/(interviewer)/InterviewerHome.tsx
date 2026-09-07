@@ -5,6 +5,7 @@ import { Icon } from "@/lib/icons";
 import { Card, Button, Badge, Avatar } from "@/components/ui";
 import { useInterviews } from "@/hooks/queries/useInterviews";
 import { useAuth } from "@/context/AuthContext";
+import { formatDateLong, formatTime } from "@/lib/utils";
 
 // Interviewer Portal (minimalist)
 const { useState: useS_iv } = React;
@@ -41,7 +42,7 @@ function Interviewer() {
         </div>
         <div className="tsIvr-cal">
           <Icon.Calendar size={14}/>
-          <span>{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</span>
+          <span>{formatDateLong(new Date())}</span>
         </div>
       </div>
 
@@ -83,7 +84,7 @@ function Interviewer() {
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                     <span className="h3" style={{ fontWeight: 500 }}>{iv.candidate_name ?? 'Unknown'}</span>
-                    <Badge variant="warning"><Icon.Clock size={11}/> {new Date(iv.scheduled_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</Badge>
+                    <Badge variant="warning"><Icon.Clock size={11}/> {formatTime(iv.scheduled_at)}</Badge>
                   </div>
                   <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>{iv.status}</div>
                   <div className="tsIvr-meta">

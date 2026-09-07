@@ -7,12 +7,13 @@ import { useFunnel, useTimeToHire, useAnalyticsSummary, useActivity } from "@/ho
 import { useInterviews } from "@/hooks/queries/useInterviews";
 import { useCandidates } from "@/hooks/queries/useCandidates";
 import { ResumeBatchModal } from "./ResumeBatchModal";
+import { formatDateLong, formatTime } from "@/lib/utils";
 
 // Dashboard screen
 function Dashboard() {
   const router = useRouter();
   const [showUpload, setShowUpload] = React.useState(false);
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const today = formatDateLong(new Date());
 
   const { data: summaryData } = useAnalyticsSummary();
   const { data: funnelData } = useFunnel();
@@ -114,7 +115,7 @@ function Dashboard() {
             <div style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
               {(interviewsData?.items ?? []).slice(0,5).map(iv => (
                 <div key={iv.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
-                  <div style={{fontWeight:500}}>{new Date(iv.scheduled_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+                  <div style={{fontWeight:500}}>{formatTime(iv.scheduled_at)}</div>
                   <div style={{fontSize:12,color:'var(--muted)'}}>{iv.status}</div>
                 </div>
               ))}

@@ -2,11 +2,12 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/lib/icons";
-import { Card, Button, Badge, SearchInput, useToast } from "@/components/ui";
+import { Badge, Button, Card, IconButton, SearchInput, useToast } from "@/components/ui";
 import { useJobs, useJob, useUpdateJob } from "@/hooks/queries/useJobs";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 import { Candidates } from "./Candidates";
 import type { ApiJob } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 const { useState: useS_jobs, useEffect, useRef } = React;
 
@@ -29,12 +30,11 @@ function JobContextMenu({ job, onEdit, onStatusChange }: { job: ApiJob; onEdit: 
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <button
-        className="tsIconBtn"
+      <IconButton
+        icon={<Icon.MoreH size={16}/>}
+        label="Job actions"
         onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-      >
-        <Icon.MoreH size={16}/>
-      </button>
+      />
       {open && (
         <div style={{ position: "absolute", right: 0, top: "100%", zIndex: 100, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
           <button
@@ -149,7 +149,7 @@ function Jobs() {
                   <div className="tsJobsTable-title">{j.title}</div>
                   <div className="small">
                     <Badge variant={j.status === "active" ? "success" : j.status === "closed" ? "danger" : "warning"} dot>{j.status === "active" ? "Active" : j.status === "paused" ? "Paused" : "Closed"}</Badge>
-                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>Posted {new Date(j.created_at).toLocaleDateString()}</span>
+                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>Posted {formatDate(j.created_at)}</span>
                   </div>
                 </div>
                 <div>{j.department ?? ''}</div>
@@ -276,7 +276,7 @@ function JobOverviewTab({ job }: { job: ApiJob }) {
     { label: "Salary", value: job.salary_range },
     { label: "Min. experience", value: job.min_years_experience ? `${job.min_years_experience} yrs` : null },
     { label: "Education", value: job.education_requirement },
-    { label: "Posted", value: new Date(job.created_at).toLocaleDateString() },
+    { label: "Posted", value: formatDate(job.created_at) },
   ].filter(r => r.value);
 
   return (
@@ -393,7 +393,7 @@ const JobCard = ({ job, onClick, onEdit, onStatusChange }: { job: ApiJob; onClic
       <div style={{ height: "100%", borderRadius: 999, background: "var(--primary)", width: `${Math.min(100, (job.candidate_count ?? 0) * 10)}%`, transition: "width 0.4s ease" }}/>
     </div>
     <div className="small" style={{ marginTop: 12, color: "var(--muted)" }}>
-      Posted {new Date(job.created_at).toLocaleDateString()}
+      Posted {formatDate(job.created_at)}
     </div>
   </Card>
 );

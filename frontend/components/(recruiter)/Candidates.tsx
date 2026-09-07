@@ -8,6 +8,7 @@ import { useJob, useJobs } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 import type { ApiJob } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 const { useState: useS_c } = React;
 
@@ -330,7 +331,7 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {job.salary_range && <MetaRow label="Compensation" val={job.salary_range}/>}
                 <MetaRow label="Type" val={[job.employment_type?.replace(/_/g, " "), job.experience_level].filter(Boolean).join(" · ")}/>
-                <MetaRow label="Posted" val={new Date(job.created_at).toLocaleDateString()}/>
+                <MetaRow label="Posted" val={formatDate(job.created_at)}/>
                 <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }}/>
                 <div>
                   <div className="tiny" style={{ marginBottom: 8 }}>Candidates</div>
