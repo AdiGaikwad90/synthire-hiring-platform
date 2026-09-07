@@ -25,7 +25,7 @@ CI (`.github/workflows/ci.yml`) gates on `typecheck` + `test`. `tsconfig.json` s
 
 | Tier | Where | Examples |
 |---|---|---|
-| **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional) |
+| **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional). Production currently holds only `JWT_SECRET` + `SENDGRID_API_KEY` — `RESEND_WEBHOOK_SECRET` is unset, so the Resend webhook would 401 if `EMAIL_PROVIDER` were switched to resend. |
 | **Runtime vars** | `wrangler.toml [vars]` | model names, thresholds, TTLs — safe to commit |
 | **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI` |
 
