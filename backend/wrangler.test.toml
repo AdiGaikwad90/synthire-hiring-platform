@@ -13,6 +13,7 @@
 # Cloudflare and creates fresh local storage per run.
 
 name = "synthire-backend-test"
+main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 

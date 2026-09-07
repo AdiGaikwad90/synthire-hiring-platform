@@ -41,6 +41,12 @@ export default defineConfig({
             },
           }),
         ],
+        // mammoth segfaults workerd on load (bluebird/jszip/argparse top-level
+        // init). Aliased away so `main` can point at the real src/index.ts and
+        // SELF-based route tests become possible. Production is unaffected.
+        resolve: {
+          alias: { mammoth: path.join(__dirname, 'tests/fixtures/mammoth-stub.ts') },
+        },
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],

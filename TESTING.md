@@ -187,9 +187,14 @@ Three hard constraints, learned the hard way:
 1. **`[ai]` and `[[vectorize]]` must not appear in `wrangler.test.toml`.**
    Neither has a local simulator; the pool tries a remote connection and
    **segfaults workerd** on startup.
-2. **`main` must not be set either** — it segfaults the pool the same way. This
-   blocks `SELF`-based route tests and has to be solved before Tier B route
-   coverage can land.
+2. **`main = "src/index.ts"` works, but `mammoth` must be aliased away.**
+   Loading the real worker segfaults workerd because mammoth's dependency tree
+   (bluebird, jszip, argparse) crashes on top-level init. Bisected: `unpdf`,
+   `jose` and `bcryptjs` are all fine. `vitest.config.mts` aliases mammoth to
+   `tests/fixtures/mammoth-stub.ts` for the integration project only —
+   production bundling is untouched. If a new dependency makes the pool
+   segfault on startup, bisect it the same way: point `main` at a trivial
+   worker, then add imports one at a time.
 3. **Coverage cannot instrument workerd.** `@vitest/coverage-v8` imports
    `node:inspector/promises`, which workerd does not provide. `test:coverage`
    is scoped to `--project unit`. Integration tests run uninstrumented — their
