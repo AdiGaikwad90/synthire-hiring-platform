@@ -146,31 +146,40 @@ export async function apiFetch<T>(
   })
 
   if (res.status === 401) {
-    // Try to refresh once, then retry the original request
-    try {
-      await doRefreshOnce()
-      const retryRes = await fetch(`${API_URL}${path}`, {
-        ...options,
-        headers,
-        credentials: 'include',
-      })
-      if (retryRes.status === 401) {
-        removeToken()
-        if (typeof window !== 'undefined') window.location.href = '/login'
-        throw new ApiError('Session expired', 401)
-      }
-      const retryJson = await retryRes.json() as { success: boolean; data: T; error: string | null }
-      if (!retryRes.ok || !retryJson.success) {
-        throw new ApiError(retryJson.error ?? `HTTP ${retryRes.status}`, retryRes.status, retryJson)
-      }
-      return retryJson.data
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) throw e
-      // Refresh itself failed — clear user and redirect
+    // Two distinct stages. Which one failed decides whether the session is
+    // dead — the HTTP status alone does not, and inferring it from the status
+    // produced two opposite bugs: a 403/422/500 on the replay logged the user
+    // out, while a failed refresh left a dead session in place.
+    const sessionExpired = (): never => {
       removeToken()
       if (typeof window !== 'undefined') window.location.href = '/login'
       throw new ApiError('Session expired', 401)
     }
+
+    // Stage 1 — refresh. Any failure here means the session really is over.
+    try {
+      await doRefreshOnce()
+    } catch {
+      return sessionExpired()
+    }
+
+    // Stage 2 — replay. The session is valid now, so anything other than
+    // another 401 is an ordinary API error and must NOT clear the session.
+    const retryRes = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    })
+    if (retryRes.status === 401) return sessionExpired()
+
+    const retryJson = await retryRes
+      .json()
+      .catch(() => null) as { success: boolean; data: T; error: string | null } | null
+
+    if (!retryRes.ok || !retryJson?.success) {
+      throw new ApiError(retryJson?.error ?? `HTTP ${retryRes.status}`, retryRes.status, retryJson)
+    }
+    return retryJson.data
   }
 
   const json = await res.json() as { success: boolean; data: T; error: string | null }
