@@ -134,3 +134,27 @@ AI interview question generation **is** wired (`POST /api/candidates/:id/questio
 ## Git
 
 Commit prefix convention: `feat:` / `fix:` / `chore:`
+
+### GitHub account — never switch globally
+
+This repo belongs to the personal account **AdiGaikwad90**, but the machine's
+default `gh` account is a work one. **Do not run `gh auth switch`** — it changes
+the active account for every repository on the machine, and it silently reverts,
+which has already caused a failed secret write and a 404 that looked like lost
+branch protection.
+
+Everything is scoped per-repo instead, and needs no switching:
+
+| Concern | How it is pinned |
+|---|---|
+| Commit author | `git config --local user.name/user.email` → `AdiGaikwad90 <143449168+AdiGaikwad90@users.noreply.github.com>` |
+| Push credentials | username embedded in the remote URL + `credential.https://github.com.username` (local) |
+| `gh` commands | prefix with a token override, below |
+
+```bash
+# Run any gh command against this repo without touching the global account:
+GH_TOKEN=$(gh auth token --user AdiGaikwad90) gh <command>
+```
+
+The global `git` identity and the global `gh` active account must stay as they
+are — they belong to work repositories.
