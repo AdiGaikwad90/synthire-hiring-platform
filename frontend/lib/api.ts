@@ -125,6 +125,18 @@ async function doRefreshOnce(): Promise<void> {
   }
 }
 
+/**
+ * Routes where an expired session is the expected state, so bouncing to
+ * /login is either a no-op reload or actively wrong. Kept as a prefix list
+ * because /login carries a ?from= query string.
+ */
+const AUTH_PAGES = ['/login', '/signup']
+
+function isLoginPage(): boolean {
+  if (typeof window === 'undefined') return false
+  return AUTH_PAGES.some((p) => window.location.pathname.startsWith(p))
+}
+
 // ── apiFetch ──────────────────────────────────────────────────────────────────
 
 export async function apiFetch<T>(
@@ -152,7 +164,14 @@ export async function apiFetch<T>(
     // out, while a failed refresh left a dead session in place.
     const sessionExpired = (): never => {
       removeToken()
-      if (typeof window !== 'undefined') window.location.href = '/login'
+      // Only navigate if we are not already on /login. Assigning
+      // location.href to the current path is a full page reload, and
+      // AuthContext probes /api/auth/me on mount — so redirecting to /login
+      // from /login produced an infinite reload loop that looked like the app
+      // hanging on a loading state, and burned through the rate limiter.
+      if (typeof window !== 'undefined' && !isLoginPage()) {
+        window.location.href = '/login'
+      }
       throw new ApiError('Session expired', 401)
     }
 

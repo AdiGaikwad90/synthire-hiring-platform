@@ -19,22 +19,28 @@ const fail = (status: number, error = 'nope') =>
 let fetchMock: ReturnType<typeof vi.fn>
 let redirectedTo: string | null
 
-beforeEach(() => {
-  localStorage.clear()
-  redirectedTo = null
-
-  // happy-dom would attempt a real navigation on assignment; capture instead.
+/** happy-dom would attempt a real navigation on assignment; capture instead. */
+function setPathname(pathname: string) {
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: {
+      pathname,
       get href() {
-        return 'http://localhost/'
+        return `http://localhost${pathname}`
       },
       set href(v: string) {
         redirectedTo = v
       },
     },
   })
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  redirectedTo = null
+
+  // happy-dom would attempt a real navigation on assignment; capture instead.
+  setPathname('/dashboard')
 
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
@@ -173,4 +179,54 @@ describe('apiFetch — a non-401 failure AFTER a successful refresh', () => {
       expect(redirectedTo, `${status} after refresh redirected to login`).toBeNull()
     })
   }
+})
+
+describe('apiFetch — session expiry while already on an auth page (regression)', () => {
+  /**
+   * Regression guard for a loop this suite did not catch.
+   *
+   * AuthContext probes /api/auth/me on mount, on every route including /login.
+   * Unauthenticated that 401s, the refresh 401s, and sessionExpired() assigned
+   * window.location.href = '/login'. Assigning the CURRENT path is a full page
+   * reload, so AuthContext remounted and probed again — an infinite reload that
+   * presented as the UI hanging on a loading state, and which exhausted the
+   * rate limiter until even /api/auth/refresh returned 429.
+   *
+   * The earlier tests asserted the redirect fires, but all ran as if the user
+   * were on /dashboard. Being already on /login is the case that mattered.
+   */
+  const deadSession = () => {
+    fetchMock
+      .mockResolvedValueOnce(fail(401)) // original
+      .mockResolvedValueOnce(fail(401)) // refresh also rejected
+  }
+
+  for (const page of ['/login', '/signup', '/login?from=%2Fjobs']) {
+    it(`does NOT navigate when already on ${page}`, async () => {
+      setPathname(page.split('?')[0])
+      setToken('stale')
+      deadSession()
+
+      await expect(apiFetch('/api/auth/me')).rejects.toMatchObject({ status: 401 })
+      expect(redirectedTo, 'navigating to the current page reloads it forever').toBeNull()
+    })
+  }
+
+  it('still clears the stale token even though it does not navigate', async () => {
+    setPathname('/login')
+    setToken('stale')
+    deadSession()
+
+    await expect(apiFetch('/api/auth/me')).rejects.toMatchObject({ status: 401 })
+    expect(getToken()).toBeNull()
+  })
+
+  it('DOES still navigate from a protected page', async () => {
+    setPathname('/dashboard')
+    setToken('stale')
+    deadSession()
+
+    await expect(apiFetch('/api/jobs')).rejects.toMatchObject({ status: 401 })
+    expect(redirectedTo).toBe('/login')
+  })
 })

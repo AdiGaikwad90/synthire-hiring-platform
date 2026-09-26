@@ -29,7 +29,13 @@ LLM_LIMITS_ENABLED = "true"
 # Rate limiting uses the native [[ratelimits]] binding below, not KV.
 # The short-poll endpoints (candidate status, JD parse status) are exempted in
 # middleware/rate-limit.ts, so batch uploads are unaffected.
-RATE_LIMIT_ENABLED = "true"
+# OFF for local dev on purpose. `wrangler dev` receives no CF-Connecting-IP, so
+# every request collapses into the single key "unknown" — one shared bucket for
+# the entire dev session. With React Query retries and the 30s activity poll, a
+# normal session exhausts 300/60s and then even /api/auth/refresh 429s, leaving
+# the UI stuck loading with no way to recover. Production keys on a real client
+# IP, so it is enabled there.
+RATE_LIMIT_ENABLED = "false"
 RATE_LIMIT_REQUESTS = "300"          # keep in sync with [[ratelimits]] simple.limit
 RATE_LIMIT_WINDOW_SECONDS = "60"     # keep in sync with [[ratelimits]] simple.period
 
