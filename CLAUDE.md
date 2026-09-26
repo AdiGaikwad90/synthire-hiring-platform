@@ -148,7 +148,7 @@ Everything is scoped per-repo instead, and needs no switching:
 | Concern | How it is pinned |
 |---|---|
 | Commit author | `git config --local user.name/user.email` → `AdiGaikwad90 <143449168+AdiGaikwad90@users.noreply.github.com>` |
-| Push credentials | username embedded in the remote URL + `credential.https://github.com.username` (local) |
+| Push credentials | a **local** `credential.https://github.com.helper` that shells out to `gh auth token --user AdiGaikwad90` per request — no token is stored in the repo, and the keychain is not consulted |
 | `gh` commands | prefix with a token override, below |
 
 ```bash
@@ -157,4 +157,10 @@ GH_TOKEN=$(gh auth token --user AdiGaikwad90) gh <command>
 ```
 
 The global `git` identity and the global `gh` active account must stay as they
-are — they belong to work repositories.
+are — they belong to work repositories. Verified: `git push` and `gh api`
+both reach this repo while `gh auth status` still shows the work account
+active.
+
+> Pinning only `credential.username` is **not** enough — osxkeychain then looks
+> for a credential filed under that user and fails with "Invalid username or
+> token". The helper above is what actually supplies the token.
