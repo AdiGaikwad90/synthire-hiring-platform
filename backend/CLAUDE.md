@@ -76,8 +76,16 @@ Public routes: `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/email
 
 | Env | Primary | Fallback |
 |---|---|---|
-| production / dev | `@cf/meta/llama-3.1-8b-instruct-awq` | `@cf/meta/llama-3.2-3b-instruct` |
-| staging | `@cf/meta/llama-3.1-8b-instruct` | `@cf/meta/llama-3.2-3b-instruct` |
+| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+
+The fallback is deliberately **stronger** than the primary — the chain fires on
+invalid JSON or schema failure, which a weaker model is less likely to resolve.
+Check `npx wrangler ai models` before changing a name; Workers AI deprecates
+models and a dead name fails with error 5028, not a fallback.
+
+Local dev needs migrations applied to the local D1 or `[quota] flush failed:
+no such table: quota_usage` warnings appear on every request:
+`npx wrangler d1 migrations apply synthire-prod --local`
 
 - Bad JSON, failed Zod validation, or any error → try next model. Exhausted → `AppError(503)`.
 - `extractJson()` strips ``` fences and finds the first balanced `{...}`/`[...]` — smaller models routinely wrap JSON in prose.

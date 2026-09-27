@@ -33,8 +33,10 @@ EMAIL_MAX_RETRIES = "3"
 EMAIL_QUEUE_BATCH_SIZE = "10"
 EMAIL_RETRY_BACKOFF_SECONDS = "60"
 
-LLM_MODEL_PRIMARY = "@cf/meta/llama-3.1-8b-instruct-awq"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+# Never actually called — env.AI has no local simulator and tests stub it.
+# Kept in sync anyway so the values are not a misleading example.
+LLM_MODEL_PRIMARY = "@cf/meta/llama-3.1-8b-instruct-fp8"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"

@@ -110,8 +110,14 @@ LLM calls go through Workers AI (not OpenRouter) with a two-model fallback chain
 
 | Env | Primary | Fallback |
 |---|---|---|
-| production / dev | `@cf/meta/llama-3.1-8b-instruct-awq` | `@cf/meta/llama-3.2-3b-instruct` |
-| staging | `@cf/meta/llama-3.1-8b-instruct` | `@cf/meta/llama-3.2-3b-instruct` |
+| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+
+**The fallback must be equal or stronger than the primary.** The chain exists for
+invalid-JSON and schema failures, and a weaker model is less likely to fix those.
+Falling back to `llama-3.2-3b` did exactly that and produced "All AI models
+exhausted". **Workers AI removes models** — `llama-3.1-8b-instruct-awq` was
+deprecated 2026-05-30 and broke JD parsing with error 5028. Verify names against
+`npx wrangler ai models` before changing them.
 
 Invalid JSON or schema failure → next model. Hard stop at `NEURONS_DAILY_LIMIT` (10000/day prod) → throws 503. See `backend/src/services/ai/fallback.ts`.
 

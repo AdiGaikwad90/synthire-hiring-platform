@@ -15,8 +15,15 @@ RESEND_FROM_NAME = "Synthire"
 SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
 EMAIL_QUEUE_INTERVAL_SECONDS = "30"
 EMAIL_MAX_RETRIES = "3"
-LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-awq"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+# Model chain. The fallback must be EQUAL OR STRONGER than the primary: the
+# chain exists for invalid-JSON and schema failures, and a weaker model is less
+# likely to fix those, not more. Falling back to llama-3.2-3b did exactly that
+# and produced "All AI models exhausted".
+# Verify names against `npx wrangler ai models` before changing — Workers AI
+# deprecates models (llama-3.1-8b-instruct-awq was removed 2026-05-30, which
+# broke JD parsing with error 5028).
+LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
@@ -110,8 +117,15 @@ REFRESH_TOKEN_EXPIRY_SECONDS = "2592000"
 MAX_UPLOAD_BYTES = "10485760"
 EMAIL_QUEUE_INTERVAL_SECONDS = "30"
 EMAIL_MAX_RETRIES = "3"
-LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-awq"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+# Model chain. The fallback must be EQUAL OR STRONGER than the primary: the
+# chain exists for invalid-JSON and schema failures, and a weaker model is less
+# likely to fix those, not more. Falling back to llama-3.2-3b did exactly that
+# and produced "All AI models exhausted".
+# Verify names against `npx wrangler ai models` before changing — Workers AI
+# deprecates models (llama-3.1-8b-instruct-awq was removed 2026-05-30, which
+# broke JD parsing with error 5028).
+LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"
@@ -184,8 +198,15 @@ EMAIL_PROVIDER = "resend"
 RESEND_FROM_EMAIL = "onboarding@resend.dev"
 RESEND_FROM_NAME = "Synthire"
 SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
-LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct"
-LLM_MODEL_FALLBACK = "@cf/meta/llama-3.2-3b-instruct"
+# Model chain. The fallback must be EQUAL OR STRONGER than the primary: the
+# chain exists for invalid-JSON and schema failures, and a weaker model is less
+# likely to fix those, not more. Falling back to llama-3.2-3b did exactly that
+# and produced "All AI models exhausted".
+# Verify names against `npx wrangler ai models` before changing — Workers AI
+# deprecates models (llama-3.1-8b-instruct-awq was removed 2026-05-30, which
+# broke JD parsing with error 5028).
+LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
+LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "1000"
