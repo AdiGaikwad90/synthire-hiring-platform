@@ -25,7 +25,10 @@ EMAIL_MAX_RETRIES = "3"
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
-LLM_MAX_TOKENS = "800"
+# Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
+# budget. 800 truncated resume JSON mid-object, which surfaced as "returned
+# invalid JSON" rather than as an obvious truncation.
+LLM_MAX_TOKENS = "4000"
 NEURONS_DAILY_LIMIT = "10000"
 LLM_LIMITS_ENABLED = "true"
 
@@ -127,7 +130,10 @@ EMAIL_MAX_RETRIES = "3"
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
-LLM_MAX_TOKENS = "800"
+# Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
+# budget. 800 truncated resume JSON mid-object, which surfaced as "returned
+# invalid JSON" rather than as an obvious truncation.
+LLM_MAX_TOKENS = "4000"
 NEURONS_DAILY_LIMIT = "10000"
 LLM_LIMITS_ENABLED = "true"
 

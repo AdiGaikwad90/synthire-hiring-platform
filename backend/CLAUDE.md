@@ -88,6 +88,18 @@ no such table: quota_usage` warnings appear on every request:
 `npx wrangler d1 migrations apply synthire-prod --local`
 
 - Bad JSON, failed Zod validation, or any error → try next model. Exhausted → `AppError(503)`.
+- **Token budgets are per-operation** (`MAX_TOKENS_BY_OPERATION` in `fallback.ts`):
+  `LLM_PARSE` 4000, `LLM_SCORE` 2000, `LLM_QUESTIONS` 1500. A single global
+  `LLM_MAX_TOKENS` does not work — it was 800, which truncated resume JSON
+  mid-object. That surfaces as **"returned invalid JSON"**, not as an obvious
+  truncation, and JD parsing kept working because its output is small. If you
+  see that error, check the log for `hit the N-token budget and was truncated`
+  before blaming the model.
+- **Do not add Workers AI JSON Mode** (`response_format: json_schema`). The docs
+  list "Llama 3.1 8B variants" as supported, but both models here reject it:
+  the 8B returns error 5025 "doesn't support JSON Schema", the 70B returns an
+  upstream internal error. Valid JSON comes from an adequate budget plus
+  `extractJson()` and Zod validation.
 - `extractJson()` strips ``` fences and finds the first balanced `{...}`/`[...]` — smaller models routinely wrap JSON in prose.
 - **Neurons budget** (`src/services/budget/neurons.ts`): checked *before* any model runs, deducted only on success. Costs per call — `LLM_PARSE` 100, `LLM_SCORE` 150, `LLM_QUESTIONS` 80, `EMBEDDING` 3. Daily key `neurons:daily:YYYY-MM-DD`, expires at midnight UTC. Over budget throws 503 and does **not** fall through to the next model.
 
