@@ -11,6 +11,7 @@ import { ActivityRow } from "./Dashboard";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
+import { apiFetchBlob } from "@/lib/api";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd, useEffect: useE_cd } = React;
@@ -18,13 +19,9 @@ const { useState: useS_cd, useEffect: useE_cd } = React;
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
 
 async function downloadResume(candidateId: string, filename: string) {
-  const { getToken } = await import('@/lib/auth')
-  const token = getToken()
-  const res = await fetch(`${API_URL}/api/candidates/${candidateId}/resume`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) return
-  const blob = await res.blob()
+  // apiFetchBlob, not raw fetch — it refreshes on 401 instead of silently
+  // failing once the 15-minute access token expires.
+  const blob = await apiFetchBlob(`/api/candidates/${candidateId}/resume`)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -57,17 +54,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
       try {
         const { getToken } = await import('@/lib/auth');
         const token = getToken();
-        const res = await fetch(`${API_URL}/api/candidates/${actualId}/resume`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (revoked) return;
-        if (!res.ok) {
-          // Swallowing this is what made a CSP-blocked viewer look like an
-          // empty panel with no explanation. Say what actually failed.
-          setResumeError(`Could not load the resume file (HTTP ${res.status}).`);
-          return;
-        }
-        const blob = await res.blob();
+        const blob = await apiFetchBlob(`/api/candidates/${actualId}/resume`);
         if (!revoked) setResumeBlobUrl(URL.createObjectURL(blob));
       } catch (e) {
         if (!revoked) setResumeError(e instanceof Error ? `Could not load the resume file: ${e.message}` : 'Could not load the resume file.');

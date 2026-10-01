@@ -100,6 +100,68 @@ async function attemptRefresh(): Promise<void> {
     credentials: 'include',
   })
   if (!res.ok) throw new ApiError('Refresh failed', res.status)
+
+  // Persist the new access token. Without this the refresh "succeeded" while
+  // localStorage still held the EXPIRED token, so the replayed request sent a
+  // dead credential and 401'd again. Relying on the Set-Cookie alone is not
+  // enough — the browser does not always keep it (cross-origin dev).
+  try {
+    const body = (await res.json()) as { data?: { token?: string } }
+    const token = body?.data?.token
+    if (token) {
+      const { setToken } = await import('./auth')
+      setToken(token)
+    }
+  } catch {
+    // Body is optional; the cookie path still works where it is honoured.
+  }
+}
+
+/**
+ * The ONE place that attaches auth and recovers from a 401.
+ *
+ * Every authenticated request must go through this. Four components previously
+ * hand-rolled `Authorization: Bearer` with raw fetch, which meant no refresh —
+ * so the resume viewer and the interview recordings broke silently the moment
+ * the 15-minute access token expired, and stayed broken until a re-login.
+ *
+ * Headers are rebuilt AFTER the refresh so the replay uses the NEW token.
+ */
+export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const { getToken, removeToken } = await import('./auth')
+
+  const build = (): RequestInit => {
+    const token = getToken()
+    const headers: Record<string, string> = { ...((init.headers as Record<string, string>) ?? {}) }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    return { ...init, headers, credentials: 'include' }
+  }
+
+  const expire = (): never => {
+    removeToken()
+    if (typeof window !== 'undefined' && !isLoginPage()) window.location.href = '/login'
+    throw new ApiError('Session expired', 401)
+  }
+
+  const first = await fetch(`${API_URL}${path}`, build())
+  if (first.status !== 401) return first
+
+  try {
+    await doRefreshOnce()
+  } catch {
+    return expire()
+  }
+
+  const retry = await fetch(`${API_URL}${path}`, build())
+  if (retry.status === 401) return expire()
+  return retry
+}
+
+/** Binary-safe authenticated GET — PDFs, recordings, any non-JSON body. */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const res = await authedFetch(path)
+  if (!res.ok) throw new ApiError(`HTTP ${res.status}`, res.status)
+  return res.blob()
 }
 
 async function waitForRefresh(): Promise<void> {

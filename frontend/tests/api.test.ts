@@ -7,7 +7,7 @@
  * still logic testing, not component rendering (TESTING.md tier D).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { apiFetch, ApiError } from '@/lib/api'
+import { apiFetch, apiFetchBlob, ApiError } from '@/lib/api'
 import { setToken, getToken } from '@/lib/auth'
 
 const ok = (data: unknown, status = 200) =>
@@ -228,5 +228,89 @@ describe('apiFetch — session expiry while already on an auth page (regression)
 
     await expect(apiFetch('/api/jobs')).rejects.toMatchObject({ status: 401 })
     expect(redirectedTo).toBe('/login')
+  })
+})
+
+describe('apiFetchBlob — binary downloads get the same 401 recovery', () => {
+  /**
+   * Regression guard. The resume viewer, the resume download and two viewers in
+   * InterviewConduct each hand-rolled `Authorization: Bearer` with raw fetch,
+   * bypassing apiFetch entirely. That meant no refresh-on-401, so every one of
+   * them broke the moment the 15-minute access token expired and stayed broken
+   * until the user logged in again — presenting as "HTTP 401" in the viewer.
+   */
+  const pdf = (status = 200) =>
+    new Response(new Blob(['%PDF-1.4'], { type: 'application/pdf' }), { status })
+
+  it('returns the blob on a straight 200', async () => {
+    setPathname('/candidates/abc')
+    setToken('good')
+    fetchMock.mockResolvedValueOnce(pdf())
+    const blob = await apiFetchBlob('/api/candidates/abc/resume')
+    expect(blob.size).toBeGreaterThan(0)
+  })
+
+  it('refreshes once on 401 and replays, instead of failing', async () => {
+    setPathname('/candidates/abc')
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(pdf(401))                 // original
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))   // refresh
+      .mockResolvedValueOnce(pdf())                    // replay
+
+    const blob = await apiFetchBlob('/api/candidates/abc/resume')
+    expect(blob.size).toBeGreaterThan(0)
+    expect(refreshCalls()).toBe(1)
+  })
+
+  it('replays with the NEW token, not the expired one', async () => {
+    setPathname('/candidates/abc')
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(pdf(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(pdf())
+
+    await apiFetchBlob('/api/candidates/abc/resume')
+
+    const replay = fetchMock.mock.calls.at(-1)!
+    const sent = (replay[1] as RequestInit).headers as Record<string, string>
+    expect(sent.Authorization, 'replayed with the dead token').toBe('Bearer fresh')
+  })
+
+  it('surfaces a non-401 failure as ApiError rather than logging out', async () => {
+    setPathname('/candidates/abc')
+    setToken('good')
+    fetchMock.mockResolvedValueOnce(pdf(404))
+    await expect(apiFetchBlob('/api/candidates/abc/resume')).rejects.toMatchObject({ status: 404 })
+    expect(getToken()).toBe('good')
+    expect(redirectedTo).toBeNull()
+  })
+})
+
+describe('attemptRefresh persists the new access token', () => {
+  // Without this the refresh "succeeded" while localStorage still held the
+  // EXPIRED token, so the replay sent a dead credential and 401'd again.
+  it('stores the token returned by /api/auth/refresh', async () => {
+    setPathname('/dashboard')
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(ok({ id: 'j1' }))
+
+    await apiFetch('/api/jobs')
+    expect(getToken()).toBe('fresh')
+  })
+
+  it('still works when the refresh body carries no token (cookie-only)', async () => {
+    setPathname('/dashboard')
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ user: { id: 'u1' } }))
+      .mockResolvedValueOnce(ok({ id: 'j1' }))
+
+    await expect(apiFetch('/api/jobs')).resolves.toEqual({ id: 'j1' })
   })
 })

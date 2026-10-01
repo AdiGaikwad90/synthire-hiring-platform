@@ -80,22 +80,28 @@ export async function hashToken(token: string): Promise<string> {
     .join('')
 }
 
+/**
+ * SameSite=None REQUIRES Secure — browsers reject the cookie outright without
+ * it. Over plain http in local dev that silently dropped every auth cookie,
+ * including the refresh token, so an expired access token could never be
+ * renewed. Use Lax when we cannot set Secure.
+ */
+function sameSitePolicy(secure: boolean): string {
+  return secure ? 'SameSite=None; Secure' : 'SameSite=Lax'
+}
+
 export function buildAccessCookie(token: string, maxAge: number, secure: boolean): string {
-  const secureFlag = secure ? '; Secure' : ''
-  return `synthire_token=${token}; HttpOnly${secureFlag}; SameSite=None; Path=/; Max-Age=${maxAge}`
+  return `synthire_token=${token}; HttpOnly; ${sameSitePolicy(secure)}; Path=/; Max-Age=${maxAge}`
 }
 
 export function buildRefreshCookie(token: string, maxAge: number, secure: boolean): string {
-  const secureFlag = secure ? '; Secure' : ''
-  return `synthire_refresh=${token}; HttpOnly${secureFlag}; SameSite=None; Path=/api/auth; Max-Age=${maxAge}`
+  return `synthire_refresh=${token}; HttpOnly; ${sameSitePolicy(secure)}; Path=/api/auth; Max-Age=${maxAge}`
 }
 
 export function clearAccessCookie(secure: boolean): string {
-  const secureFlag = secure ? '; Secure' : ''
-  return `synthire_token=; HttpOnly${secureFlag}; SameSite=None; Path=/; Max-Age=0`
+  return `synthire_token=; HttpOnly; ${sameSitePolicy(secure)}; Path=/; Max-Age=0`
 }
 
 export function clearRefreshCookie(secure: boolean): string {
-  const secureFlag = secure ? '; Secure' : ''
-  return `synthire_refresh=; HttpOnly${secureFlag}; SameSite=None; Path=/api/auth; Max-Age=0`
+  return `synthire_refresh=; HttpOnly; ${sameSitePolicy(secure)}; Path=/api/auth; Max-Age=0`
 }

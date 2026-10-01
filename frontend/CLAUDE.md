@@ -37,6 +37,7 @@ change an existing component's API, **update `UI_CONVENTIONS.md` in the same
 PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
 
 - **Never call `apiFetch` directly from a component** — always go through `hooks/queries/`.
+- **Never hand-roll `Authorization: Bearer` with raw `fetch`.** Binary downloads go through `apiFetchBlob()`; everything else through the hooks. Four components used to attach the header themselves, which skipped refresh-on-401 — so the resume viewer and interview recordings broke silently the moment the 15-minute access token expired, showing an empty panel.
 - **Never call `lib/api.ts` auth functions directly** — `useAuth()` is the only entry point for `login` / `logout` / `signup`.
 - Every data-dependent component needs a loading and an error guard:
   ```tsx

@@ -239,7 +239,11 @@ router.post('/refresh', async (c) => {
   c.header('Set-Cookie', buildAccessCookie(accessToken, accessExpiry, secure), { append: true })
   c.header('Set-Cookie', buildRefreshCookie(newRefreshToken, refreshExpiry, secure), { append: true })
 
-  return c.json(apiResponse({ user: toPublicUser(user) }))
+  // Return the access token in the BODY as well as the cookie. The client
+  // stores it for the Authorization header; relying on the cookie alone breaks
+  // whenever the browser will not keep it (cross-origin dev, or a SameSite
+  // policy change), which leaves an expired session with no way to recover.
+  return c.json(apiResponse({ user: toPublicUser(user), token: accessToken }))
 })
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────

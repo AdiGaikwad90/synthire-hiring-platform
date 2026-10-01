@@ -10,6 +10,7 @@ import { useJob } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { apiFetchBlob } from "@/lib/api";
 
 const { useState: useS_ic, useEffect: useE_ic, useRef: useR_ic } = React;
 
@@ -255,16 +256,12 @@ function ResumeTab({ candidate, score }: { candidate: any; score: number }) {
   useE_ic(() => {
     if (!candidate?.id || !isPdf || blobUrl) return;
     setLoading(true);
-    import('@/lib/auth').then(({ getToken }) => {
-      const token = getToken();
-      fetch(`${apiUrl}/api/candidates/${candidate.id}/resume`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-        .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+    // apiFetchBlob refreshes on 401; raw fetch did not, so this broke
+      // silently once the 15-minute access token expired.
+      apiFetchBlob(`/api/candidates/${candidate.id}/resume`)
         .then(blob => setBlobUrl(URL.createObjectURL(blob)))
         .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
-    });
   }, [candidate?.id]);
 
   useE_ic(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
@@ -372,16 +369,12 @@ function JobDescTab({ job }: { job: any }) {
   useE_ic(() => {
     if (!job?.id || !job.jd_url || blobUrl) return;
     setLoading(true);
-    import('@/lib/auth').then(({ getToken }) => {
-      const token = getToken();
-      fetch(`${apiUrl}/api/jobs/${job.id}/jd`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-        .then(r => r.ok ? r.blob() : Promise.reject(r.status))
+    // apiFetchBlob refreshes on 401; raw fetch did not, so this broke
+      // silently once the 15-minute access token expired.
+      apiFetchBlob(`/api/jobs/${job.id}/jd`)
         .then(blob => setBlobUrl(URL.createObjectURL(blob)))
         .catch(() => setLoadError(true))
         .finally(() => setLoading(false));
-    });
   }, [job?.id]);
 
   useE_ic(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);

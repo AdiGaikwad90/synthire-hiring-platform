@@ -59,7 +59,9 @@ Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullabl
 - HS256 via `jose`; issuer `https://api.synthire.io`, audience `https://app.synthire.io`
 - Payload: `{ sub, email, name, role, company_id, iat, exp }`
 - Access token 15 min (`JWT_EXPIRY_SECONDS`); refresh token 30 days, stored SHA-256 hashed in `refresh_tokens`, rotated on every use by `POST /api/auth/refresh`
-- Middleware reads `Authorization: Bearer` first, falls back to the `synthire_token` cookie
+- Middleware reads the **`synthire_token` cookie first**, falling back to `Authorization: Bearer` (the reverse of what this file used to claim — check `src/middleware/auth.ts`).
+- **Cookies use `SameSite=Lax` unless `Secure` can be set** (`sameSitePolicy()` in `middleware/auth.ts`). `SameSite=None` *requires* `Secure`; over plain http in local dev the browser rejected every auth cookie outright, including the refresh token, so an expired access token could never be renewed.
+- **`POST /api/auth/refresh` returns the new access token in the body**, not only as a cookie. The client stores it for the `Authorization` header; a cookie-only refresh silently fails wherever the browser declines to keep the cookie.
 - Login/signup return `{ user, token }` in the body **and** set HttpOnly cookies
 - **Role guards live in `src/middleware/authorize.ts`** — `requireRecruiter()`, `requireAdmin()`, `requireOwnInterview()`. Use them; do not hand-roll `if (user.role === 'interviewer')` again. They are fail-closed allowlists, so an unrecognised role is denied.
 - **Interviewers are scoped to their own interviews** — 403, not 404. The whole `/api/analytics` router is recruiter/admin only via a router-level `requireRecruiter`, registered **after** `authMiddleware` (`c.get('user')` is empty before it). A new analytics endpoint inherits the guard automatically.
