@@ -48,6 +48,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const [zoom, setZoom] = useS_cd(100);
   const [showSchedule, setShowSchedule] = useS_cd(false);
   const [resumeBlobUrl, setResumeBlobUrl] = useS_cd<string | null>(null);
+  const [resumeError, setResumeError] = useS_cd<string | null>(null);
 
   useE_cd(() => {
     if (!actualId) return;
@@ -59,10 +60,18 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
         const res = await fetch(`${API_URL}/api/candidates/${actualId}/resume`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok || revoked) return;
+        if (revoked) return;
+        if (!res.ok) {
+          // Swallowing this is what made a CSP-blocked viewer look like an
+          // empty panel with no explanation. Say what actually failed.
+          setResumeError(`Could not load the resume file (HTTP ${res.status}).`);
+          return;
+        }
         const blob = await res.blob();
         if (!revoked) setResumeBlobUrl(URL.createObjectURL(blob));
-      } catch {}
+      } catch (e) {
+        if (!revoked) setResumeError(e instanceof Error ? `Could not load the resume file: ${e.message}` : 'Could not load the resume file.');
+      }
     })();
     return () => {
       revoked = true;
@@ -174,6 +183,11 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
               />
             ) : (
               <div className="tsResume" style={{ transform: `scale(${zoom/100})`, transformOrigin: "top center" }}>
+                {resumeError && (
+                  <div className="small" style={{ color: "var(--danger)", padding: "8px 12px" }}>
+                    {resumeError} Showing the parsed preview instead.
+                  </div>
+                )}
                 <ResumePreview c={c}/>
               </div>
             )}

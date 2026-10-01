@@ -118,6 +118,23 @@ const data = await apiFetch("/api/candidates")
 
 ---
 
+## 4b. Content Security Policy
+
+The CSP lives in `next.config.mjs` and is enforced in `next dev`. Two rules that
+have already cost debugging time:
+
+- **`frame-src` has no fallback you can rely on.** It falls back to
+  `default-src 'self'`, and a `blob:` URL is not `'self'`. The resume viewer
+  fetches a PDF with an auth header, wraps it in a blob URL and renders it in an
+  `<iframe>` — without `frame-src 'self' blob:` the browser blocks the frame and
+  the pane renders **blank with no error**.
+- **`connect-src` must name every API origin.** It listed a worker URL that was
+  never deployed, so the moment the header applied in production every API call
+  would have been blocked. It is now derived from `NEXT_PUBLIC_API_URL`.
+
+If a resource silently fails to load, check the browser console for a CSP
+violation before suspecting the code.
+
 ## 5. Styling
 
 - **All CSS lives in `app/globals.css`.** No CSS modules, no styled-components.
