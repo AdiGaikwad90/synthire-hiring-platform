@@ -8,6 +8,7 @@ import { callWithFallback, buildLlmConfig } from '../ai/fallback'
 import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
 import { aggregateScore, buildScoreConfig } from './aggregator'
 import { checkNeuronBudget, deductNeurons, buildNeuronLimitConfig } from '../budget/neurons'
+import { selectSkillsForAdjudication } from './skill-matches'
 
 export interface ScoringInput {
   candidateId: string
@@ -80,14 +81,14 @@ export async function runScoringPipeline(
     ? Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100)
     : 0
 
-  // Step 5: LLM scoring
+  // Step 5: LLM scoring (dimension scores + per-skill verdicts in one call)
+  const skillsToAdjudicate = selectSkillsForAdjudication(requiredSkills, input.niceToHaveSkills)
   const messages = buildScoringMessages(
     resumeText,
     jobTitle,
     jobDescription,
-    requiredSkills,
+    skillsToAdjudicate,
     minYearsExperience,
-    scoringWeights
   )
 
   const config = buildLlmConfig(env)

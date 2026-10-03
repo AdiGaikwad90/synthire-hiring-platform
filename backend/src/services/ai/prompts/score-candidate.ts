@@ -1,6 +1,6 @@
 import type { WorkersAIRequest } from '../workers-ai'
-import type { ScoringDimensions } from '../../scoring/dimensions'
 import { SUB_DIMENSION_KEYS } from '../../scoring/dimensions'
+import type { SkillToAdjudicate } from '../../scoring/skill-matches'
 
 export interface LLMScores {
   dimensions: {
@@ -16,18 +16,44 @@ export interface LLMScores {
   summary: string
   strengths: string[]
   concerns: string[]
+  /**
+   * Optional and untyped on purpose: validateLLMScores must not reject a
+   * response that gets the scores right but this wrong. normalizeSkillMatches()
+   * owns turning it into rows.
+   */
+  skill_matches?: unknown
 }
 
+const VERDICT_GUIDE = `Verdicts — judge from the work described, the way a senior recruiter reads a resume, not by keyword presence:
+- "evidenced": demonstrated by described work (a role, project or result that used it), not merely listed
+- "claimed": appears only in a skills list or summary, with no supporting experience
+- "transferable": not present, but an adjacent skill the candidate clearly demonstrated reasonably credits it; name that skill in "via"
+- "missing": no support anywhere in the resume`
+
+// The job's dimension weights are deliberately NOT a parameter. Telling the
+// model a dimension matters more inflates that score, and the aggregator then
+// weights the inflated score again. Scores stay independent measurements.
 export function buildScoringMessages(
   resumeText: string,
   jobTitle: string,
   jobDescription: string | null,
-  requiredSkills: string[],
+  skills: readonly SkillToAdjudicate[],
   minYearsExperience: number,
-  _dimensions: ScoringDimensions
 ): WorkersAIRequest['messages'] {
-  const skillsList = requiredSkills.length > 0 ? requiredSkills.join(', ') : 'Not specified'
+  const required = skills.filter((s) => s.requirement === 'required').map((s) => s.skill)
+  const skillsList = required.length > 0 ? required.join(', ') : 'Not specified'
   const jobContext = jobDescription ? `Job Description: ${jobDescription}` : `Job Title: ${jobTitle}`
+
+  const skillSection = skills.length > 0
+    ? `\nSkills to assess:\n${skills.map((s) => `- ${s.skill} [${s.requirement}]`).join('\n')}\n\n${VERDICT_GUIDE}\n`
+    : ''
+  const skillSchema = skills.length > 0
+    ? `,
+  "skill_matches": [
+    { "skill": "<exactly as listed in Skills to assess>", "verdict": "evidenced|claimed|transferable|missing", "evidence": "<max 25 words grounded in the resume, or null>", "via": "<adjacent skill, transferable only, else null>" }
+  ]`
+    : ''
+  const skillRule = skills.length > 0 ? '\nInclude exactly one skill_matches entry per skill listed in Skills to assess.' : ''
 
   return [
     { role: 'system', content: 'You are an expert technical recruiter. Score candidates against job requirements objectively. Return ONLY valid JSON matching the requested schema. Use the full 0-100 range — average candidates should land around 50-65, strong ones above 75.' },
@@ -37,7 +63,7 @@ Job Title: ${jobTitle}
 ${jobContext}
 Required Skills: ${skillsList}
 Minimum Years Experience: ${minYearsExperience}
-
+${skillSection}
 Resume:
 ${resumeText}
 
@@ -51,9 +77,9 @@ Return JSON with EXACTLY this structure (all scores 0-100):
   },
   "summary": "<one or two sentence overall assessment of fit>",
   "strengths": ["2-4 short bullet points, max 12 words each"],
-  "concerns": ["2-4 short bullet points about gaps, empty array if none"]
+  "concerns": ["2-4 short bullet points about gaps, empty array if none"]${skillSchema}
 }
-
+${skillRule}
 Do not include any text outside the JSON object.` },
   ]
 }

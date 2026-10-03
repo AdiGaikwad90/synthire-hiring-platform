@@ -22,7 +22,7 @@ export interface LlmConfig {
  */
 export const MAX_TOKENS_BY_OPERATION: Record<NeuronOperation, number> = {
   LLM_PARSE: 4000,
-  LLM_SCORE: 2000,
+  LLM_SCORE: 3000, // dimension scores + up to 25 per-skill verdicts with evidence
   LLM_QUESTIONS: 1500,
   EMBEDDING: 0,
 }
