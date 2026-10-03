@@ -17,7 +17,9 @@ import {
   updateJob,
   deleteJob,
 } from '../db/queries/jobs'
+import { getJobSkillGaps } from '../db/queries/skill-matches'
 import { authMiddleware } from '../middleware/auth'
+import { requireRecruiter } from '../middleware/authorize'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
@@ -241,6 +243,15 @@ router.get('/:id/jd', async (c) => {
       'Vary': 'Origin',
     },
   })
+})
+
+// GET /api/jobs/:id/skill-gaps — per-skill verdict counts across scored applicants
+router.get('/:id/skill-gaps', async (c) => {
+  const user = c.get('user')
+  requireRecruiter(user)
+  const jobId = c.req.param('id')
+  if (!(await getJob(c.env.DB, jobId, user.company_id))) throw new AppError('Job not found', 404)
+  return c.json(apiResponse(await getJobSkillGaps(c.env.DB, jobId, user.company_id)))
 })
 
 // GET /api/jobs/:id — get a single job
