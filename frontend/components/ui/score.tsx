@@ -50,9 +50,11 @@ export interface ScoreBarProps {
   label?: React.ReactNode;
   value: number;
   color?: string;
+  /** Replaces the default `{value}%` readout, e.g. "24.1 pts". `value` still drives the fill. */
+  display?: React.ReactNode;
 }
 
-export function ScoreBar({ label, value, color }: ScoreBarProps) {
+export function ScoreBar({ label, value, color, display }: ScoreBarProps) {
   const c =
     color ||
     (value >= 80 ? "var(--success)" : value >= 60 ? "var(--warning)" : "var(--danger)");
@@ -60,7 +62,7 @@ export function ScoreBar({ label, value, color }: ScoreBarProps) {
     <div className="tsScoreBar">
       <div className="tsScoreBar-head">
         <span className="tsScoreBar-label">{label}</span>
-        <span className="tsScoreBar-val mono">{value}%</span>
+        <span className="tsScoreBar-val mono">{display ?? `${value}%`}</span>
       </div>
       <div className="tsScoreBar-track">
         <div className="tsScoreBar-fill" style={{ width: `${value}%`, background: c }} />

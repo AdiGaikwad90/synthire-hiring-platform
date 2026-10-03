@@ -103,7 +103,7 @@ Both long-running backend calls return a job id at 202 and are polled from the c
 | `/jobs/[jobId]` | `Candidates` | `useCandidates({ job_id })` |
 | `/jobs/[jobId]/edit` | `JobEditForm` | `useJob()` + `useUpdateJob()` |
 | `/candidates` | `Candidates` | `useCandidates()` |
-| `/candidates/[candidateId]` | `CandidateDetail` | `useCandidate(id)` |
+| `/candidates/[candidateId]` | `CandidateDetail` | `useCandidate(id)` (incl. `skill_matches`, `score_attribution`), `useJob(job_id)` |
 | `/pipeline` | `PipelineKanban` | `useCandidates()` + `useUpdateCandidateStage()` |
 | `/interviews` | `InterviewerHome` (reused by the recruiter route) | `useInterviews()` |
 | `/analytics` | `Analytics` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary` |

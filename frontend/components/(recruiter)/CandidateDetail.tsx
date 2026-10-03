@@ -12,6 +12,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { apiFetchBlob } from "@/lib/api";
+import type { ApiJob } from "@/lib/api";
+import { VERDICT_META, VERDICT_ORDER, attributionRows, evaluationCoverage, parseAttribution, sortSkillMatches, verdictCounts } from "@/lib/scoring";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd, useEffect: useE_cd } = React;
@@ -191,7 +193,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
           </div>
 
           <div className="tsCD-tabBody">
-            {tab === "overview" && <OverviewTab c={c}/>}
+            {tab === "overview" && <OverviewTab c={c} job={appliedJob}/>}
             {tab === "breakdown" && <BreakdownTab c={c}/>}
             {tab === "ai" && <AITab c={c}/>}
             {tab === "activity" && <ActivityTab c={c}/>}
@@ -253,12 +255,13 @@ const ResumePreview = ({ c }: any) => (
 );
 
 // ===== Overview tab =====
-function OverviewTab({ c }: any) {
-    const skillsTable = c.skills.map((skill: string) => ({
-    name: skill,
-    required: true,
-    status: 'met' as const,
-  }));
+function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
+  const attribution = parseAttribution(c.score_attribution);
+  const matches = sortSkillMatches(c.skill_matches ?? []);
+  const counts = verdictCounts(matches);
+  const coverage = evaluationCoverage(matches, job?.required_skills ?? [], job?.nice_to_have_skills ?? []);
+  // Nothing to match against: no skills on the job and no stored verdicts.
+  const showSkills = matches.length > 0 || coverage.total > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -272,38 +275,91 @@ function OverviewTab({ c }: any) {
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
             <ScoreRing score={c.score} size={132} stroke={9} label="Match"/>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <ScoreBar label="Technical skills (40%)" value={c.skillsScore}/>
-              <ScoreBar label="Experience relevance (30%)" value={c.expScore}/>
-              <ScoreBar label="Education & certs (20%)" value={c.eduScore}/>
-              <ScoreBar label="Achievements (10%)" value={c.achScore}/>
+              {attribution ? attributionRows(attribution).map(r => (
+                <div key={r.id}>
+                  <ScoreBar
+                    label={<>{r.label} <span style={{ color: "var(--muted)" }}>· {Math.round(r.weightPct)}% weight</span></>}
+                    value={r.score}
+                    display={`${r.points.toFixed(1)} pts`}
+                  />
+                  {r.subDimensions.length > 0 && (
+                    <details className="tsAttr">
+                      <summary className="small">Sub-scores</summary>
+                      <div className="tsAttr-subs">
+                        {r.subDimensions.map(s => (
+                          <React.Fragment key={s.key}>
+                            <span className="small">{s.label}</span>
+                            <span className="small mono">{s.score}</span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )) : (
+                <>
+                  {/* Scored before attribution shipped: the scores are real, the weights were never recorded. */}
+                  <ScoreBar label="Skills" value={c.skillsScore}/>
+                  <ScoreBar label="Experience" value={c.expScore}/>
+                  <ScoreBar label="Education & certifications" value={c.eduScore}/>
+                  <ScoreBar label="Achievements" value={c.achScore}/>
+                  <span className="small" style={{ color: "var(--muted)" }}>Weight breakdown not available — this candidate was scored before it was recorded.</span>
+                </>
+              )}
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Skills heatmap */}
-      <Card padded={false}>
-        <div className="tsCardHead" style={{ paddingBottom: 8 }}>
-          <div className="h3">Skills match</div>
-          <span className="small" style={{ color: "var(--muted)" }}>{c.skills.length} skills detected</span>
-        </div>
-        <div className="tsSkillTable">
-          <div className="tsSkillTable-head">
-            <div>Skill</div>
-            <div>Required</div>
-            <div></div>
-          </div>
-          {skillsTable.map(s => (
-            <div key={s.name} className="tsSkillTable-row">
-              <div style={{ fontWeight: 500 }}>{s.name}</div>
-              <div>{s.required ? <Badge variant="primary">Required</Badge> : <span className="small" style={{ color: "var(--muted)" }}>Nice-to-have</span>}</div>
-              <div>
-                {s.status === "met" && <span className="tsSkillStatus tsSkillStatus-met"><Icon.Check size={11} stroke={3}/></span>}
+      {/* Skills match */}
+      {showSkills && (
+        <Card padded={false}>
+          <div className="tsCardHead" style={{ paddingBottom: 8 }}>
+            <div className="h3">Skills match</div>
+            {matches.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {VERDICT_ORDER.filter(v => counts[v] > 0).map(v => (
+                  <Badge key={v} variant={VERDICT_META[v].variant}>{counts[v]} {VERDICT_META[v].label.toLowerCase()}</Badge>
+                ))}
               </div>
+            )}
+          </div>
+          {matches.length === 0 ? (
+            <div className="small" style={{ padding: "0 22px 18px", color: "var(--muted)" }}>
+              Skill analysis not available — this candidate was scored before skill matching shipped.
             </div>
-          ))}
-        </div>
-      </Card>
+          ) : (
+            <div className="tsSkillTable">
+              <div className="tsSkillTable-head">
+                <div>Skill</div>
+                <div>Requirement</div>
+                <div>Verdict</div>
+              </div>
+              {matches.map(m => (
+                <div key={m.skill} className="tsSkillTable-row">
+                  <div>
+                    {m.evidence || m.via ? (
+                      <details>
+                        <summary style={{ fontWeight: 500, cursor: "pointer" }}>{m.skill}</summary>
+                        <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
+                          {m.via && <>Credited via <strong>{m.via}</strong>. </>}{m.evidence}
+                        </div>
+                      </details>
+                    ) : <span style={{ fontWeight: 500 }}>{m.skill}</span>}
+                  </div>
+                  <div>{m.requirement === "required" ? <Badge variant="primary">Required</Badge> : <span className="small" style={{ color: "var(--muted)" }}>Nice-to-have</span>}</div>
+                  <div><Badge variant={VERDICT_META[m.verdict].variant}>{VERDICT_META[m.verdict].label}</Badge></div>
+                </div>
+              ))}
+            </div>
+          )}
+          {matches.length > 0 && coverage.notEvaluated.length > 0 && (
+            <div className="small" style={{ padding: "10px 22px 16px", color: "var(--muted)" }}>
+              Not evaluated ({coverage.notEvaluated.length} of {coverage.total}): {coverage.notEvaluated.join(", ")}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Experience timeline */}
       <Card padded={false}>
