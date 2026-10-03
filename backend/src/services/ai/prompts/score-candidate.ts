@@ -50,7 +50,7 @@ export function buildScoringMessages(
   const skillSchema = skills.length > 0
     ? `,
   "skill_matches": [
-    { "skill": "<exactly as listed in Skills to assess>", "verdict": "evidenced|claimed|transferable|missing", "evidence": "<max 25 words grounded in the resume, or null>", "via": "<adjacent skill, transferable only, else null>" }
+    { "skill": "<exactly as listed in Skills to assess>", "verdict": "evidenced|claimed|transferable|missing", "evidence": "<max 15 words grounded in the resume, or null>", "via": "<adjacent skill, transferable only, else null>" }
   ]`
     : ''
   const skillRule = skills.length > 0 ? '\nInclude exactly one skill_matches entry per skill listed in Skills to assess.' : ''

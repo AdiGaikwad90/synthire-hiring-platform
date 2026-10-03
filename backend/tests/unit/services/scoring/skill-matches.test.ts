@@ -74,6 +74,10 @@ describe('selectSkillsForAdjudication — invalid input', () => {
       { skill: 'Go', requirement: 'required' },
     ])
   })
+
+  it('treats a non-array required/niceToHave (malformed JSON column) as empty rather than throwing', () => {
+    expect(selectSkillsForAdjudication('Go' as unknown as unknown[], { x: 1 } as unknown as unknown[])).toEqual([])
+  })
 })
 
 describe('selectSkillsForAdjudication — empty', () => {
@@ -131,7 +135,7 @@ describe('normalizeSkillMatches — boundaries', () => {
       REQ,
     )
     expect(out[0].verdict).toBe('missing')
-    expect(out).toHaveLength(REQ.length)
+    expect(out).toHaveLength(1)
   })
 })
 
@@ -143,14 +147,16 @@ describe('normalizeSkillMatches — invalid input', () => {
     }
   })
 
-  it('marks requested skills the model omitted as missing, with no evidence', () => {
+  it('omits requested skills the model did not return a verdict for', () => {
     const out = normalizeSkillMatches([{ skill: 'Kubernetes', verdict: 'evidenced' }], REQ)
-    expect(out.find((m) => m.skill === 'Rust')).toEqual({ skill: 'Rust', requirement: 'nice_to_have', verdict: 'missing', evidence: null, via: null })
+    expect(out.find((m) => m.skill === 'Rust')).toBeUndefined()
+    expect(out.find((m) => m.skill === 'TypeScript')).toBeUndefined()
+    expect(out).toHaveLength(1)
   })
 
   it('drops skills the model invented', () => {
     const out = normalizeSkillMatches([{ skill: 'Kubernetes', verdict: 'evidenced' }, { skill: 'COBOL', verdict: 'evidenced' }], REQ)
-    expect(out.map((m) => m.skill)).toEqual(['Kubernetes', 'TypeScript', 'Rust'])
+    expect(out.map((m) => m.skill)).toEqual(['Kubernetes'])
   })
 
   it('discards via on any verdict other than transferable', () => {

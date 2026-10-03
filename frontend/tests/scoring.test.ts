@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows,
+  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows, skillsUnavailableReason,
 } from '@/lib/scoring'
 import type { ApiSkillMatch, ApiScoreAttribution } from '@/lib/api'
 
@@ -79,6 +79,30 @@ describe('parseAttribution', () => {
     ['non-numeric contribution', { ...ATTR, contributions: { ...ATTR.contributions, skills: 'high' } }],
   ])('returns null for %s', (_n, raw) => {
     expect(parseAttribution(raw)).toBeNull()
+  })
+})
+
+describe('skillsUnavailableReason', () => {
+  it.each(['pending', 'parsing', 'scoring', undefined, null])('says scoring is in progress for status %s', (status) => {
+    expect(skillsUnavailableReason(status as any, false)).toEqual({
+      skills: 'Scoring in progress — skill analysis will appear when it finishes.',
+      attribution: 'Scoring in progress.',
+    })
+  })
+
+  it('says scoring failed when processing_status is failed', () => {
+    expect(skillsUnavailableReason('failed', false)).toEqual({
+      skills: 'Scoring failed, so no skill analysis is available.',
+      attribution: 'Scoring failed, so no weight breakdown is available.',
+    })
+  })
+
+  it('says no verdicts were recorded when complete with attribution but no matches', () => {
+    expect(skillsUnavailableReason('complete', true).skills).toBe('No skill verdicts were recorded for this scoring run.')
+  })
+
+  it('falls back to the legacy copy when complete with no attribution', () => {
+    expect(skillsUnavailableReason('complete', false).skills).toBe('Skill analysis not available — this candidate was scored before skill matching shipped.')
   })
 })
 

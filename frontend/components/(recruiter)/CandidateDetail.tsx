@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { apiFetchBlob } from "@/lib/api";
 import type { ApiJob } from "@/lib/api";
-import { VERDICT_META, VERDICT_ORDER, attributionRows, evaluationCoverage, parseAttribution, sortSkillMatches, verdictCounts } from "@/lib/scoring";
+import { VERDICT_META, VERDICT_ORDER, attributionRows, evaluationCoverage, parseAttribution, skillsUnavailableReason, sortSkillMatches, verdictCounts } from "@/lib/scoring";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd, useEffect: useE_cd } = React;
@@ -262,6 +262,7 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
   const coverage = evaluationCoverage(matches, job?.required_skills ?? [], job?.nice_to_have_skills ?? []);
   // Nothing to match against: no skills on the job and no stored verdicts.
   const showSkills = matches.length > 0 || coverage.total > 0;
+  const unavailable = skillsUnavailableReason(c.processing_status, attribution !== null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -303,7 +304,7 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
                   <ScoreBar label="Experience" value={c.expScore}/>
                   <ScoreBar label="Education & certifications" value={c.eduScore}/>
                   <ScoreBar label="Achievements" value={c.achScore}/>
-                  <span className="small" style={{ color: "var(--muted)" }}>Weight breakdown not available — this candidate was scored before it was recorded.</span>
+                  <span className="small" style={{ color: "var(--muted)" }}>{unavailable.attribution}</span>
                 </>
               )}
             </div>
@@ -326,7 +327,7 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
           </div>
           {matches.length === 0 ? (
             <div className="small" style={{ padding: "0 22px 18px", color: "var(--muted)" }}>
-              Skill analysis not available — this candidate was scored before skill matching shipped.
+              {unavailable.skills}
             </div>
           ) : (
             <div className="tsSkillTable">
@@ -427,12 +428,12 @@ function BreakdownTab({ c }: any) {
   const sections = [
     skills.length > 0 && { id: "skills", title: "Technical skills", count: skills.length, icon: <Icon.Code size={14}/>,
       groups: [
-        { name: "Detected skills", items: skills.map(s => ({ v: s, years: 0, match: "met" })) },
+        { name: "Detected skills", items: skills.map(s => ({ v: s, years: 0 })) },
       ]},
     c.experience?.length > 0 && { id: "exp", title: "Professional experience", count: c.experience.length, icon: <Icon.Briefcase size={14}/>, experience: c.experience },
     c.education?.length > 0 && { id: "edu", title: "Education", count: c.education.length, icon: <Icon.Book size={14}/>, education: c.education },
     certs.length > 0 && { id: "certs", title: "Certifications", count: certs.length, icon: <Icon.ShieldCheck size={14}/>,
-      certs: certs.map(name => ({ name, issuer: '', date: '', match: 'met' })) },
+      certs: certs.map(name => ({ name, issuer: '', date: '' })) },
     achievements.length > 0 && { id: "ach", title: "Achievements", count: achievements.length, icon: <Icon.Award size={14}/>,
       items: achievements },
   ].filter(Boolean) as any[];
@@ -463,12 +464,9 @@ function BreakdownSection({ s }: any) {
               <div className="tiny" style={{ marginBottom: 6 }}>{g.name}</div>
               <div className="tsBreakdown-items">
                 {g.items.map(it => (
-                  <div key={it.v} className={`tsBreakdown-item tsBreakdown-item-${it.match}`}>
+                  <div key={it.v} className="tsBreakdown-item">
                     <span>{it.v}</span>
                     {it.years > 0 && <span className="mono tiny" style={{ color: "var(--muted)" }}>{it.years}y</span>}
-                    {it.match === "met" && <Icon.Check size={11} stroke={3} style={{ color: "var(--success)" }}/>}
-                    {it.match === "partial" && <Icon.AlertTriangle size={11} style={{ color: "var(--warning)" }}/>}
-                    {it.match === "missing" && <Icon.X size={11} stroke={3} style={{ color: "var(--danger)" }}/>}
                   </div>
                 ))}
               </div>
@@ -478,13 +476,11 @@ function BreakdownSection({ s }: any) {
             <div className="tsBreakdown-items" style={{ flexDirection: "column", gap: 8 }}>
               {s.certs.map(cert => (
                 <div key={cert.name} className="tsCertCard">
-                  <Icon.Award size={16} style={{ color: cert.match === "met" ? "var(--success)" : cert.match === "partial" ? "var(--warning)" : "var(--text-2)" }}/>
+                  <Icon.Award size={16} style={{ color: "var(--text-2)" }}/>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{cert.name}</div>
                     <div className="small" style={{ color: "var(--muted)" }}>{cert.issuer} · {cert.date}</div>
                   </div>
-                  {cert.match === "met" && <Badge variant="success">Required</Badge>}
-                  {cert.match === "partial" && <Badge variant="warning">Nice-to-have</Badge>}
                 </div>
               ))}
             </div>

@@ -46,7 +46,7 @@ describe('MAX_TOKENS_BY_OPERATION', () => {
   })
 
   it('gives LLM_SCORE room for up to 25 per-skill verdicts with evidence', () => {
-    expect(MAX_TOKENS_BY_OPERATION.LLM_SCORE).toBeGreaterThanOrEqual(3000)
+    expect(MAX_TOKENS_BY_OPERATION.LLM_SCORE).toBeGreaterThanOrEqual(4000)
   })
 })
 

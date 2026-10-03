@@ -58,7 +58,6 @@ describe('runScoringPipeline — skill matches and attribution', () => {
 
     expect(r.skill_matches).toEqual([
       { skill: 'Kubernetes', requirement: 'required', verdict: 'evidenced', evidence: 'EKS for 5 years', via: null },
-      { skill: 'Rust', requirement: 'nice_to_have', verdict: 'missing', evidence: null, via: null },
     ])
     const a = JSON.parse(r.score_attribution)
     const sum = Object.values(a.contributions as Record<string, number>).reduce((s, n) => s + n, 0)
@@ -84,5 +83,25 @@ describe('runScoringPipeline — skill matches and attribution', () => {
     )
     expect(r.skill_matches).toEqual([])
     expect(prompts[0]).not.toContain('skill_matches')
+  })
+
+  it('clamps a negative cosine similarity to 0 rather than a negative semantic score', async () => {
+    prompts = []
+    let embedCalls = 0
+    const AI = {
+      run: async (model: string, input: { messages?: { content: string }[] }) => {
+        // Opposite unit vectors → cosine similarity -1, which would otherwise
+        // round to a negative semantic score and a negative contribution/bar.
+        if (model.includes('bge')) {
+          const sign = embedCalls++ === 0 ? 1 : -1
+          return { data: [Array.from({ length: 1024 }, () => sign * 0.5)] }
+        }
+        prompts.push((input.messages ?? []).map((m) => m.content).join('\n'))
+        return { response: JSON.stringify(SCORES) }
+      },
+    }
+    const VECTORIZE = { upsert: async () => ({}) }
+    const r = await runScoringPipeline({ ...env, AI, VECTORIZE } as unknown as Env, input())
+    expect(r.semantic_score).toBe(0)
   })
 })

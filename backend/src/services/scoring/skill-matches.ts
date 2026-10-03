@@ -57,9 +57,12 @@ export function selectSkillsForAdjudication(
 }
 
 /**
- * One entry per requested skill, in requested order. Returns [] when the model
- * gave nothing usable, so the UI can say "not available" rather than marking
- * every skill missing because the field was skipped.
+ * Only the skills the model actually returned a verdict for, still in
+ * requested order. Returns [] when the model gave nothing usable, so the UI
+ * can say "not available" rather than marking every skill missing because the
+ * field was skipped. Skills the model omitted are simply absent — the
+ * frontend's evaluationCoverage() already lists those as "Not evaluated",
+ * so padding them here would double-count the omission as a verdict.
  */
 export function normalizeSkillMatches(raw: unknown, requested: readonly SkillToAdjudicate[]): SkillMatch[] {
   if (!Array.isArray(raw) || requested.length === 0) return []
@@ -87,9 +90,7 @@ export function normalizeSkillMatches(raw: unknown, requested: readonly SkillToA
   }
 
   if (found.size === 0) return []
-  return requested.map(
-    (r) => found.get(r.skill.toLowerCase()) ?? { ...r, verdict: 'missing', evidence: null, via: null },
-  )
+  return requested.map((r) => found.get(r.skill.toLowerCase())).filter((m): m is SkillMatch => m !== undefined)
 }
 
 function clip(v: unknown, max: number): string | null {

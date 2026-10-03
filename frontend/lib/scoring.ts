@@ -53,6 +53,28 @@ export function evaluationCoverage(
   return { total: seen.size, notEvaluated }
 }
 
+/**
+ * Copy for the empty states on the Overview tab — skills panel and the
+ * attribution fallback note. "Not available" is a false claim whenever
+ * scoring hasn't actually run or has failed, so the reason comes from the
+ * candidate's processing state, not a single hardcoded string.
+ */
+export function skillsUnavailableReason(
+  processingStatus: string | null | undefined,
+  hasAttribution: boolean,
+): { skills: string; attribution: string } {
+  if (processingStatus !== 'complete' && processingStatus !== 'failed') {
+    return { skills: 'Scoring in progress — skill analysis will appear when it finishes.', attribution: 'Scoring in progress.' }
+  }
+  if (processingStatus === 'failed') {
+    return { skills: 'Scoring failed, so no skill analysis is available.', attribution: 'Scoring failed, so no weight breakdown is available.' }
+  }
+  if (hasAttribution) {
+    return { skills: 'No skill verdicts were recorded for this scoring run.', attribution: 'Weight breakdown not available — this candidate was scored before it was recorded.' }
+  }
+  return { skills: 'Skill analysis not available — this candidate was scored before skill matching shipped.', attribution: 'Weight breakdown not available — this candidate was scored before it was recorded.' }
+}
+
 export function parseAttribution(raw: unknown): ApiScoreAttribution | null {
   if (!raw || typeof raw !== 'object') return null
   const a = raw as ApiScoreAttribution

@@ -50,7 +50,7 @@ export interface ApiCandidate {
   semantic_score: number | null; skills_score: number | null; experience_score: number | null
   education_score: number | null; achievements_score: number | null; ai_analysis: string | null
   status: string; processing_status: string; created_at: string; updated_at: string
-  /** Detail endpoint only. [] = scored before skill matching shipped. */
+  /** skill_matches is detail-endpoint only; score_attribution is on every candidate (list and detail). [] = scored before skill matching shipped. */
   skill_matches?: ApiSkillMatch[]
   score_attribution?: ApiScoreAttribution | null
 }

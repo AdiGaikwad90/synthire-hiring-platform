@@ -91,7 +91,7 @@ no such table: quota_usage` warnings appear on every request:
 
 - Bad JSON, failed Zod validation, or any error → try next model. Exhausted → `AppError(503)`.
 - **Token budgets are per-operation** (`MAX_TOKENS_BY_OPERATION` in `fallback.ts`):
-  `LLM_PARSE` 4000, `LLM_SCORE` 2000, `LLM_QUESTIONS` 1500. A single global
+  `LLM_PARSE` 4000, `LLM_SCORE` 4000, `LLM_QUESTIONS` 1500. A single global
   `LLM_MAX_TOKENS` does not work — it was 800, which truncated resume JSON
   mid-object. That surfaces as **"returned invalid JSON"**, not as an obvious
   truncation, and JD parsing kept working because its output is small. If you

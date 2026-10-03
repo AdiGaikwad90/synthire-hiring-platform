@@ -83,7 +83,7 @@ export async function runScoringPipeline(
 
   // Step 4: Compute cosine similarity → semanticScore (0-100)
   const semanticScore = (resumeEmbedding && jobEmbedding)
-    ? Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100)
+    ? Math.max(0, Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100))
     : 0
 
   // Step 5: LLM scoring (dimension scores + per-skill verdicts in one call)

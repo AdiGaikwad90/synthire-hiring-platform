@@ -102,7 +102,7 @@ explicit definitions:
 - `missing` — no support in the resume
 
 **Bounds.** At most 25 skills are sent for adjudication, required before
-nice-to-have. `LLM_SCORE` rises 2000 → 3000 tokens to fit the larger response.
+nice-to-have. `LLM_SCORE` rises 2000 → 4000 tokens to fit the larger response.
 When a job exceeds 25, the UI states which skills were evaluated rather than
 implying the rest passed.
 
@@ -228,10 +228,14 @@ evidence text shown so a recruiter can overrule, and `claimed` presented as
 which skills were evaluated. Silent truncation would be a new fabrication.
 
 **Prompt and response grow**, raising the chance of malformed JSON — the
-failure mode that caused the earlier resume-parsing outage. Mitigation: the
-budget rises to 3000, `skill_matches` is optional so a truncated response still
-yields a score, and the existing truncation diagnostics already distinguish a
-budget overrun from unparseable output.
+failure mode that caused the earlier resume-parsing outage. A truncated
+response is unbalanced JSON and fails to parse, so it falls through to the
+next model; if both models truncate, scoring fails outright. `skill_matches`
+being optional does not rescue a truncated response — optionality only
+applies once the JSON parses. The real mitigations are the 4000-token budget,
+the 15-word evidence cap, and the 25-skill cap, which together keep the
+response inside the budget; the existing truncation diagnostics then make a
+budget overrun distinguishable from unparseable output when one does occur.
 
 ## Out of scope
 
