@@ -1,6 +1,6 @@
 # Synthire — Testing Rules
 
-Every fix, new feature, or modification must be tested with Playwright before handover. These rules apply to every session.
+Every fix, new feature, or modification must be tested in the running app with the Playwright MCP before handover — see `TESTING.md` §10 for the procedure. These rules apply to every session.
 
 ## Core Testing Mandate
 
@@ -13,7 +13,7 @@ Every fix, new feature, or modification must be tested with Playwright before ha
 
 ```
 Backend:  http://localhost:8787
-Frontend: http://localhost:3001
+Frontend: http://localhost:3000
 Email:    test@synthire.io
 Password: password123
 ```

@@ -213,6 +213,9 @@ Three hard constraints, learned the hard way:
 - [ ] A bug fix has a regression test that **fails without the fix** — verify by
       reverting the fix locally and watching it go red
 - [ ] Any deliberate limitation is pinned by a commented test
+- [ ] **Every change verified in the running app with the Playwright MCP** —
+      see §10. Mandatory for every fix, feature or modification, backend
+      included. A green suite is not "done"; a passing browser pass is.
 
 ### Fixing a bug
 
@@ -225,11 +228,39 @@ Three hard constraints, learned the hard way:
 
 ---
 
-## 10. Manual browser checks
+## 10. Live-app verification with the Playwright MCP — mandatory
 
-`TESTING_RULES.md` holds the 9-step recruiter journey. Treat it as a
-**pre-release manual checklist**, not a per-PR gate — nothing enforces it and
-Playwright is not installed. Do not claim it as coverage.
+Automated suites prove the code does what the tests assume. They do not prove
+the screen a recruiter sees is right — the fabricated "every skill met" table
+passed every test for months. So **every** implementation ends with a pass
+through the running app using the Playwright MCP tools
+(`mcp__plugin_playwright_playwright__*`), and nothing is called "implemented"
+or "ready" until it passes.
 
-If it should be a real gate, it needs automating as Playwright specs in CI.
-Until then, run it by hand before a release and say plainly that it was manual.
+**How**
+
+1. Run both apps locally (`backend: npm run dev` on :8787, `frontend: npm run dev`
+   on :3000). Apply any new migration locally first: `cd backend && npm run db:migrate:local`.
+2. Log in as the test account in `TESTING_RULES.md` (create it if missing).
+3. Exercise **every** changed behaviour through the UI, the way a user would —
+   create the data it needs, click through, and read what is rendered.
+   For a backend-only change, drive it from the page that consumes it, or call
+   the endpoint from the page context (`browser_evaluate` with `fetch`) so the
+   real auth path is used.
+4. Verify against the expected behaviour, not just "it renders": values match
+   the API, empty/legacy/error states show the right copy, no console errors
+   (`browser_console_messages`), no failed requests (`browser_network_requests`).
+5. Take a screenshot of each verified state.
+6. **If anything is wrong, fix it and repeat from step 3.** Iterate until the
+   whole pass is clean.
+
+**Report it.** State what was exercised and what was observed. If a step
+could not be run (for example it needs a paid external call you were told not
+to make), say so explicitly and do not call the work ready.
+
+Workers AI calls made during this pass are real and spend the daily Neuron
+budget (~160 per resume scored). That is expected; keep the number of uploads
+to what the change needs.
+
+`TESTING_RULES.md` holds the standing checklist for these passes (test
+account, what to check on every page, the recruiter journey).
