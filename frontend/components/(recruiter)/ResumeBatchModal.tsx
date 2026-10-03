@@ -55,7 +55,7 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
             arr.map((x) => x.id === entry.id ? { ...x, status: "parsing" } : x)
           );
 
-          // Poll GET /api/candidates/:id every 2s until complete or failed
+          // Poll GET /api/candidates/:id every 2s until complete or error
           let ticks = 0;
           const poll = setInterval(async () => {
             ticks++;
@@ -71,7 +71,7 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
                       : x
                   )
                 );
-              } else if (ps === "failed" || ticks > 60) {
+              } else if (ps === "error" || ticks > 60) {
                 clearInterval(poll);
                 setFiles((arr) =>
                   arr.map((x) => x.id === entry.id ? { ...x, status: "error" } : x)
@@ -102,6 +102,8 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
   const sortedFiles = [...files].sort((a, b) => (b.score || 0) - (a.score || 0));
   const highMatches = sortedFiles.filter((f) => (f.score || 0) >= 80).length;
   const mediumMatches = sortedFiles.filter((f) => (f.score || 0) >= 60 && (f.score || 0) < 80).length;
+  // Only files that were actually scored — a failed upload is not a low score.
+  const belowThreshold = sortedFiles.filter((f) => f.score != null && f.score < 60).length;
 
   return (
     <Modal
@@ -218,7 +220,7 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
               </div>
               <div className="tsResStat">
                 <div className="mono" style={{ fontSize: 24, fontWeight: 600, color: "var(--muted)" }}>
-                  {files.length - highMatches - mediumMatches}
+                  {belowThreshold}
                 </div>
                 <div className="small" style={{ color: "var(--muted)" }}>Below threshold</div>
               </div>

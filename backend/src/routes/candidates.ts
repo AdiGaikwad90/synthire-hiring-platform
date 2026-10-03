@@ -7,7 +7,7 @@ import {
   apiResponse,
   paginatedResponse,
 } from '../types/api'
-import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
+import { detectFileType, getExtension, getContentType, hasReadableResumeText } from '../services/parsing/detector'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
 import { uploadToR2, deleteFromR2, getFromR2, r2Key } from '../services/storage/r2'
@@ -53,6 +53,9 @@ async function runPipeline(
       resumeText = await extractPdfText(buffer)
     } else {
       resumeText = await extractDocxText(buffer)
+    }
+    if (!hasReadableResumeText(resumeText)) {
+      throw new Error('No readable text found in the resume — scanned or image-only files are not supported')
     }
 
     // Parse resume with AI

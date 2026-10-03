@@ -90,8 +90,11 @@ describe('skillsUnavailableReason', () => {
     })
   })
 
-  it('says scoring failed when processing_status is failed', () => {
-    expect(skillsUnavailableReason('failed', false)).toEqual({
+  // The backend writes 'error' on failure (updateCandidateError), not 'failed'.
+  // Checking 'failed' showed "Scoring in progress" forever on a failed upload —
+  // caught in the live-app Playwright pass, not by the unit tests.
+  it('says scoring failed when processing_status is error', () => {
+    expect(skillsUnavailableReason('error', false)).toEqual({
       skills: 'Scoring failed, so no skill analysis is available.',
       attribution: 'Scoring failed, so no weight breakdown is available.',
     })

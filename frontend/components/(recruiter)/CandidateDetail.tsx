@@ -127,7 +127,8 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div className="tsCD-overall">
-            <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: "var(--success)" }}>{c.score}</div>
+            {/* null until scoring completes — "0" in green would read as a real score */}
+            <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: apiCandidate.overall_score == null ? "var(--muted)" : "var(--success)" }}>{apiCandidate.overall_score ?? "—"}</div>
             <div className="tiny">Overall</div>
           </div>
           <div className="tsCD-divider"/>
@@ -187,7 +188,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
         <div className="tsCD-analysis">
           <div className="tsCD-tabs">
             <button className={`tsTab ${tab === "overview" ? "tsTab-active" : ""}`} onClick={() => setTab("overview")}>Overview</button>
-            <button className={`tsTab ${tab === "breakdown" ? "tsTab-active" : ""}`} onClick={() => setTab("breakdown")}>Resume breakdown <span className="tsTab-count">12</span></button>
+            <button className={`tsTab ${tab === "breakdown" ? "tsTab-active" : ""}`} onClick={() => setTab("breakdown")}>Resume breakdown</button>
             <button className={`tsTab ${tab === "ai" ? "tsTab-active" : ""}`} onClick={() => setTab("ai")}>AI analysis</button>
             <button className={`tsTab ${tab === "activity" ? "tsTab-active" : ""}`} onClick={() => setTab("activity")}>Activity</button>
           </div>
@@ -263,6 +264,9 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
   // Nothing to match against: no skills on the job and no stored verdicts.
   const showSkills = matches.length > 0 || coverage.total > 0;
   const unavailable = skillsUnavailableReason(c.processing_status, attribution !== null);
+  // Until scoring completes there is nothing to break down — a 0 ring and four
+  // 0% bars would present an unscored candidate as one that scored zero.
+  const scored = c.processing_status === "complete";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -271,8 +275,11 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
         <div style={{ padding: 22, position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <AIPill>AI score breakdown</AIPill>
-            <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${formatDate(c.updated_at)}` : 'Scored recently'}</span>
+            {scored && <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${formatDate(c.updated_at)}` : 'Scored recently'}</span>}
           </div>
+          {!scored ? (
+            <span className="small" style={{ color: "var(--muted)" }}>{unavailable.attribution}</span>
+          ) : (
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
             <ScoreRing score={c.score} size={132} stroke={9} label="Match"/>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -309,6 +316,7 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
               )}
             </div>
           </div>
+          )}
         </div>
       </Card>
 
@@ -413,7 +421,7 @@ function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
             <Icon.AlertTriangle size={12}/> Concerns
           </div>
           {c.concerns.length ? c.concerns.map((s, i) => <div key={i} className="tsFlag-row"><Icon.AlertTriangle size={11} style={{ color: "var(--warning)" }}/>{s}</div>) :
-            <div className="small" style={{ color: "var(--muted)" }}>No major concerns identified.</div>}
+            <div className="small" style={{ color: "var(--muted)" }}>{scored ? "No major concerns identified." : "—"}</div>}
         </div>
       </div>
     </div>
@@ -433,7 +441,7 @@ function BreakdownTab({ c }: any) {
     c.experience?.length > 0 && { id: "exp", title: "Professional experience", count: c.experience.length, icon: <Icon.Briefcase size={14}/>, experience: c.experience },
     c.education?.length > 0 && { id: "edu", title: "Education", count: c.education.length, icon: <Icon.Book size={14}/>, education: c.education },
     certs.length > 0 && { id: "certs", title: "Certifications", count: certs.length, icon: <Icon.ShieldCheck size={14}/>,
-      certs: certs.map(name => ({ name, issuer: '', date: '' })) },
+      certs: certs.map(name => ({ name })) },
     achievements.length > 0 && { id: "ach", title: "Achievements", count: achievements.length, icon: <Icon.Award size={14}/>,
       items: achievements },
   ].filter(Boolean) as any[];
@@ -479,7 +487,6 @@ function BreakdownSection({ s }: any) {
                   <Icon.Award size={16} style={{ color: "var(--text-2)" }}/>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{cert.name}</div>
-                    <div className="small" style={{ color: "var(--muted)" }}>{cert.issuer} · {cert.date}</div>
                   </div>
                 </div>
               ))}

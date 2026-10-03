@@ -63,10 +63,11 @@ export function skillsUnavailableReason(
   processingStatus: string | null | undefined,
   hasAttribution: boolean,
 ): { skills: string; attribution: string } {
-  if (processingStatus !== 'complete' && processingStatus !== 'failed') {
+  // 'error' is what updateCandidateError() writes on failure — there is no 'failed'.
+  if (processingStatus !== 'complete' && processingStatus !== 'error') {
     return { skills: 'Scoring in progress — skill analysis will appear when it finishes.', attribution: 'Scoring in progress.' }
   }
-  if (processingStatus === 'failed') {
+  if (processingStatus === 'error') {
     return { skills: 'Scoring failed, so no skill analysis is available.', attribution: 'Scoring failed, so no weight breakdown is available.' }
   }
   if (hasAttribution) {

@@ -134,9 +134,9 @@ If the LLM ignores the v2 sub-dimension structure, `rollupDimension()` falls bac
 
 ## Resume upload pipeline
 
-`POST /api/candidates/upload` (multipart: `file`, `jobId`) returns `{ candidateId }` at **202** immediately; the client polls `GET /api/candidates/:id` until `processing_status` is `complete` or `failed`.
+`POST /api/candidates/upload` (multipart: `file`, `jobId`) returns `{ candidateId }` at **202** immediately; the client polls `GET /api/candidates/:id` until `processing_status` is `complete` or `error` (written by `updateCandidateError()` — there is no `failed`).
 
-Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → extract text (`unpdf` for PDF, `mammoth` for DOCX) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
+Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → extract text (`unpdf` for PDF, `mammoth` for DOCX) → **reject if under 50 readable chars** (`hasReadableResumeText()` — a blank/scanned PDF otherwise makes the model invent a candidate) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
 
 ---
 
