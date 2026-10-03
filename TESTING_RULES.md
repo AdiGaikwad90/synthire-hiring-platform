@@ -1,6 +1,6 @@
 # Synthire — Testing Rules
 
-Every fix, new feature, or modification must be tested in the running app with the Playwright MCP before handover — see `TESTING.md` §10 for the procedure. These rules apply to every session.
+Every fix, new feature, or modification must be tested with Playwright before handover, using real LLM calls. These rules apply to every session.
 
 ## Core Testing Mandate
 

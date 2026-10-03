@@ -52,10 +52,8 @@ Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own co
 
 @TESTING.md
 
-`TESTING.md` is the testing strategy — read it before writing a test.
-`TESTING_RULES.md` is the checklist for the **mandatory** live-app pass:
-every implementation is verified in the running app with the Playwright MCP
-before it is called done (`TESTING.md` §10). Tests passing is not enough.
+`TESTING.md` is the automated strategy CI enforces — read it before writing a test.
+`TESTING_RULES.md` is the mandatory live-app Playwright pass for every change (`TESTING.md` §10).
 
 ## Keeping these docs current
 
