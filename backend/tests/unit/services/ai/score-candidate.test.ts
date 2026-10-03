@@ -37,6 +37,21 @@ describe('buildScoringMessages — happy path', () => {
     const p = userPrompt()
     for (const v of VERDICTS) expect(p, v).toContain(`"${v}"`)
   })
+
+  // Regression from a live run: the model marked Kubernetes "evidenced" citing
+  // Amazon ECS work. A related-but-different technology is "transferable"; the
+  // prompt must say so explicitly, or the panel claims proof that isn't there.
+  it('forbids crediting a related technology as evidenced', () => {
+    const p = userPrompt()
+    expect(p).toContain('never "evidenced"')
+    expect(p).toMatch(/related[^\n]*"transferable"/i)
+  })
+
+  // Same live run: the model answered "missing" for Pulumi→Terraform and
+  // Pulsar→Kafka. "missing" must prompt a check for a related technology first.
+  it('tells the model to look for a related technology before answering missing', () => {
+    expect(userPrompt()).toMatch(/"missing"[^\n]*before choosing it[^\n]*"transferable"/)
+  })
 })
 
 describe('buildScoringMessages — positive variants', () => {

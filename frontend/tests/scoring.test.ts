@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows, skillsUnavailableReason,
+  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows, skillsUnavailableReason, candidatePollInterval, CANDIDATE_POLL_MS,
 } from '@/lib/scoring'
 import type { ApiSkillMatch, ApiScoreAttribution } from '@/lib/api'
 
@@ -138,5 +138,22 @@ describe('attributionRows', () => {
   it('gives every dimension 0% weight, without NaN, when all importances are 0', () => {
     const z = attributionRows({ ...ATTR, importances: { skills: 0, experience: 0, education: 0, achievements: 0 } })
     expect(z.slice(0, 4).map((r) => r.weightPct)).toEqual([0, 0, 0, 0])
+  })
+})
+
+// Regression: the candidate page said "skill analysis will appear when it
+// finishes" but never refetched, so it stayed on "Scoring in progress" after
+// the backend completed. Found in the live-app Playwright pass.
+describe('candidatePollInterval', () => {
+  it.each(['pending', 'parsing', 'scoring'])('polls while status is %s', (status) => {
+    expect(candidatePollInterval(status)).toBe(CANDIDATE_POLL_MS)
+  })
+
+  it.each(['complete', 'error'])('stops polling once status is %s', (status) => {
+    expect(candidatePollInterval(status)).toBe(false)
+  })
+
+  it('does not poll before the candidate has loaded', () => {
+    expect(candidatePollInterval(undefined)).toBe(false)
   })
 })

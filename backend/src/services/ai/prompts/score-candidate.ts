@@ -25,10 +25,11 @@ export interface LLMScores {
 }
 
 const VERDICT_GUIDE = `Verdicts — judge from the work described, the way a senior recruiter reads a resume, not by keyword presence:
-- "evidenced": demonstrated by described work (a role, project or result that used it), not merely listed
+- "evidenced": described work (a role, project or result) uses THIS skill — named, or an unambiguous alias such as "React.js" for React — not merely listed
 - "claimed": appears only in a skills list or summary, with no supporting experience
-- "transferable": not present, but an adjacent skill the candidate clearly demonstrated reasonably credits it; name that skill in "via"
-- "missing": no support anywhere in the resume`
+- "transferable": not present, but a related technology the candidate clearly demonstrated reasonably credits it; name that technology in "via"
+- "missing": no support anywhere in the resume — before choosing it, look for a related technology the candidate clearly demonstrated; if there is one, the verdict is "transferable"
+A related but different technology is "transferable", never "evidenced": Vue work does not evidence React, Azure work does not evidence AWS, GitLab CI work does not evidence GitHub Actions.`
 
 // The job's dimension weights are deliberately NOT a parameter. Telling the
 // model a dimension matters more inflates that score, and the aggregator then

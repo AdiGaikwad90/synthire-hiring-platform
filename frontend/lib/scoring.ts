@@ -59,6 +59,19 @@ export function evaluationCoverage(
  * scoring hasn't actually run or has failed, so the reason comes from the
  * candidate's processing state, not a single hardcoded string.
  */
+/** How often a candidate still being parsed/scored is refetched. */
+export const CANDIDATE_POLL_MS = 3000
+
+/**
+ * react-query refetchInterval for a candidate: poll while the backend is still
+ * working, stop at 'complete' or 'error'. Without it the detail page promised
+ * results "when it finishes" and then never fetched them.
+ */
+export function candidatePollInterval(processingStatus: string | null | undefined): number | false {
+  if (!processingStatus || processingStatus === 'complete' || processingStatus === 'error') return false
+  return CANDIDATE_POLL_MS
+}
+
 export function skillsUnavailableReason(
   processingStatus: string | null | undefined,
   hasAttribution: boolean,
