@@ -29,6 +29,7 @@ import {
   updateCandidateStatus,
   deleteCandidate,
 } from '../db/queries/candidates'
+import { replaceSkillMatches, listSkillMatches } from '../db/queries/skill-matches'
 import { getJob } from '../db/queries/jobs'
 import type { ParsedResume } from '../services/ai/prompts/parse-resume'
 import { authMiddleware } from '../middleware/auth'
@@ -83,6 +84,15 @@ async function runPipeline(
       scoringWeights: job.scoring_dimensions,
       parsedResume,
     })
+
+    // Written BEFORE the score marks the row 'complete', so a client that sees
+    // 'complete' also sees the verdicts. A failure here is logged, not thrown:
+    // a score without skill matches beats no score.
+    try {
+      await replaceSkillMatches(env.DB, { candidateId, jobId, companyId }, scoringResult.skill_matches)
+    } catch (err) {
+      console.error('skill match persistence failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
+    }
 
     // Update scores
     await updateCandidateScores(env.DB, candidateId, scoringResult, 'workers-ai')
@@ -199,7 +209,8 @@ router.get('/:id', async (c) => {
     return c.json({ success: false, error: 'Candidate not found' }, 404)
   }
 
-  return c.json(apiResponse(candidate))
+  const skill_matches = await listSkillMatches(c.env.DB, id, payload.company_id)
+  return c.json(apiResponse({ ...candidate, skill_matches }))
 })
 
 // ── PATCH /:id — update candidate status ──────────────────────────────────────

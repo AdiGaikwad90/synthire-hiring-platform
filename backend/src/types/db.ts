@@ -61,6 +61,7 @@ export interface CandidateRow {
   education_score: number | null
   achievements_score: number | null
   ai_analysis: string | null    // JSON TEXT
+  score_attribution: string | null // JSON TEXT — ScoreAttribution, see services/scoring/attribution.ts
   status: string
   parsing_quality: number | null
   model_used: string | null

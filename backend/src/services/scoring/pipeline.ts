@@ -8,7 +8,8 @@ import { callWithFallback, buildLlmConfig } from '../ai/fallback'
 import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
 import { aggregateScore, buildScoreConfig } from './aggregator'
 import { checkNeuronBudget, deductNeurons, buildNeuronLimitConfig } from '../budget/neurons'
-import { selectSkillsForAdjudication } from './skill-matches'
+import { selectSkillsForAdjudication, normalizeSkillMatches, type SkillMatch } from './skill-matches'
+import { buildAttribution } from './attribution'
 
 export interface ScoringInput {
   candidateId: string
@@ -32,6 +33,10 @@ export interface ScoringResult {
   education_score: number
   achievements_score: number
   ai_analysis: string
+  /** JSON of ScoreAttribution — persisted as-is to candidates.score_attribution. */
+  score_attribution: string
+  /** [] when the model gave nothing usable; the UI shows "not available". */
+  skill_matches: SkillMatch[]
 }
 
 export async function runScoringPipeline(
@@ -121,5 +126,7 @@ export async function runScoringPipeline(
     education_score: aggregated.dimensionScores.education,
     achievements_score: aggregated.dimensionScores.achievements,
     ai_analysis,
+    score_attribution: JSON.stringify(buildAttribution(aggregated, llmResult, scoreConfig)),
+    skill_matches: normalizeSkillMatches(llmResult.skill_matches, skillsToAdjudicate),
   }
 }

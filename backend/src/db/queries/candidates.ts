@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import type { CandidateRow } from '../../types/db'
 import type { ParsedResume } from '../../services/ai/prompts/parse-resume'
 import type { ScoringResult } from '../../services/scoring/pipeline'
+import type { ScoreAttribution } from '../../services/scoring/attribution'
 
 // ── Deserialization helper ────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ export function toCandidate(row: CandidateRow) {
   let achievements: string[] = []
   let ai_analysis: string | null = null
   let parsed_resume: ParsedResume | null = null
+  let score_attribution: ScoreAttribution | null = null
 
   try { technical_skills = JSON.parse(row.technical_skills) } catch { technical_skills = [] }
   try { professional_experience = JSON.parse(row.professional_experience) } catch { professional_experience = [] }
@@ -22,6 +24,7 @@ export function toCandidate(row: CandidateRow) {
   try { achievements = JSON.parse(row.achievements) } catch { achievements = [] }
   ai_analysis = row.ai_analysis ?? null
   try { parsed_resume = row.parsed_resume ? JSON.parse(row.parsed_resume) : null } catch { parsed_resume = null }
+  try { score_attribution = row.score_attribution ? JSON.parse(row.score_attribution) : null } catch { score_attribution = null }
 
   return {
     ...row,
@@ -32,6 +35,7 @@ export function toCandidate(row: CandidateRow) {
     achievements,
     ai_analysis,
     parsed_resume,
+    score_attribution,
   }
 }
 
@@ -161,6 +165,7 @@ export async function updateCandidateScores(
         education_score = ?,
         achievements_score = ?,
         ai_analysis = ?,
+        score_attribution = ?,
         model_used = ?,
         processing_status = 'complete',
         updated_at = ?
@@ -174,6 +179,7 @@ export async function updateCandidateScores(
       scores.education_score,
       scores.achievements_score,
       scores.ai_analysis,
+      scores.score_attribution,
       modelUsed,
       now,
       id

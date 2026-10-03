@@ -39,7 +39,7 @@ All resource IDs are already provisioned and committed for dev, staging, and pro
 
 - **`authMiddleware` is registered inside each route file**, not in `src/index.ts`. Hono's `path/*` matcher does not match the bare `path`, which once silently bypassed auth on list endpoints like `GET /api/candidates`. Any new protected router must call `router.use('*', authMiddleware)` itself.
 - **Never `JSON.parse` a D1 text column without try/catch.** Follow `src/db/queries/jobs.ts::toJob()`. Every query file exports a `toX()` deserializer; routes call those and never write raw SQL.
-- **`candidates.ai_analysis` is a plain string** — do not `JSON.stringify` or `JSON.parse` it.
+- **`candidates.ai_analysis` is JSON TEXT** — `{ summary, strengths, concerns }`, written by `pipeline.ts`. Parse it with try/catch like every JSON column. `candidates.score_attribution` is the same (a `ScoreAttribution` snapshot).
 - **Emails never send inline.** Routes call `queueEmail()`; the every-minute cron drains `email_queue`.
 - **`bcryptjs`, not `bcrypt`** — native bindings crash in Workers.
 - **`nodejs_compat` is required** by the PDF/DOCX parsers for Buffer support.
@@ -48,9 +48,9 @@ All resource IDs are already provisioned and committed for dev, staging, and pro
 
 ## Database (D1)
 
-12 tables across migrations `0001`–`0008`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`.
+13 tables across migrations `0001`–`0009`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
 
-Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget).
+Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`.
 
 ---
 
@@ -127,6 +127,8 @@ overall         = component_score * SCORE_LLM_WEIGHT + semantic * SCORE_SEMANTIC
 **There is no "weights must sum to 100" rule.** The weighted average normalizes by total importance, so each dimension's importance is set independently 0–100. Four dimensions — `skills`, `experience`, `education`, `achievements` — each with sub-dimensions (see `DEFAULT_SCORING_DIMENSIONS`).
 
 If the LLM ignores the v2 sub-dimension structure, `rollupDimension()` falls back to the legacy flat `{id}_score` field. Keep that fallback.
+
+**Skill matching and attribution.** The same LLM call also returns a verdict per job skill — `evidenced` / `claimed` / `transferable` / `missing` (`services/scoring/skill-matches.ts`). At most 25 skills, required first. The model is **not** told dimension weights; scores stay independent and weighting stays arithmetic. Output is normalised fail-closed (unknown verdict → `missing`; nothing usable → `[]`, shown as "not available") and written to `candidate_skill_matches` via `replaceSkillMatches()` (one `db.batch()`, delete-then-insert). `aggregateScore()` also returns `contributions` that sum to the unrounded overall; `buildAttribution()` snapshots them into `candidates.score_attribution` at score time so later weight edits cannot break the breakdown. `GET /api/candidates/:id` returns `skill_matches` and `score_attribution`; `GET /api/jobs/:id/skill-gaps` (recruiter/admin) aggregates verdicts per skill over candidates that have rows.
 
 ---
 
