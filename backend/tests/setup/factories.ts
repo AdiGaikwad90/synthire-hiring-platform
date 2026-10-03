@@ -145,3 +145,17 @@ export async function signTestToken(
 }
 
 export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` })
+
+/** Minimal candidate row — only the NOT NULL columns; everything else defaults. */
+export async function insertCandidate(
+  db: D1Database,
+  companyId: string,
+  jobId: string,
+  name?: string,
+): Promise<string> {
+  const id = testId('cand')
+  await db.prepare('INSERT INTO candidates (id, job_id, company_id, name) VALUES (?, ?, ?, ?)')
+    .bind(id, jobId, companyId, name ?? `Candidate ${id}`)
+    .run()
+  return id
+}
