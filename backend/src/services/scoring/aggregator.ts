@@ -35,10 +35,22 @@ export interface DimensionRollup {
   achievements: number
 }
 
+export interface Contributions extends DimensionRollup {
+  semantic: number
+}
+
 export interface AggregateResult {
   overall: number
   componentScore: number
   dimensionScores: DimensionRollup
+  /**
+   * Points each part adds to `overall`, unrounded. They sum to the unrounded
+   * overall, so Math.round(sum) === overall. This is what the breakdown panel
+   * shows; the invariant is what makes it trustworthy.
+   */
+  contributions: Contributions
+  /** Importance actually used per dimension, after defaults. 0 stays 0. */
+  importances: DimensionRollup
 }
 
 /**
@@ -60,15 +72,28 @@ export function aggregateScore(
     achievements: rollupDimension('achievements', llmScores, dimensions),
   }
 
+  const importances = {} as DimensionRollup
+  for (const id of DIMENSION_IDS) {
+    importances[id] = dimensions[id]?.importance ?? DEFAULT_SCORING_DIMENSIONS[id].importance
+  }
+
   // Combine dimension scores using their importance weights
   const componentScore = weightedAvg(
-    DIMENSION_IDS.map((id) => ({
-      score: dimensionScores[id],
-      weight: dimensions[id]?.importance ?? DEFAULT_SCORING_DIMENSIONS[id].importance,
-    }))
+    DIMENSION_IDS.map((id) => ({ score: dimensionScores[id], weight: importances[id] }))
   )
 
   const overall = componentScore * config.llmWeight + semanticScore * config.semanticWeight
+
+  // Same denominator weightedAvg uses (positive weights only), so the four
+  // dimension contributions sum to componentScore * llmWeight exactly.
+  const totalImportance = DIMENSION_IDS.reduce((s, id) => s + Math.max(0, importances[id]), 0)
+  const contributions = { semantic: semanticScore * config.semanticWeight } as Contributions
+  for (const id of DIMENSION_IDS) {
+    // importances[id] > 0 implies totalImportance > 0, so no division by zero.
+    contributions[id] = importances[id] > 0
+      ? (dimensionScores[id] * importances[id] / totalImportance) * config.llmWeight
+      : 0
+  }
 
   return {
     overall: clampInt(overall),
@@ -79,6 +104,8 @@ export function aggregateScore(
       education: clampInt(dimensionScores.education),
       achievements: clampInt(dimensionScores.achievements),
     },
+    contributions,
+    importances,
   }
 }
 
