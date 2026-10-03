@@ -27,6 +27,21 @@ export interface ApiJob {
   candidate_count?: number
 }
 
+export type SkillVerdict = 'evidenced' | 'claimed' | 'transferable' | 'missing'
+export interface ApiSkillMatch {
+  skill: string; requirement: 'required' | 'nice_to_have'; verdict: SkillVerdict
+  evidence: string | null; via: string | null
+}
+export type DimensionKey = 'skills' | 'experience' | 'education' | 'achievements'
+/** Snapshot taken at score time — see backend services/scoring/attribution.ts. */
+export interface ApiScoreAttribution {
+  version: 1
+  contributions: Record<DimensionKey | 'semantic', number>
+  importances: Record<DimensionKey, number>
+  llmWeight: number; semanticWeight: number
+  subDimensions: Record<DimensionKey, Record<string, number>>
+}
+
 export interface ApiCandidate {
   id: string; job_id: string; company_id: string; name: string; email: string | null
   phone: string | null; location: string | null; resume_url: string | null
@@ -35,6 +50,9 @@ export interface ApiCandidate {
   semantic_score: number | null; skills_score: number | null; experience_score: number | null
   education_score: number | null; achievements_score: number | null; ai_analysis: string | null
   status: string; processing_status: string; created_at: string; updated_at: string
+  /** Detail endpoint only. [] = scored before skill matching shipped. */
+  skill_matches?: ApiSkillMatch[]
+  score_attribution?: ApiScoreAttribution | null
 }
 
 export interface ApiInterview {

@@ -30,6 +30,7 @@ export default defineConfig({
         'middleware.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'lib/auth.ts': { statements: 80, branches: 55, functions: 100, lines: 100 },
         'lib/api.ts': { statements: 45, branches: 40, functions: 18, lines: 45 },
+        'lib/scoring.ts': { statements: 100, branches: 86, functions: 100, lines: 100 },
       },
     },
   },
