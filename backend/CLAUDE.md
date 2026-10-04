@@ -76,9 +76,17 @@ Public routes: `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/email
 
 `src/services/ai/fallback.ts`. Models come from `wrangler.toml`, so changing them needs no code edit:
 
-| Env | Primary | Fallback |
-|---|---|---|
-| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Used for | Primary | Fallback | Vars |
+|---|---|---|---|
+| Parsing, questions | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `LLM_MODEL_*` |
+| Candidate scoring | `@cf/openai/gpt-oss-120b` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `LLM_SCORE_MODEL_*` |
+
+Scoring uses `buildScoringLlmConfig()`. Picked by a live benchmark (two resumes
+× 3 runs): gpt-oss-120b got 18/18 skill verdicts right, identical every run, at
+~105 Neurons a resume; llama-3.3-70b 16/18 at ~97; the 8B model never produced a
+`transferable` verdict. gpt-oss replies in chat-completions shape (`choices[0]`,
+no `response`) — `callWorkersAI()` reads both. DeepSeek V4 Flash and GLM-5.3
+Flash need the paid Workers plan.
 
 The fallback is deliberately **stronger** than the primary — the chain fires on
 invalid JSON or schema failure, which a weaker model is less likely to resolve.
@@ -136,7 +144,10 @@ If the LLM ignores the v2 sub-dimension structure, `rollupDimension()` falls bac
 
 `POST /api/candidates/upload` (multipart: `file`, `jobId`) returns `{ candidateId }` at **202** immediately; the client polls `GET /api/candidates/:id` until `processing_status` is `complete` or `error` (written by `updateCandidateError()` — there is no `failed`).
 
-Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → extract text (`unpdf` for PDF, `mammoth` for DOCX) → **reject if under 50 readable chars** (`hasReadableResumeText()` — a blank/scanned PDF otherwise makes the model invent a candidate) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
+Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → **record `resume_url` immediately** (so the viewer works while processing and after a failure) → extract text (`unpdf` for PDF, `mammoth` for DOCX) → **reject if under 50 readable chars** (`hasReadableResumeText()` — a blank/scanned PDF otherwise makes the model invent a candidate) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
+
+
+A pipeline that dies mid-way (waitUntil cut off, worker restarted) would leave the row in `parsing`/`scoring` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error` with an "interrupted — upload again" message.
 
 ---
 

@@ -187,6 +187,16 @@ export async function updateCandidateScores(
     .run()
 }
 
+// ── Record the stored file ────────────────────────────────────────────────────
+
+/**
+ * Written as soon as the file is in R2, not after parsing — otherwise the
+ * viewer 404s while a resume processes and for ever if processing fails.
+ */
+export async function setCandidateResumeUrl(db: D1Database, id: string, resumeUrl: string): Promise<void> {
+  await db.prepare('UPDATE candidates SET resume_url = ? WHERE id = ?').bind(resumeUrl, id).run()
+}
+
 // ── Update candidate on error ─────────────────────────────────────────────────
 
 export async function updateCandidateError(
@@ -206,6 +216,30 @@ export async function updateCandidateError(
     )
     .bind(error, now, id)
     .run()
+}
+
+// ── Fail interrupted processing ───────────────────────────────────────────────
+
+/** Longer than any real parse + score; a row older than this was abandoned. */
+export const STALE_PROCESSING_MINUTES = 10
+export const STALE_PROCESSING_MESSAGE =
+  'Processing was interrupted before it finished — please upload the resume again'
+
+/**
+ * Run by the cron. A background pipeline that dies mid-way (waitUntil cut off,
+ * worker restarted) would otherwise leave the row in 'parsing' or 'scoring'
+ * for ever, and the page would keep saying "Scoring in progress".
+ * `cutoffIso` must be an ISO string — updated_at is written with toISOString().
+ */
+export async function failStaleProcessing(db: D1Database, cutoffIso: string): Promise<number> {
+  const res = await db
+    .prepare(
+      `UPDATE candidates SET processing_status = 'error', processing_error = ?, updated_at = ?
+        WHERE processing_status IN ('pending', 'parsing', 'scoring') AND updated_at < ?`
+    )
+    .bind(STALE_PROCESSING_MESSAGE, new Date().toISOString(), cutoffIso)
+    .run()
+  return res.meta.changes ?? 0
 }
 
 // ── Get single candidate ──────────────────────────────────────────────────────

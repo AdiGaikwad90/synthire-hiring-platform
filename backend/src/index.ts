@@ -5,6 +5,7 @@ import { loggerMiddleware } from './middleware/logger'
 import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
+import { failStaleProcessing, STALE_PROCESSING_MINUTES } from './db/queries/candidates'
 import { meterD1, meterKV, newTally } from './services/budget/meters'
 import { flushUsage } from './services/budget/quotas'
 import { quotaMiddleware } from './middleware/quota'
@@ -80,6 +81,11 @@ export default {
         // Sentry capture would go here when SENTRY_DSN is configured:
         // if (env.SENTRY_DSN) createSentry(new Request('https://worker/scheduled'), ctx, env.SENTRY_DSN).captureException(err)
       }),
+    )
+    ctx.waitUntil(
+      failStaleProcessing(env.DB, new Date(Date.now() - STALE_PROCESSING_MINUTES * 60_000).toISOString())
+        .then((n) => { if (n > 0) console.warn(`[scheduled] failed ${n} interrupted candidate(s)`) })
+        .catch((err) => console.error('[scheduled] failStaleProcessing failed', err)),
     )
   },
 }

@@ -28,6 +28,7 @@ import {
   listCandidates,
   updateCandidateStatus,
   deleteCandidate,
+  setCandidateResumeUrl,
 } from '../db/queries/candidates'
 import { replaceSkillMatches, listSkillMatches } from '../db/queries/skill-matches'
 import { getJob } from '../db/queries/jobs'
@@ -175,6 +176,7 @@ router.post('/upload', async (c) => {
 
   // Upload to R2 before responding so the file is available for the background pipeline
   await uploadToR2(env, key, buffer, contentType)
+  await setCandidateResumeUrl(env.DB, candidateId, key)
 
   // Run pipeline in background — client polls GET /api/candidates/:id for status
   c.executionCtx.waitUntil(
