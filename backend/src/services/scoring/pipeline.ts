@@ -4,7 +4,7 @@ import type { ScoringDimensions } from '../scoring/dimensions'
 import { generateEmbedding } from '../embeddings/generator'
 import { upsertEmbedding } from '../embeddings/vectorize'
 import { cosineSimilarity } from '../embeddings/similarity'
-import { callWithFallback, buildLlmConfig } from '../ai/fallback'
+import { callWithFallback, buildScoringLlmConfig } from '../ai/fallback'
 import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
 import { aggregateScore, buildScoreConfig } from './aggregator'
 import { checkNeuronBudget, deductNeurons, buildNeuronLimitConfig } from '../budget/neurons'
@@ -96,7 +96,7 @@ export async function runScoringPipeline(
     minYearsExperience,
   )
 
-  const config = buildLlmConfig(env)
+  const config = buildScoringLlmConfig(env)
   const llmResult = await callWithFallback(
     env.AI,
     env.KV_CACHE,

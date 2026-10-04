@@ -24,6 +24,10 @@ EMAIL_MAX_RETRIES = "3"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 # Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
 # budget. 800 truncated resume JSON mid-object, which surfaced as "returned
@@ -129,6 +133,10 @@ EMAIL_MAX_RETRIES = "3"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 # Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
 # budget. 800 truncated resume JSON mid-object, which surfaced as "returned
@@ -213,6 +221,10 @@ SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "1000"

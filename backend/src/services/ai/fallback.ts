@@ -46,6 +46,23 @@ export function buildLlmConfig(env: Env): LlmConfig {
   }
 }
 
+/**
+ * Candidate scoring gets its own, stronger models. Parsing is extraction and
+ * the 8B model does it well; per-skill verdicts are judgement, and the 8B
+ * model never produced "transferable". Chosen by a live benchmark on two
+ * resumes x 3 runs: gpt-oss-120b 18/18 verdicts, identical every run, ~105
+ * Neurons a resume; llama-3.3-70b 16/18 at ~97 — so it is the fallback.
+ */
+export function buildScoringLlmConfig(env: Env): LlmConfig {
+  return {
+    ...buildLlmConfig(env),
+    models: [
+      env.LLM_SCORE_MODEL_PRIMARY  ?? '@cf/openai/gpt-oss-120b',
+      env.LLM_SCORE_MODEL_FALLBACK ?? '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    ],
+  }
+}
+
 // Strip markdown code fences and find the first {...} or [...] JSON object in the response.
 // Many smaller models wrap their JSON in ```json ... ``` or add prose before/after.
 export function extractJson(raw: string): string {

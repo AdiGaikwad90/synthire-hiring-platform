@@ -35,13 +35,18 @@ export async function callWorkersAI(
   const result = (await (ai as any).run(model, payload)) as {
     response?: string | Record<string, unknown>
     finish_reason?: string
-  }
+    choices?: { message?: { content?: string | null }; finish_reason?: string }[]
+  } | null
 
-  // In JSON Mode some models return an already-parsed object rather than a
-  // string. Normalise so callers always get text to JSON.parse.
+  // Llama models return `{ response }`; gpt-oss returns an OpenAI-style
+  // chat-completions object with no `response` field. Some models also hand
+  // back an already-parsed object. Normalise so callers always get text.
   const raw = result?.response
-  const content = typeof raw === 'string' ? raw : raw ? JSON.stringify(raw) : ''
+  const choice = result?.choices?.[0]
+  const content = typeof raw === 'string' ? raw
+    : raw ? JSON.stringify(raw)
+    : choice?.message?.content ?? ''
 
   if (!content) throw new Error(`Workers AI model ${model} returned empty response`)
-  return { content, finishReason: result?.finish_reason }
+  return { content, finishReason: result?.finish_reason ?? choice?.finish_reason }
 }

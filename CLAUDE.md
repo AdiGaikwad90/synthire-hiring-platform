@@ -108,9 +108,10 @@ Two rules that keep this honest:
 
 LLM calls go through Workers AI (not OpenRouter) with a two-model fallback chain set in `wrangler.toml`:
 
-| Env | Primary | Fallback |
+| Used for | Primary | Fallback |
 |---|---|---|
-| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Parsing, questions | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Candidate scoring | `@cf/openai/gpt-oss-120b` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
 
 **The fallback must be equal or stronger than the primary.** The chain exists for
 invalid-JSON and schema failures, and a weaker model is less likely to fix those.

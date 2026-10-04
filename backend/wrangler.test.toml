@@ -37,6 +37,8 @@ EMAIL_RETRY_BACKOFF_SECONDS = "60"
 # Kept in sync anyway so the values are not a misleading example.
 LLM_MODEL_PRIMARY = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+LLM_SCORE_MODEL_PRIMARY = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "800"
 NEURONS_DAILY_LIMIT = "10000"

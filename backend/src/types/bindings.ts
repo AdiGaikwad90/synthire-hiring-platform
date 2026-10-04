@@ -30,8 +30,10 @@ export interface Env {
   ALLOWED_FILE_TYPES: string         // default: "pdf,docx" (comma-separated)
 
   // LLM — Workers AI native models (change in wrangler.toml without touching code)
-  LLM_MODEL_PRIMARY: string          // default: "@cf/meta/llama-3-70b-instruct"
-  LLM_MODEL_FALLBACK: string         // default: "@cf/meta/llama-3-8b-instruct"
+  LLM_MODEL_PRIMARY: string          // default: "@cf/meta/llama-3.1-8b-instruct-fp8"   (parsing, questions)
+  LLM_MODEL_FALLBACK: string         // default: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  LLM_SCORE_MODEL_PRIMARY?: string   // default: "@cf/openai/gpt-oss-120b"   (candidate scoring)
+  LLM_SCORE_MODEL_FALLBACK?: string  // default: "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   LLM_TEMPERATURE: string            // default: "0.1"
   LLM_MAX_TOKENS: string             // default: "2000"
   NEURONS_DAILY_LIMIT: string        // default: "10000" — hard cap, stops AI calls when reached
