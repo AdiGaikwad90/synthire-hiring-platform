@@ -8,7 +8,7 @@ import { updateCandidateParsed } from '../../../src/db/queries/candidates'
 import type { Env } from '../../../src/types/bindings'
 import type { ProcessResumeMessage } from '../../../src/queue/messages'
 import { seedCompanyAndRecruiter, makeJobData, insertCandidate } from '../../setup/factories'
-import { stubAi, stubVectorize, STUB_PARSED_RESUME } from '../../setup/ai-stub'
+import { stubAi, stubVectorize, STUB_PARSED_RESUME, STUB_SCORES } from '../../setup/ai-stub'
 
 // 863-byte blank one-page PDF (no extractable text) — same bytes as tests/integration/routes/candidate-upload.test.ts.
 const BLANK_PDF_B64 = 'JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PC9UaXRsZSAoYmxhbmsuaHRtbCkKL0NyZWF0b3IgKE1vemlsbGEvNS4wIFwoTWFjaW50b3NoOyBJbnRlbCBNYWMgT1MgWCAxMF8xNV83XCkgQXBwbGVXZWJLaXQvNTM3LjM2IFwoS0hUTUwsIGxpa2UgR2Vja29cKSBIZWFkbGVzc0Nocm9tZS8xNTIuMC4wLjAgU2FmYXJpLzUzNy4zNikKL1Byb2R1Y2VyIChTa2lhL1BERiBtMTUyKQovQ3JlYXRpb25EYXRlIChEOjIwMjYxMDAzMTk1NjUzKzAwJzAwJykKL01vZERhdGUgKEQ6MjAyNjEwMDMxOTU2NTMrMDAnMDAnKT4+CmVuZG9iagozIDAgb2JqCjw8L0xlbmd0aCAwPj4gc3RyZWFtCgplbmRzdHJlYW0KZW5kb2JqCjIgMCBvYmoKPDwvVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8L1Byb2NTZXQgWy9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUldPj4KL01lZGlhQm94IFswIDAgNjEyIDc5Ml0KL0NvbnRlbnRzIDMgMCBSCi9UYWJzIC9TCi9QYXJlbnQgNCAwIFI+PgplbmRvYmoKNCAwIG9iago8PC9UeXBlIC9QYWdlcwovQ291bnQgMQovS2lkcyBbMiAwIFJdPj4KZW5kb2JqCjUgMCBvYmoKPDwvVHlwZSAvQ2F0YWxvZwovUGFnZXMgNCAwIFIKL1ZpZXdlclByZWZlcmVuY2VzIDw8L1R5cGUgL1ZpZXdlclByZWZlcmVuY2VzCi9EaXNwbGF5RG9jVGl0bGUgdHJ1ZT4+Pj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMzQzIDAwMDAwIG4gCjAwMDAwMDAyOTYgMDAwMDAgbiAKMDAwMDAwMDQ5OCAwMDAwMCBuIAowMDAwMDAwNTUzIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA2Ci9Sb290IDUgMCBSCi9JbmZvIDEgMCBSPj4Kc3RhcnR4cmVmCjY3MAolJUVPRgo='
@@ -117,5 +117,27 @@ describe('processResume — transient failures propagate for retry', () => {
     const { env: e } = withStubs()
     await expect(processResume(e, msg())).rejects.toBeInstanceOf(NeuronBudgetError)
     await env.KV_CACHE.delete(`neurons:daily:${new Date().toISOString().slice(0, 10)}`)
+  })
+})
+
+describe('processResume — F1 orphaned vector cleanup', () => {
+  it('removes the late embedding when the candidate was deleted mid-processing (during scoring)', async () => {
+    await putDocx()
+    const v = stubVectorize()
+    const ai = {
+      run: async (model: string, input: { messages?: { content: string }[] }) => {
+        const prompt = (input.messages ?? []).map((m) => m.content).join('\n')
+        if (model.includes('bge')) return { data: [Array.from({ length: 1024 }, () => 0.5)] }
+        if (prompt.includes('Score this candidate')) {
+          // Simulate the candidate being deleted between parse and score (e.g. a concurrent DELETE).
+          await env.DB.prepare('DELETE FROM candidates WHERE id = ?').bind(candidateId).run()
+          return { response: JSON.stringify(STUB_SCORES) }
+        }
+        return { response: JSON.stringify(STUB_PARSED_RESUME) }
+      },
+    } as unknown as Env['AI']
+    const e = { ...env, AI: ai, VECTORIZE: v.index } as unknown as Env
+    await expect(processResume(e, msg())).resolves.toBeUndefined()
+    expect(v.deleted).toEqual([[candidateId]])
   })
 })

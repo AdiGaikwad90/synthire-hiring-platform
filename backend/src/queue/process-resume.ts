@@ -63,6 +63,14 @@ export async function processResume(env: Env, msg: ProcessResumeMessage): Promis
     console.error('[queue] skill match persistence failed', { candidateId: msg.candidateId, err: err instanceof Error ? err.message : String(err) })
   }
   await updateCandidateScores(env.DB, msg.candidateId, scoring, 'workers-ai')
+
+  // The purge (DELETE /api/candidates/:id) can run concurrently and finish
+  // before this upsert lands, orphaning a vector for a row that no longer
+  // exists. Re-check after scoring and remove it if so.
+  if (!(await getCandidate(env.DB, msg.candidateId, msg.companyId))) {
+    await env.VECTORIZE.deleteByIds([msg.candidateId])
+    console.warn('[queue] candidate deleted during processing — removed late embedding', { candidateId: msg.candidateId })
+  }
 }
 
 async function readResumeText(env: Env, msg: ProcessResumeMessage): Promise<string> {
