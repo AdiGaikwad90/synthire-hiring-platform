@@ -11,17 +11,17 @@ describe('classifyFailure — happy path', () => {
 
 describe('classifyFailure — positive variants', () => {
   it('retries a transient error with backoff per attempt', () => {
-    expect(classifyFailure(new Error('AI 502'), 1)).toEqual({ kind: 'retry', delaySeconds: 30, reason: 'AI 502' })
+    expect(classifyFailure(new Error('AI 502'), 1)).toEqual({ kind: 'retry', delaySeconds: 30, reason: 'AI 502', waitingForBudget: false })
     expect(classifyFailure(new Error('AI 502'), 2)).toMatchObject({ delaySeconds: 120 })
     expect(classifyFailure(new Error('AI 502'), 3)).toMatchObject({ delaySeconds: 600 })
   })
 
   it('treats "all models exhausted" (AppError 503) as transient, not as the budget', () => {
-    expect(classifyFailure(new AppError('All AI models exhausted without a valid response', 503), 1)).toMatchObject({ kind: 'retry', delaySeconds: 30 })
+    expect(classifyFailure(new AppError('All AI models exhausted without a valid response', 503), 1)).toMatchObject({ kind: 'retry', delaySeconds: 30, waitingForBudget: false })
   })
 
   it('waits for the UTC budget reset plus a minute when the AI budget is exhausted', () => {
-    expect(classifyFailure(new NeuronBudgetError('limit', 3600), 1)).toMatchObject({ kind: 'retry', delaySeconds: 3660 })
+    expect(classifyFailure(new NeuronBudgetError('limit', 3600), 1)).toMatchObject({ kind: 'retry', delaySeconds: 3660, waitingForBudget: true })
   })
 })
 

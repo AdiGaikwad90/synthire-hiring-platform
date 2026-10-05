@@ -41,9 +41,30 @@ export async function handleResumeQueue(batch: MessageBatch<unknown>, env: Env):
         // Back to 'queued' while waiting: honest, and the stale sweep gives
         // queued rows 25 h instead of 10 min.
         if (msg.type === 'process-resume') {
-          await setProcessingStatus(env.DB, msg.candidateId, 'queued').catch(() => {})
+          await setProcessingStatus(env.DB, msg.candidateId, 'queued').catch((writeErr) => {
+            console.error('[queue] could not reset status to queued', {
+              candidateId: msg.candidateId,
+              error: writeErr instanceof Error ? writeErr.message : String(writeErr),
+            })
+          })
         }
         console.warn('[queue] retrying', { type: msg.type, candidateId: msg.candidateId, attempt: message.attempts, delaySeconds: action.delaySeconds, reason: action.reason })
+
+        // Budget waits can outlive the 24h free-plan message retention and
+        // burn a retry attempt for nothing. Requeue as a fresh message (fresh
+        // retention clock, no retry consumed) and ack this one instead.
+        if (action.waitingForBudget) {
+          try {
+            await env.RESUME_QUEUE.send(msg, { delaySeconds: action.delaySeconds })
+            message.ack()
+            continue
+          } catch (sendErr) {
+            console.error('[queue] could not requeue budget wait — falling back to retry', {
+              candidateId: msg.candidateId,
+              error: sendErr instanceof Error ? sendErr.message : String(sendErr),
+            })
+          }
+        }
         message.retry({ delaySeconds: action.delaySeconds })
       }
     }

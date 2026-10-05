@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { env, createMessageBatch, createExecutionContext, getQueueResult } from 'cloudflare:test'
+import { env, createMessageBatch, createExecutionContext, getQueueResult, waitOnExecutionContext } from 'cloudflare:test'
 import type { D1Database } from '@cloudflare/workers-types'
 import worker from '../../../src/index'
 import { DEAD_LETTER_MESSAGE, handleResumeQueue, handleDeadLetters } from '../../../src/queue/handler'
@@ -58,6 +58,19 @@ async function deliver(queue: string, msgBody: unknown, attempts = 1, ai = stubA
 }
 
 describe('resume queue consumer', () => {
+  it('F4: meters D1/KV usage during processing and flushes it to quota_usage', async () => {
+    await env.DB.prepare('DELETE FROM quota_usage').run()
+    await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+    const batch = createMessageBatch('synthire-resume-jobs-test', [{ id: 'm1', timestamp: new Date(), attempts: 1, body: body() }])
+    const ctx = createExecutionContext()
+    const e = { ...env, AI: stubAi().ai, VECTORIZE: stubVectorize().index } as unknown as Env
+    await worker.queue(batch, e, ctx)
+    await waitOnExecutionContext(ctx)
+    const row = await env.DB.prepare('SELECT d1_rows_read, d1_rows_written FROM quota_usage').first<{ d1_rows_read: number; d1_rows_written: number }>()
+    expect(row).not.toBeNull()
+    expect((row?.d1_rows_read ?? 0) + (row?.d1_rows_written ?? 0)).toBeGreaterThan(0)
+  })
+
   it('acks a processed resume and leaves it complete', async () => {
     await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
     const result = await deliver('synthire-resume-jobs-test', body())
@@ -96,22 +109,56 @@ describe('resume queue consumer', () => {
     expect(ack).not.toHaveBeenCalled()
   })
 
-  it('retries with a budget-reset delay when the Neuron budget is exhausted', async () => {
+  it('F3: requeues via RESUME_QUEUE.send + ack (not retry) when the Neuron budget is exhausted', async () => {
     const key = `neurons:daily:${new Date().toISOString().slice(0, 10)}`
     await env.KV_CACHE.put(key, '10000')
     try {
       await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
       const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 1)
-      const e = { ...env, AI: stubAi().ai, VECTORIZE: stubVectorize().index } as unknown as Env
+      const send = vi.fn(async () => {})
+      const e = { ...env, AI: stubAi().ai, VECTORIZE: stubVectorize().index, RESUME_QUEUE: { send } } as unknown as Env
       await handleResumeQueue(batch, e)
+      expect(send).toHaveBeenCalledTimes(1)
+      const [[sentMsg, sentOpts]] = send.mock.calls as unknown as [[unknown, { delaySeconds: number }]]
+      expect(sentMsg).toEqual(body())
+      expect(sentOpts.delaySeconds).toBeGreaterThan(60)
+      expect(sentOpts.delaySeconds).toBeLessThanOrEqual(86400)
+      expect(ack).toHaveBeenCalledTimes(1)
+      expect(retry).not.toHaveBeenCalled()
+      expect((await status())?.s).toBe('queued')
+    } finally {
+      await env.KV_CACHE.delete(key)
+    }
+  })
+
+  it('F3: falls back to message.retry with the budget delay when RESUME_QUEUE.send throws', async () => {
+    const key = `neurons:daily:${new Date().toISOString().slice(0, 10)}`
+    await env.KV_CACHE.put(key, '10000')
+    try {
+      await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+      const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 1)
+      const send = vi.fn(async () => { throw new Error('queue send failed') })
+      const e = { ...env, AI: stubAi().ai, VECTORIZE: stubVectorize().index, RESUME_QUEUE: { send } } as unknown as Env
+      await handleResumeQueue(batch, e)
+      expect(send).toHaveBeenCalledTimes(1)
       expect(retry).toHaveBeenCalledTimes(1)
       const [[call]] = retry.mock.calls
       expect(call.delaySeconds).toBeGreaterThan(60)
-      expect(call.delaySeconds).toBeLessThanOrEqual(86400)
       expect(ack).not.toHaveBeenCalled()
     } finally {
       await env.KV_CACHE.delete(key)
     }
+  })
+
+  it('F3: a transient (non-budget) failure still uses message.retry with backoff, never RESUME_QUEUE.send', async () => {
+    await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+    const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 2)
+    const send = vi.fn(async () => {})
+    const e = { ...env, AI: stubAi({ failOn: 'parse' }).ai, VECTORIZE: stubVectorize().index, RESUME_QUEUE: { send } } as unknown as Env
+    await handleResumeQueue(batch, e)
+    expect(send).not.toHaveBeenCalled()
+    expect(retry).toHaveBeenCalledWith({ delaySeconds: 120 })
+    expect(ack).not.toHaveBeenCalled()
   })
 
   it('retries instead of acking when recording a permanent failure throws', async () => {
@@ -122,6 +169,34 @@ describe('resume queue consumer', () => {
     await handleResumeQueue(batch, e)
     expect(retry).toHaveBeenCalledWith({ delaySeconds: 30 })
     expect(ack).not.toHaveBeenCalled()
+  })
+
+  it('F6: logs (does not silently swallow) when resetting status to queued fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+      const dbThrowingOnQueuedWrite = (db: D1Database): D1Database => new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop === 'prepare') {
+            return (sql: string) => {
+              if (sql === 'UPDATE candidates SET processing_status = ?, updated_at = ? WHERE id = ?') {
+                return { bind: () => ({ run: async () => { throw new Error('simulated D1 write failure') } }) }
+              }
+              return (target.prepare as (s: string) => unknown)(sql)
+            }
+          }
+          return Reflect.get(target, prop, receiver)
+        },
+      }) as unknown as D1Database
+      const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 2)
+      const e = { ...env, DB: dbThrowingOnQueuedWrite(env.DB), AI: stubAi({ failOn: 'parse' }).ai, VECTORIZE: stubVectorize().index } as unknown as Env
+      await handleResumeQueue(batch, e)
+      expect(retry).toHaveBeenCalledWith({ delaySeconds: 120 })
+      expect(ack).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith('[queue] could not reset status to queued', expect.objectContaining({ candidateId }))
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('runs a purge-candidate message', async () => {
