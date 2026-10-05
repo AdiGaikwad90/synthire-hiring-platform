@@ -105,7 +105,7 @@ interface FormState {
   // Step 3
   scoring_dimensions: ScoringDimensions
   // From JD upload
-  jd_url?: string | null
+  jd_parse_id?: string | null  // server resolves it to the stored JD
 }
 
 const INITIAL_STATE: FormState = {
@@ -213,12 +213,16 @@ function JobForm() {
       min_years_experience: Number(form.min_years_experience) || 0,
       education_requirement: form.education_requirement || undefined,
       scoring_dimensions: form.scoring_dimensions,
-      jd_url: form.jd_url ?? undefined,
+      jd_parse_id: form.jd_parse_id ?? undefined,
     };
 
     try {
       const job = await createJob.mutateAsync(payload);
-      toast({ message: `Job "${job.title}" created.` });
+      if (job.jd_attached === false) {
+        toast({ message: "Job created, but the uploaded JD expired before it could be attached.", variant: "info" });
+      } else {
+        toast({ message: `Job "${job.title}" created.` });
+      }
       router.push(`/jobs/${job.id}`);
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : "Failed to create job");
@@ -261,7 +265,7 @@ function JobForm() {
       nice_to_have_skills: Array.isArray(parsed.nice_to_have_skills) ? (parsed.nice_to_have_skills as string[]) : s.nice_to_have_skills,
       min_years_experience: Number(parsed.min_years_experience ?? s.min_years_experience),
       education_requirement: parsed.education_requirement ? normalizeEducation(parsed.education_requirement) : s.education_requirement,
-      jd_url: parsed.jd_url ? String(parsed.jd_url) : s.jd_url,
+      jd_parse_id: parsed.parse_id ? String(parsed.parse_id) : s.jd_parse_id,
     }));
   };
 

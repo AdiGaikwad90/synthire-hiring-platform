@@ -86,7 +86,7 @@ React Query v5. Cache keys, stale times, and invalidation live inside the hooks 
 
 Both long-running backend calls return a job id at 202 and are polled from the client — neither uses SSE:
 
-- **Resume upload** — `ResumeBatchModal` posts to `POST /api/candidates/upload`, gets `{ candidateId }`, then polls `GET /api/candidates/:id` every 2s until `processing_status` settles (60 ticks / 2 min timeout). Per-file state: `queued` → `parsing` → `scoring` → `done` / `error`.
+- **Resume upload** — `ResumeBatchModal` posts to `POST /api/candidates/upload`, gets `{ candidateId }`, then polls every 2 s for up to 2 min; states `queued` → `parsing` → `scoring` → `done` / `error`; after the window a still-running file shows "Still processing" (`background`) — processing runs on a queue and can take longer.
 - **JD parsing** — `JDUploadModal` posts to `POST /api/jobs/parse-jd`, gets `{ parseId }`, then polls `GET /api/jobs/parse-jd/:parseId` until it stops returning `{ status: 'processing' }`.
 
 ---

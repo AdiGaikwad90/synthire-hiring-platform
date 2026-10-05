@@ -25,6 +25,7 @@ export interface ApiJob {
   required_skills: string[]; nice_to_have_skills: string[]; min_years_experience: number
   education_requirement: string | null; jd_url: string | null; created_at: string; updated_at: string
   candidate_count?: number
+  jd_attached?: boolean  // POST/PATCH response only, when jd_parse_id was sent
 }
 
 export type SkillVerdict = 'evidenced' | 'claimed' | 'transferable' | 'missing'

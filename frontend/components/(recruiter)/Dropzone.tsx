@@ -2,6 +2,7 @@
 import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { ScorePill, AIPill } from "@/components/ui";
+import type { UploadRowStatus } from "@/lib/upload-status";
 
 interface DropzoneProps {
   onFiles: (files: File[] | { name: string }[]) => void;
@@ -60,7 +61,7 @@ export function Dropzone({ onFiles, multiple, accept = ".pdf,.docx,.doc,.txt", h
 interface FileRowProps {
   name: string;
   size: string;
-  status: "queued" | "parsing" | "scoring" | "done" | "error";
+  status: UploadRowStatus;
   score?: number | null;
   sub?: string;
 }
@@ -79,6 +80,15 @@ export function FileRow({ name, size, status, score, sub }: FileRowProps) {
           {size} · {sub || status}
         </div>
       </div>
+      {status === "queued" && (
+        <div className="tsFileRow-status">
+          <span className="tsFileRow-spin" />
+          <span className="small">Queued</span>
+        </div>
+      )}
+      {status === "background" && (
+        <span className="small" style={{ color: "var(--muted)" }}>Still processing — results will appear on the candidate page</span>
+      )}
       {status === "parsing" && (
         <div className="tsFileRow-status">
           <span className="tsFileRow-spin" />

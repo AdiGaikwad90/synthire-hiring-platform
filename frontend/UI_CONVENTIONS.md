@@ -85,6 +85,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── types.ts              # domain types
     ├── utils.ts              # cn(), initials(), formatDate()
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
+    ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     └── icons.tsx             # the icon set
 ```
 
