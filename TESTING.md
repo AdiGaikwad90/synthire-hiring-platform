@@ -41,6 +41,7 @@ This has already caught real mistakes twice.
 | `env.DB`, `env.KV_CACHE`, `env.RESUME_BUCKET` | `integration` | `backend/tests/integration/**` |
 | `env.AI`, `env.VECTORIZE` | `unit`, with a hand-written stub | — |
 | Real `env.DB`/`env.KV_CACHE` **and** `env.AI`/`env.VECTORIZE` | `integration` | `backend/tests/integration/**`, passing `{ ...env, AI: stub, VECTORIZE: stub }` — see `tests/integration/scoring/pipeline.test.ts` |
+| Queue consumers | `integration`, drive `worker.queue()` with `createMessageBatch` and assert with `getQueueResult` | `backend/tests/integration/queue/**` — see `tests/integration/queue/handler.test.ts` |
 
 **A unit test that reaches for `env` is in the wrong suite.** Move it rather
 than mocking a binding.

@@ -142,12 +142,13 @@ If the LLM ignores the v2 sub-dimension structure, `rollupDimension()` falls bac
 
 ## Resume upload pipeline
 
-`POST /api/candidates/upload` (multipart: `file`, `jobId`) returns `{ candidateId }` at **202** immediately; the client polls `GET /api/candidates/:id` until `processing_status` is `complete` or `error` (written by `updateCandidateError()` — there is no `failed`).
+`POST /api/candidates/upload` validates (magic bytes, size), creates the row as `queued`, stores the file in R2, records `resume_url`, sends a `process-resume` message to `RESUME_QUEUE`, and returns **202** `{ candidateId }`. The client polls `GET /api/candidates/:id`.
 
-Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → **record `resume_url` immediately** (so the viewer works while processing and after a failure) → extract text (`unpdf` for PDF, `mammoth` for DOCX) → **reject if under 50 readable chars** (`hasReadableResumeText()` — a blank/scanned PDF otherwise makes the model invent a candidate) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
+The `queue()` consumer (`src/queue/`) runs `processResume`: parse (8B) → score (gpt-oss-120b) → `complete`. It is idempotent (finished or deleted candidates are skipped) and resumable (a candidate with `parsed_resume` skips parsing). `classifyFailure` decides: permanent (unreadable/missing file, missing job) → `error` + ack; AI budget exhausted → retry at the UTC reset; anything else → retry after 30 s / 120 s / 600 s. After 3 retries the message goes to the DLQ, whose consumer marks the row `error`. Any retry puts the row back to `queued`. Statuses: `queued` → `parsing` → `scoring` → `complete` | `error`.
 
+`DELETE /api/candidates/:id` deletes the row and sends `purge-candidate`; `purgeCandidateArtifacts` removes the R2 file (with accounting), the vector and `questions:{id}`. If the send fails it purges inline.
 
-A pipeline that dies mid-way (waitUntil cut off, worker restarted) would leave the row in `parsing`/`scoring` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error` with an "interrupted — upload again" message.
+A pipeline that dies mid-way (abandoned in a retry wait) would leave the row in `parsing`/`scoring` or `queued` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows in `pending`/`parsing`/`scoring` untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error`, and `queued` rows untouched for 25 hours (`QUEUED_STALE_HOURS`) as `error`, both with an "interrupted — upload again" message.
 
 **JD files.** `POST /api/jobs/parse-jd` stores the upload at `jd-pending/{company}/{parseId}.{ext}` (expired by an R2 lifecycle rule after 1 day) and keeps a tenant-tagged record in KV for 24 h. The client creates the job with `jd_parse_id`, never a storage path; the server checks the record belongs to the caller's company (422 otherwise), moves the file to `jd/{company}/{jobId}.{ext}` and sets `jd_url`. If the pending file expired in between, the job is still created and the response carries `jd_attached: false`.
 

@@ -1,6 +1,6 @@
 # Resume processing on Queues, and data lifecycle fixes
 
-**Status:** approved design, not yet implemented
+**Status:** implemented
 **Date:** 2026-10-05
 
 ## Why
