@@ -38,7 +38,7 @@ cd backend  && npm run deploy:staging
 cd frontend && npm run deploy     # next-on-pages build + wrangler pages deploy
 ```
 
-Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and fill it in, and set `NEXT_PUBLIC_API_URL=http://localhost:8787` in `frontend/.env.local`. Cloudflare resource IDs are already provisioned and committed in `backend/wrangler.toml`.
+Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and fill it in, and set `NEXT_PUBLIC_API_URL=http://localhost:8787` in `frontend/.env.local`. Cloudflare resource IDs are already committed in `backend/wrangler.toml`, but the resources themselves — the resume queue + DLQ, the dev Vectorize index, its metadata indexes, and the R2 lifecycle rule — are provisioned separately by `scripts/provision.sh dev|staging|production`; `wrangler deploy` fails if a bound queue doesn't exist yet. **Run `scripts/provision.sh production` before merging to main** — a push to main auto-deploys, so provisioning after the merge is too late. `npm run dev` now needs `wrangler login` first: dev Vectorize is a remote binding with no local simulator.
 
 Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own code — a non-zero exit is a real error in `src/`, not dependency noise. Don't turn it off: `unpdf`, `mammoth`, and `tinybench` ship `.d.ts` files that produce ~88 errors under this repo's `lib`/`types` settings.
 
@@ -88,8 +88,8 @@ Two rules that keep this honest:
 
 - **Never `JSON.parse` a D1 text column without a try/catch.** All JSON columns are stored as `TEXT`. Follow `backend/src/db/queries/jobs.ts::toJob()`.
 - **Emails never send inline.** Everything goes into the `email_queue` D1 table; a cron (every minute) drains it via `processEmailQueue()`. Queue with `queueEmail()` in `src/db/queries/email.ts`. Atomic dequeue uses `UPDATE...RETURNING` — don't replace it with select-then-update.
-- **Resume upload returns 202 immediately.** `POST /api/candidates/upload` creates the row, stores to R2, returns `{ candidateId }`; parsing/scoring runs in `waitUntil`. The client polls `GET /api/candidates/:id` for `processing_status`. Don't make the upload synchronous.
-- **Cloudflare bindings are not env vars.** `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI` are injected objects declared in `wrangler.toml` — there is no `D1_DATABASE_ID` at runtime.
+- **Resume upload returns 202 immediately.** `POST /api/candidates/upload` creates the row, stores to R2, returns `{ candidateId }`, and sends a `process-resume` message to `RESUME_QUEUE`; the queue consumer (`backend/src/queue/`) does the parsing/scoring, not `waitUntil`. The client polls `GET /api/candidates/:id` for `processing_status`. Don't make the upload synchronous.
+- **Cloudflare bindings are not env vars.** `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI`, `env.RESUME_QUEUE` are injected objects declared in `wrangler.toml` — there is no `D1_DATABASE_ID` at runtime.
 - **Frontend `strict: false`.** Don't fight type warnings in existing components; do type new code properly.
 - **Never call `apiFetch` directly in components** — use the hooks in `frontend/hooks/queries/`.
 

@@ -31,7 +31,7 @@ CI (`.github/workflows/ci.yml`) gates on `typecheck` + `test`. `tsconfig.json` s
 
 > **Cloudflare bindings are not environment variables.** There is no `D1_DATABASE_ID`, `ACCOUNT_ID`, or `ZONE_ID` at runtime — D1/R2/KV/Vectorize/AI arrive as typed binding objects. Those IDs are wrangler CLI concerns only.
 
-All resource IDs are already provisioned and committed for dev, staging, and production. `src/types/bindings.ts` is the authoritative list of every var with its default — read it rather than duplicating it here.
+All resource IDs are already committed in `wrangler.toml` for dev, staging, and production, but the resources themselves — the resume queue + DLQ, the dev Vectorize index, its `companyId`/`jobId` metadata indexes, and the R2 `jd-pending/` lifecycle rule — are provisioned separately by `scripts/provision.sh` (see below), not by `wrangler deploy`. `src/types/bindings.ts` is the authoritative list of every var with its default — read it rather than duplicating it here.
 
 ---
 
@@ -150,7 +150,7 @@ The `queue()` consumer (`src/queue/`) runs `processResume`: parse (8B) → score
 
 A pipeline that dies mid-way (abandoned in a retry wait) would leave the row in `parsing`/`scoring` or `queued` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows in `pending`/`parsing`/`scoring` untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error`, and `queued` rows untouched for 25 hours (`QUEUED_STALE_HOURS`) as `error`, both with an "interrupted — upload again" message.
 
-**JD files.** `POST /api/jobs/parse-jd` stores the upload at `jd-pending/{company}/{parseId}.{ext}` (expired by an R2 lifecycle rule after 1 day) and keeps a tenant-tagged record in KV for 24 h. The client creates the job with `jd_parse_id`, never a storage path; the server checks the record belongs to the caller's company (422 otherwise), moves the file to `jd/{company}/{jobId}.{ext}` and sets `jd_url`. If the pending file expired in between, the job is still created and the response carries `jd_attached: false`.
+**JD files.** `POST /api/jobs/parse-jd` stores the upload at `jd-pending/{company}/{parseId}.{ext}` (expired by an R2 lifecycle rule after 1 day) and keeps a tenant-tagged record in KV for 24 h. The client creates the job with `jd_parse_id`, never a storage path; the server checks the record belongs to the caller's company (422 otherwise), moves the file to `jd/{company}/{jobId}.{ext}` and sets `jd_url`. If the pending file expired in between, the job is still created and the response carries `jd_attached: false`. A `jd-pending/` upload is counted in R2 storage accounting as soon as it's written; the lifecycle rule that deletes it after 1 day does **not** decrement that count — a small known overstatement in `GET /api/analytics/r2-usage`, not a leak of the real object.
 
 ### Infrastructure not created by `wrangler deploy`
 

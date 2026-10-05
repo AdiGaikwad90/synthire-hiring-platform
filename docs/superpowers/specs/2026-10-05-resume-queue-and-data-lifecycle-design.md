@@ -135,8 +135,9 @@ untouched for 10 min. `queued` rows get a 25-hour threshold — longer than the
 message waiting for the budget reset is never failed early, but a row whose
 message expired is.
 
-**CPU:** the consumer is I/O-bound (Workers AI, D1, R2); PDF extraction is well
-under the 30 s default CPU limit, so `limits.cpu_ms` is not raised.
+**CPU:** the consumer's CPU use is I/O-bound (Workers AI, D1, R2) and unchanged
+from the old `waitUntil` path — moving the work onto Queues changes when it
+runs, not how much CPU it burns — so `limits.cpu_ms` is not raised.
 
 ### 2. JD attachment
 
