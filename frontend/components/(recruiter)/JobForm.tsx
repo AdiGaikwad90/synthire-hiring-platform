@@ -264,7 +264,10 @@ function JobForm() {
       required_skills: Array.isArray(parsed.required_skills) ? (parsed.required_skills as string[]) : s.required_skills,
       nice_to_have_skills: Array.isArray(parsed.nice_to_have_skills) ? (parsed.nice_to_have_skills as string[]) : s.nice_to_have_skills,
       min_years_experience: (() => {
-        const n = Number(parsed.min_years_experience);
+        // null/undefined/'' means "JD didn't state a number" — keep the
+        // recruiter's current value rather than coercing to 0.
+        const y = parsed.min_years_experience;
+        const n = y === null || y === undefined || y === '' ? NaN : Number(y);
         return Number.isFinite(n) ? n : s.min_years_experience;
       })(),
       education_requirement: parsed.education_requirement ? normalizeEducation(parsed.education_requirement) : s.education_requirement,

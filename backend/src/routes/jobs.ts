@@ -199,13 +199,9 @@ router.post('/parse-jd', async (c) => {
         // validateParsedJd only checks shape (data is ParsedJd); re-parse here
         // so the schema's transforms (e.g. coerceYears) actually apply — the
         // raw LLM output must never be stored as-is.
-        const parsed = parsedJdSchema.parse(raw)
-
-        const result: ParsedJd = {
-          ...parsed,
-          required_skills: parsed.required_skills ?? [],
-          nice_to_have_skills: parsed.nice_to_have_skills ?? [],
-        }
+        // parsedJdSchema's own transforms already default these to [], so no
+        // extra `?? []` is needed here.
+        const result: ParsedJd = parsedJdSchema.parse(raw)
 
         await env.KV_CACHE.put(
           kvKey,
