@@ -76,8 +76,10 @@ export async function runScoringPipeline(
         jobId,
         companyId,
       })
-    } catch {
-      // Vectorize not available locally — continue without semantic scoring
+    } catch (err) {
+      // Non-fatal: the semantic score is computed in memory, so a failed
+      // upsert only loses future similarity search for this candidate.
+      console.error('[scoring] vectorize upsert failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
     }
   }
 
