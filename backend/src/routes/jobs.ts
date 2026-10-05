@@ -126,9 +126,18 @@ router.post('/', zv('json', createJobSchema), async (c) => {
   })
   if (!jdParse) return c.json(apiResponse(job), 201)
 
-  const jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
-  if (jdUrl) job = (await updateJob(c.env.DB, job.id, user.company_id, { jd_url: jdUrl })) ?? job
-  else console.warn('[jobs] JD pending file expired before attach', { jobId: job.id })
+  let jdUrl: string | null = null
+  try {
+    jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
+  } catch (err) {
+    console.error('[jobs] attaching the JD failed', { jobId: job.id, error: err instanceof Error ? err.message : String(err) })
+  }
+  if (jdUrl) {
+    job = (await updateJob(c.env.DB, job.id, user.company_id, { jd_url: jdUrl })) ?? job
+    await c.env.KV_CACHE.delete(jdParseKvKey(jd_parse_id as string))
+  } else {
+    console.warn('[jobs] JD pending file expired before attach', { jobId: job.id })
+  }
   return c.json(apiResponse({ ...job, jd_attached: jdUrl !== null }), 201)
 })
 
@@ -289,10 +298,16 @@ router.patch('/:id', zv('json', updateJobSchema), async (c) => {
   if (!jdParse) return c.json(apiResponse(job))
 
   const previous = job.jd_url
-  const jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
+  let jdUrl: string | null = null
+  try {
+    jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
+  } catch (err) {
+    console.error('[jobs] attaching the JD failed', { jobId: job.id, error: err instanceof Error ? err.message : String(err) })
+  }
   if (jdUrl) {
     job = (await updateJob(c.env.DB, job.id, user.company_id, { jd_url: jdUrl })) ?? job
     if (previous && previous !== jdUrl) await deleteFromR2(c.env, previous).catch(() => {})
+    await c.env.KV_CACHE.delete(jdParseKvKey(jd_parse_id as string))
   }
   return c.json(apiResponse({ ...job, jd_attached: jdUrl !== null }))
 })

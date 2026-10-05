@@ -75,6 +75,98 @@ describe('POST /api/jobs with jd_parse_id', () => {
   it('rejects a jd_parse_id that is not a UUID with 422', async () => {
     expect((await create({ jd_parse_id: '../../etc/passwd' })).status).toBe(422)
   })
+
+  it('F2: keeps the job and reports jd_attached: false when attachJd throws (R2 put failure)', async () => {
+    await seedParse()
+    const originalPut = env.RESUME_BUCKET.put.bind(env.RESUME_BUCKET)
+    env.RESUME_BUCKET.put = (async () => { throw new Error('simulated R2 put failure') }) as typeof env.RESUME_BUCKET.put
+    try {
+      const res = await create({ jd_parse_id: PARSE_ID })
+      expect(res.status).toBe(201)
+      const job = ((await res.json()) as { data: { jd_url: string | null; jd_attached: boolean } }).data
+      expect(job).toMatchObject({ jd_url: null, jd_attached: false })
+      const { results } = await env.DB.prepare('SELECT id FROM jobs WHERE company_id = ?').bind(companyId).all()
+      expect(results).toHaveLength(1)
+    } finally {
+      env.RESUME_BUCKET.put = originalPut
+    }
+  })
+})
+
+describe('PATCH /api/jobs/:id with jd_parse_id', () => {
+  async function createPlainJob() {
+    const res = await create({})
+    return ((await res.json()) as { data: { id: string } }).data.id
+  }
+
+  it('F6: moves the pending file, sets jd_url and deletes the previous file', async () => {
+    const jobId = await createPlainJob()
+    const firstPendingKey = await seedParse({}, '11111111-1111-4111-8111-111111111111')
+    const firstRes = await SELF.fetch(`https://test.local/api/jobs/${jobId}`, {
+      method: 'PATCH', headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jd_parse_id: '11111111-1111-4111-8111-111111111111' }),
+    })
+    const firstJob = ((await firstRes.json()) as { data: { jd_url: string; jd_attached: boolean } }).data
+    expect(firstRes.status).toBe(200)
+    expect(firstJob.jd_attached).toBe(true)
+    const previousJdUrl = firstJob.jd_url
+
+    const secondPendingKey = await seedParse({}, '22222222-2222-4222-8222-222222222222')
+    const secondRes = await SELF.fetch(`https://test.local/api/jobs/${jobId}`, {
+      method: 'PATCH', headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jd_parse_id: '22222222-2222-4222-8222-222222222222' }),
+    })
+    expect(secondRes.status).toBe(200)
+    const secondJob = ((await secondRes.json()) as { data: { jd_url: string; jd_attached: boolean } }).data
+    expect(secondJob.jd_attached).toBe(true)
+    expect(secondJob.jd_url).toBe(previousJdUrl) // same key pattern jd/{company}/{jobId}.pdf
+    expect(await env.RESUME_BUCKET.get(firstPendingKey)).toBeNull()
+    expect(await env.RESUME_BUCKET.get(secondPendingKey)).toBeNull()
+  })
+
+  it('F6: 422s another company\'s parse and leaves the job unchanged', async () => {
+    const jobId = await createPlainJob()
+    const other = await seedCompanyAndRecruiter(env.DB)
+    await seedParse({}, PARSE_ID, other.companyId)
+    const res = await SELF.fetch(`https://test.local/api/jobs/${jobId}`, {
+      method: 'PATCH', headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jd_parse_id: PARSE_ID }),
+    })
+    expect(res.status).toBe(422)
+    const row = await env.DB.prepare('SELECT jd_url FROM jobs WHERE id = ?').bind(jobId).first<{ jd_url: string | null }>()
+    expect(row?.jd_url).toBeNull()
+  })
+
+  it('F2: keeps the job and reports jd_attached: false when attachJd throws (R2 put failure)', async () => {
+    const jobId = await createPlainJob()
+    await seedParse()
+    const originalPut = env.RESUME_BUCKET.put.bind(env.RESUME_BUCKET)
+    env.RESUME_BUCKET.put = (async () => { throw new Error('simulated R2 put failure') }) as typeof env.RESUME_BUCKET.put
+    try {
+      const res = await SELF.fetch(`https://test.local/api/jobs/${jobId}`, {
+        method: 'PATCH', headers: { ...authHeader(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jd_parse_id: PARSE_ID }),
+      })
+      expect(res.status).toBe(200)
+      const job = ((await res.json()) as { data: { jd_url: string | null; jd_attached: boolean } }).data
+      expect(job).toMatchObject({ jd_url: null, jd_attached: false })
+    } finally {
+      env.RESUME_BUCKET.put = originalPut
+    }
+  })
+})
+
+describe('F6: jdparse KV record deleted after successful attach (double-submit)', () => {
+  it('422s a second POST that reuses the same jd_parse_id after a successful create', async () => {
+    await seedParse()
+    const first = await create({ jd_parse_id: PARSE_ID })
+    expect(first.status).toBe(201)
+
+    const second = await create({ jd_parse_id: PARSE_ID })
+    expect(second.status).toBe(422)
+    const { results } = await env.DB.prepare('SELECT id FROM jobs WHERE company_id = ?').bind(companyId).all()
+    expect(results).toHaveLength(1)
+  })
 })
 
 describe('GET /api/jobs/parse-jd/:parseId', () => {
