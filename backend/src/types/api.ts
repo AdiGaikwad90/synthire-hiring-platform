@@ -112,6 +112,7 @@ export const createJobSchema = z.object({
   min_years_experience: z.number().min(0).transform(Math.round).default(0),
   education_requirement: z.enum(['none', 'bachelors', 'masters', 'phd']).optional(),
   scoring_dimensions: scoringDimensionsSchema.default(DEFAULT_DIMENSIONS),
+  jd_parse_id: z.string().uuid().optional(),
 })
 
 export const updateJobSchema = createJobSchema.partial().extend({

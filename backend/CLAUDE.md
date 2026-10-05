@@ -149,6 +149,8 @@ Background via `ctx.waitUntil`: validate magic bytes + size → create row (`par
 
 A pipeline that dies mid-way (waitUntil cut off, worker restarted) would leave the row in `parsing`/`scoring` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error` with an "interrupted — upload again" message.
 
+**JD files.** `POST /api/jobs/parse-jd` stores the upload at `jd-pending/{company}/{parseId}.{ext}` (expired by an R2 lifecycle rule after 1 day) and keeps a tenant-tagged record in KV for 24 h. The client creates the job with `jd_parse_id`, never a storage path; the server checks the record belongs to the caller's company (422 otherwise), moves the file to `jd/{company}/{jobId}.{ext}` and sets `jd_url`. If the pending file expired in between, the job is still created and the response carries `jd_attached: false`.
+
 ### Infrastructure not created by `wrangler deploy`
 
 `scripts/provision.sh dev|staging|production` (idempotent) creates the resume
