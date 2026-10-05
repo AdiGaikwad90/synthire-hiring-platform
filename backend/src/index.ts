@@ -92,9 +92,24 @@ export default {
         .catch((err) => console.error('[scheduled] failStaleProcessing failed', err)),
     )
   },
-  /** One Worker consumes both queues; dead-letter queue names end in "-dlq". */
-  async queue(batch: MessageBatch<unknown>, env: Env, _ctx: ExecutionContext) {
-    if (batch.queue.endsWith('-dlq')) await handleDeadLetters(batch, env)
-    else await handleResumeQueue(batch, env)
+  /**
+   * One Worker consumes both queues; dead-letter queue names end in "-dlq".
+   * D1/KV are metered the same way as fetchWithQuotaMetering: a fresh env is
+   * spread per batch (never mutate the isolate-shared env), and the flush
+   * uses the raw DB so it does not count itself.
+   */
+  async queue(batch: MessageBatch<unknown>, env: Env, ctx: ExecutionContext) {
+    const tally = newTally()
+    const metered: Env = {
+      ...env,
+      DB: meterD1(env.DB, tally),
+      KV_CACHE: meterKV(env.KV_CACHE, tally),
+    }
+    try {
+      if (batch.queue.endsWith('-dlq')) await handleDeadLetters(batch, metered)
+      else await handleResumeQueue(batch, metered)
+    } finally {
+      ctx.waitUntil(flushUsage(env.DB, tally))
+    }
   },
 }
