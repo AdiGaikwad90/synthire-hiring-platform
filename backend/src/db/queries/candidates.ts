@@ -218,6 +218,28 @@ export async function updateCandidateError(
     .run()
 }
 
+export type ActiveProcessingStatus = 'queued' | 'parsing' | 'scoring'
+
+/** Also bumps updated_at, which the stale sweep reads. */
+export async function setProcessingStatus(db: D1Database, id: string, status: ActiveProcessingStatus): Promise<void> {
+  await db
+    .prepare('UPDATE candidates SET processing_status = ?, updated_at = ? WHERE id = ?')
+    .bind(status, new Date().toISOString(), id)
+    .run()
+}
+
+/** Marks the row error unless it already finished — a late DLQ message must not overwrite a result. */
+export async function failCandidateIfActive(db: D1Database, id: string, reason: string): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE candidates SET processing_status = 'error', processing_error = ?, updated_at = ?
+        WHERE id = ? AND processing_status NOT IN ('complete', 'error')`
+    )
+    .bind(reason, new Date().toISOString(), id)
+    .run()
+  return (res.meta.changes ?? 0) > 0
+}
+
 // ── Fail interrupted processing ───────────────────────────────────────────────
 
 /** Longer than any real parse + score; a row older than this was abandoned. */
