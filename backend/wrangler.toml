@@ -95,6 +95,7 @@ preview_id = "a808db59def7494d8ad4718dea31cf3b"
 [[vectorize]]
 binding = "VECTORIZE"
 index_name = "synthire-embeddings-dev"
+remote = true  # Sends dev embeddings to the dev-only remote index — local wrangler dev has no Vectorize simulator
 
 # Resume processing runs on Queues (15-min consumer wall clock), not
 # ctx.waitUntil (cancelled 30 s after the response). Miniflare runs these

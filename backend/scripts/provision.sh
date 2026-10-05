@@ -40,8 +40,14 @@ ensure "queue $QUEUE-dlq"  queues create "$QUEUE-dlq"
 if [[ "$ENV_NAME" == dev ]]; then
   ensure "vectorize index $INDEX" vectorize create "$INDEX" --dimensions=1024 --metric=cosine
 fi
+
+metadata_list=$(npx wrangler vectorize list-metadata-index "$INDEX")
 for prop in companyId jobId; do
-  ensure "metadata index $INDEX.$prop" vectorize create-metadata-index "$INDEX" --propertyName="$prop" --type=string
+  if grep -q "$prop" <<<"$metadata_list"; then
+    echo "  exists   metadata index $INDEX.$prop"
+  else
+    ensure "metadata index $INDEX.$prop" vectorize create-metadata-index "$INDEX" --propertyName="$prop" --type=string
+  fi
 done
 
 # Dev R2 is local (Miniflare); lifecycle rules only exist on real buckets.
