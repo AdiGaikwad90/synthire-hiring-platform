@@ -21,6 +21,7 @@ import { getJobSkillGaps } from '../db/queries/skill-matches'
 import { authMiddleware } from '../middleware/auth'
 import { requireRecruiter } from '../middleware/authorize'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
+import { coerceYears } from '../utils/numbers'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
 import { uploadToR2, getFromR2, deleteFromR2 } from '../services/storage/r2'
@@ -51,7 +52,7 @@ const parsedJdSchema = z.object({
   required_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
   nice_to_have_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
   min_years_experience: z.union([z.number(), z.string(), z.null()]).optional()
-    .transform(v => (v === null || v === undefined || v === '') ? null : Number(v) || null),
+    .transform(v => coerceYears(v)),
   education_requirement: z.string().nullable().optional(),
 })
 
@@ -186,7 +187,7 @@ router.post('/parse-jd', async (c) => {
         const messages = buildJdParseMessages(jdText)
         const llmConfig = buildLlmConfig(env)
 
-        const parsed = await callWithFallback(
+        const raw = await callWithFallback(
           env.AI,
           env.KV_CACHE,
           buildNeuronLimitConfig(env),
@@ -194,7 +195,11 @@ router.post('/parse-jd', async (c) => {
           validateParsedJd,
           'LLM_PARSE',
           llmConfig
-        ) as ParsedJd
+        )
+        // validateParsedJd only checks shape (data is ParsedJd); re-parse here
+        // so the schema's transforms (e.g. coerceYears) actually apply — the
+        // raw LLM output must never be stored as-is.
+        const parsed = parsedJdSchema.parse(raw)
 
         const result: ParsedJd = {
           ...parsed,

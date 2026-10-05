@@ -263,7 +263,10 @@ function JobForm() {
       salary_range: String(parsed.salary_range ?? s.salary_range),
       required_skills: Array.isArray(parsed.required_skills) ? (parsed.required_skills as string[]) : s.required_skills,
       nice_to_have_skills: Array.isArray(parsed.nice_to_have_skills) ? (parsed.nice_to_have_skills as string[]) : s.nice_to_have_skills,
-      min_years_experience: Number(parsed.min_years_experience ?? s.min_years_experience),
+      min_years_experience: (() => {
+        const n = Number(parsed.min_years_experience);
+        return Number.isFinite(n) ? n : s.min_years_experience;
+      })(),
       education_requirement: parsed.education_requirement ? normalizeEducation(parsed.education_requirement) : s.education_requirement,
       jd_parse_id: parsed.parse_id ? String(parsed.parse_id) : s.jd_parse_id,
     }));
