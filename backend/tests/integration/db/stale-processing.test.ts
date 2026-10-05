@@ -35,23 +35,25 @@ const statusOf = async (id: string) =>
 const CUTOFF = '2026-10-04T12:00:00.000Z'
 const BEFORE = '2026-10-04T11:49:59.000Z'
 const AFTER = '2026-10-04T12:00:01.000Z'
+const QUEUED_CUTOFF = '2026-10-03T11:00:00.000Z'
+const cutoffs = { activeBeforeIso: CUTOFF, queuedBeforeIso: QUEUED_CUTOFF }
 
 describe('failStaleProcessing', () => {
   it.each(['parsing', 'scoring', 'pending'])('fails a %s row last touched before the cutoff', async (status) => {
     const id = await candidateWith(status, BEFORE)
-    await failStaleProcessing(env.DB, CUTOFF)
+    await failStaleProcessing(env.DB, cutoffs)
     expect(await statusOf(id)).toEqual({ processing_status: 'error', processing_error: STALE_PROCESSING_MESSAGE })
   })
 
   it('leaves rows that are still within the window', async () => {
     const id = await candidateWith('parsing', AFTER)
-    await failStaleProcessing(env.DB, CUTOFF)
+    await failStaleProcessing(env.DB, cutoffs)
     expect((await statusOf(id))?.processing_status).toBe('parsing')
   })
 
   it.each(['complete', 'error'])('never touches a %s row however old', async (status) => {
     const id = await candidateWith(status, BEFORE)
-    await failStaleProcessing(env.DB, CUTOFF)
+    await failStaleProcessing(env.DB, cutoffs)
     expect((await statusOf(id))?.processing_status).toBe(status)
   })
 
@@ -59,6 +61,20 @@ describe('failStaleProcessing', () => {
     await candidateWith('parsing', BEFORE)
     await candidateWith('scoring', BEFORE)
     await candidateWith('parsing', AFTER)
-    expect(await failStaleProcessing(env.DB, CUTOFF)).toBeGreaterThanOrEqual(2)
+    expect(await failStaleProcessing(env.DB, cutoffs)).toBeGreaterThanOrEqual(2)
+  })
+
+  // A message waiting for the AI budget reset, or in retry backoff, sits in
+  // 'queued' for hours; the 10-minute rule must not kill it.
+  it('leaves a queued row that is older than the active cutoff but newer than the queued cutoff', async () => {
+    const id = await candidateWith('queued', BEFORE)
+    await failStaleProcessing(env.DB, cutoffs)
+    expect((await statusOf(id))?.processing_status).toBe('queued')
+  })
+
+  it('fails a queued row older than the queued cutoff (its message expired)', async () => {
+    const id = await candidateWith('queued', '2026-10-03T10:00:00.000Z')
+    await failStaleProcessing(env.DB, cutoffs)
+    expect((await statusOf(id))?.processing_status).toBe('error')
   })
 })

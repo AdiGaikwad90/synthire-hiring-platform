@@ -5,7 +5,8 @@ import { loggerMiddleware } from './middleware/logger'
 import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
-import { failStaleProcessing, STALE_PROCESSING_MINUTES } from './db/queries/candidates'
+import { failStaleProcessing, STALE_PROCESSING_MINUTES, QUEUED_STALE_HOURS } from './db/queries/candidates'
+import { handleResumeQueue, handleDeadLetters } from './queue/handler'
 import { meterD1, meterKV, newTally } from './services/budget/meters'
 import { flushUsage } from './services/budget/quotas'
 import { quotaMiddleware } from './middleware/quota'
@@ -83,9 +84,17 @@ export default {
       }),
     )
     ctx.waitUntil(
-      failStaleProcessing(env.DB, new Date(Date.now() - STALE_PROCESSING_MINUTES * 60_000).toISOString())
+      failStaleProcessing(env.DB, {
+        activeBeforeIso: new Date(Date.now() - STALE_PROCESSING_MINUTES * 60_000).toISOString(),
+        queuedBeforeIso: new Date(Date.now() - QUEUED_STALE_HOURS * 3_600_000).toISOString(),
+      })
         .then((n) => { if (n > 0) console.warn(`[scheduled] failed ${n} interrupted candidate(s)`) })
         .catch((err) => console.error('[scheduled] failStaleProcessing failed', err)),
     )
+  },
+  /** One Worker consumes both queues; dead-letter queue names end in "-dlq". */
+  async queue(batch: MessageBatch<unknown>, env: Env, _ctx: ExecutionContext) {
+    if (batch.queue.endsWith('-dlq')) await handleDeadLetters(batch, env)
+    else await handleResumeQueue(batch, env)
   },
 }

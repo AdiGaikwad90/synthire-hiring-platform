@@ -247,19 +247,26 @@ export const STALE_PROCESSING_MINUTES = 10
 export const STALE_PROCESSING_MESSAGE =
   'Processing was interrupted before it finished — please upload the resume again'
 
+/** Longer than the 24 h free-plan message retention plus the longest budget wait. */
+export const QUEUED_STALE_HOURS = 25
+
 /**
- * Run by the cron. A background pipeline that dies mid-way (waitUntil cut off,
- * worker restarted) would otherwise leave the row in 'parsing' or 'scoring'
- * for ever, and the page would keep saying "Scoring in progress".
- * `cutoffIso` must be an ISO string — updated_at is written with toISOString().
+ * Run by the cron. Active rows (pending/parsing/scoring) untouched past
+ * `activeBeforeIso` were abandoned mid-run; `queued` rows get the far longer
+ * `queuedBeforeIso` because they legitimately wait for retries or the AI
+ * budget reset. Both cutoffs are ISO strings — updated_at is toISOString().
  */
-export async function failStaleProcessing(db: D1Database, cutoffIso: string): Promise<number> {
+export async function failStaleProcessing(
+  db: D1Database,
+  cutoffs: { activeBeforeIso: string; queuedBeforeIso: string },
+): Promise<number> {
   const res = await db
     .prepare(
       `UPDATE candidates SET processing_status = 'error', processing_error = ?, updated_at = ?
-        WHERE processing_status IN ('pending', 'parsing', 'scoring') AND updated_at < ?`
+        WHERE (processing_status IN ('pending', 'parsing', 'scoring') AND updated_at < ?)
+           OR (processing_status = 'queued' AND updated_at < ?)`
     )
-    .bind(STALE_PROCESSING_MESSAGE, new Date().toISOString(), cutoffIso)
+    .bind(STALE_PROCESSING_MESSAGE, new Date().toISOString(), cutoffs.activeBeforeIso, cutoffs.queuedBeforeIso)
     .run()
   return res.meta.changes ?? 0
 }
