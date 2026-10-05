@@ -7,22 +7,13 @@ import {
   apiResponse,
   paginatedResponse,
 } from '../types/api'
-import { detectFileType, getExtension, getContentType, hasReadableResumeText } from '../services/parsing/detector'
-import { extractPdfText } from '../services/parsing/pdf'
-import { extractDocxText } from '../services/parsing/docx'
-import { uploadToR2, deleteFromR2, getFromR2, r2Key } from '../services/storage/r2'
-import {
-  buildResumeParseMessages,
-  validateParsedResume,
-} from '../services/ai/prompts/parse-resume'
+import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
+import { uploadToR2, getFromR2, r2Key } from '../services/storage/r2'
 import { buildQuestionMessages, validateQuestions } from '../services/ai/prompts/generate-questions'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
 import { buildNeuronLimitConfig } from '../services/budget/neurons'
-import { runScoringPipeline } from '../services/scoring/pipeline'
 import {
   createCandidate,
-  updateCandidateParsed,
-  updateCandidateScores,
   updateCandidateError,
   getCandidate,
   listCandidates,
@@ -30,85 +21,11 @@ import {
   deleteCandidate,
   setCandidateResumeUrl,
 } from '../db/queries/candidates'
-import { replaceSkillMatches, listSkillMatches } from '../db/queries/skill-matches'
+import { listSkillMatches } from '../db/queries/skill-matches'
 import { getJob } from '../db/queries/jobs'
-import type { ParsedResume } from '../services/ai/prompts/parse-resume'
 import { authMiddleware } from '../middleware/auth'
-
-// ── runPipeline — background work for resume upload ──────────────────────────
-
-async function runPipeline(
-  env: Env,
-  candidateId: string,
-  jobId: string,
-  companyId: string,
-  buffer: ArrayBuffer,
-  fileType: 'pdf' | 'docx',
-  r2ObjectKey: string,
-  job: Awaited<ReturnType<typeof getJob>> & {}
-): Promise<void> {
-  try {
-    // Extract text
-    let resumeText: string
-    if (fileType === 'pdf') {
-      resumeText = await extractPdfText(buffer)
-    } else {
-      resumeText = await extractDocxText(buffer)
-    }
-    if (!hasReadableResumeText(resumeText)) {
-      throw new Error('No readable text found in the resume — scanned or image-only files are not supported')
-    }
-
-    // Parse resume with AI
-    const messages = buildResumeParseMessages(resumeText)
-    const parsedResume = await callWithFallback(
-      env.AI,
-      env.KV_CACHE,
-      buildNeuronLimitConfig(env),
-      messages,
-      validateParsedResume,
-      'LLM_PARSE',
-      buildLlmConfig(env)
-    ) as ParsedResume
-
-    // Update candidate with parsed data
-    await updateCandidateParsed(env.DB, candidateId, parsedResume, r2ObjectKey)
-
-    // Run scoring pipeline
-    const scoringResult = await runScoringPipeline(env, {
-      candidateId,
-      jobId,
-      companyId,
-      resumeText,
-      jobTitle: job.title,
-      jobDescription: job.description ?? null,
-      requiredSkills: job.required_skills,
-      niceToHaveSkills: job.nice_to_have_skills,
-      minYearsExperience: job.min_years_experience,
-      scoringWeights: job.scoring_dimensions,
-      parsedResume,
-    })
-
-    // Written BEFORE the score marks the row 'complete', so a client that sees
-    // 'complete' also sees the verdicts. A failure here is logged, not thrown:
-    // a score without skill matches beats no score.
-    try {
-      await replaceSkillMatches(env.DB, { candidateId, jobId, companyId }, scoringResult.skill_matches)
-    } catch (err) {
-      console.error('skill match persistence failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
-    }
-
-    // Update scores
-    await updateCandidateScores(env.DB, candidateId, scoringResult, 'workers-ai')
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    try {
-      await updateCandidateError(env.DB, candidateId, message)
-    } catch {
-      // best-effort — don't let the error handler throw
-    }
-  }
-}
+import type { ResumeQueueMessage } from '../queue/messages'
+import { purgeCandidateArtifacts } from '../services/candidates/purge'
 
 const router = new Hono<{ Bindings: Env }>()
 
@@ -160,12 +77,12 @@ router.post('/upload', async (c) => {
     return c.json({ success: false, error: 'Job not found' }, 404)
   }
 
-  // Create candidate row with processing_status='parsing'
+  // Create candidate row with processing_status='queued'
   const candidate = await createCandidate(c.env.DB, {
     job_id: jobId,
     company_id: companyId,
     name: 'Processing...',
-    processing_status: 'parsing',
+    processing_status: 'queued',
   })
 
   const env = c.env
@@ -174,14 +91,26 @@ router.post('/upload', async (c) => {
   const contentType = getContentType(fileType)
   const key = r2Key(companyId, jobId, candidateId, ext)
 
-  // Upload to R2 before responding so the file is available for the background pipeline
-  await uploadToR2(env, key, buffer, contentType)
-  await setCandidateResumeUrl(env.DB, candidateId, key)
+  // Upload to R2 before responding so the file is viewable immediately
+  try {
+    await uploadToR2(env, key, buffer, contentType)
+    await setCandidateResumeUrl(env.DB, candidateId, key)
+  } catch (err) {
+    console.error('[upload] storing the file failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
+    await updateCandidateError(env.DB, candidateId, 'Could not store the uploaded file')
+    throw err
+  }
 
-  // Run pipeline in background — client polls GET /api/candidates/:id for status
-  c.executionCtx.waitUntil(
-    runPipeline(env, candidateId, jobId, companyId, buffer, fileType, key, job)
-  )
+  // Processing runs in the queue consumer (15-min wall clock), not waitUntil
+  // (cancelled 30 s after this response). The client polls GET /:id.
+  const message: ResumeQueueMessage = { type: 'process-resume', candidateId, companyId, jobId, r2Key: key, fileType }
+  try {
+    await env.RESUME_QUEUE.send(message)
+  } catch (err) {
+    console.error('[upload] queue send failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
+    await updateCandidateError(env.DB, candidateId, 'Could not queue the resume for processing')
+    return c.json({ success: false, error: 'Could not queue the resume for processing — please try again' }, 503)
+  }
 
   return c.json(apiResponse({ candidateId }), 202)
 })
@@ -335,13 +264,14 @@ router.delete('/:id', async (c) => {
     return c.json({ success: false, error: 'Candidate not found' }, 404)
   }
 
-  // Delete from R2 if resume exists
-  if (result.resumeUrl) {
-    try {
-      await deleteFromR2(c.env, result.resumeUrl)
-    } catch {
-      // best-effort — don't fail the request if R2 delete fails
-    }
+  // The row is gone (source of truth); its file, embedding and caches are
+  // purged by the queue with retries. If the queue is unreachable, purge now.
+  const purge: ResumeQueueMessage = { type: 'purge-candidate', candidateId: id, companyId: payload.company_id, resumeUrl: result.resumeUrl }
+  try {
+    await c.env.RESUME_QUEUE.send(purge)
+  } catch (err) {
+    console.error('[delete] queue send failed, purging inline', { candidateId: id, err: err instanceof Error ? err.message : String(err) })
+    await purgeCandidateArtifacts(c.env, purge).catch((e) => console.error('[delete] inline purge failed', { candidateId: id, e: String(e) }))
   }
 
   return c.json(apiResponse({ deleted: true, id }))

@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { SELF, env } from 'cloudflare:test'
+import { env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
+import worker from '../../../src/index'
 import { createJob } from '../../../src/db/queries/jobs'
+import type { Env } from '../../../src/types/bindings'
 import { seedCompanyAndRecruiter, makeJobData, signTestToken, authHeader } from '../../setup/factories'
 
 /**
@@ -18,34 +20,82 @@ const BLANK_PDF = Uint8Array.from(atob('JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PC9UaXRs
 
 let token: string
 let jobId: string
+let companyId: string
 
 beforeEach(async () => {
   const s = await seedCompanyAndRecruiter(env.DB)
+  companyId = s.companyId
   jobId = (await createJob(env.DB, makeJobData(s.companyId, s.recruiterId))).id
   token = await signTestToken(env.JWT_SECRET, { sub: s.recruiterId, company_id: s.companyId, role: 'recruiter' })
 })
 
-async function upload(): Promise<string> {
+function queueSpy(fail = false) {
+  const sent: unknown[] = []
+  return { sent, queue: { send: async (m: unknown) => { if (fail) throw new Error('queue down'); sent.push(m) } } }
+}
+
+async function upload(queue: { send: (m: unknown) => Promise<void> }) {
   const form = new FormData()
   form.append('jobId', jobId)
   form.append('file', new File([BLANK_PDF], 'resume.pdf', { type: 'application/pdf' }))
-  const res = await SELF.fetch('https://test.local/api/candidates/upload', { method: 'POST', body: form, headers: authHeader(token) })
-  expect(res.status).toBe(202)
-  return ((await res.json()) as { data: { candidateId: string } }).data.candidateId
+  const ctx = createExecutionContext()
+  const res = await worker.fetch(
+    new Request('https://test.local/api/candidates/upload', { method: 'POST', body: form, headers: authHeader(token) }),
+    { ...env, RESUME_QUEUE: queue } as unknown as Env,
+    ctx,
+  )
+  await waitOnExecutionContext(ctx)
+  return res
 }
 
-describe('POST /api/candidates/upload — the stored file is viewable straight away', () => {
-  it('records resume_url before processing finishes', async () => {
-    const id = await upload()
-    const row = await env.DB.prepare('SELECT resume_url FROM candidates WHERE id = ?').bind(id).first<{ resume_url: string | null }>()
-    expect(row?.resume_url).toMatch(/\.pdf$/)
+const rowOf = (id: string) => env.DB.prepare('SELECT processing_status, processing_error, resume_url FROM candidates WHERE id = ?')
+  .bind(id).first<{ processing_status: string; processing_error: string | null; resume_url: string | null }>()
+
+describe('POST /api/candidates/upload — enqueues processing', () => {
+  it('returns 202, leaves the row queued with its file recorded, and sends one process-resume message', async () => {
+    const spy = queueSpy()
+    const res = await upload(spy.queue)
+    expect(res.status).toBe(202)
+    const id = ((await res.json()) as { data: { candidateId: string } }).data.candidateId
+    const row = await rowOf(id)
+    expect(row?.processing_status).toBe('queued')
+    expect(row?.resume_url).toBe(`resumes/${companyId}/${jobId}/${id}.pdf`)
+    expect(spy.sent).toEqual([{ type: 'process-resume', candidateId: id, companyId, jobId, r2Key: row?.resume_url, fileType: 'pdf' }])
   })
 
-  it('serves the original file for a candidate whose processing failed', async () => {
-    const id = await upload()
-    const res = await SELF.fetch(`https://test.local/api/candidates/${id}/resume`, { headers: authHeader(token) })
-    expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toBe('application/pdf')
-    expect(new Uint8Array(await res.arrayBuffer())).toEqual(BLANK_PDF)
+  it('serves the original file while the resume is still queued', async () => {
+    const res = await upload(queueSpy().queue)
+    const id = ((await res.json()) as { data: { candidateId: string } }).data.candidateId
+    const file = await worker.fetch(
+      new Request(`https://test.local/api/candidates/${id}/resume`, { headers: authHeader(token) }),
+      env as unknown as Env, createExecutionContext(),
+    )
+    expect(file.status).toBe(200)
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(BLANK_PDF)
+  })
+
+  it('returns 503 and marks the row error when the queue send fails — no row left waiting forever', async () => {
+    const res = await upload(queueSpy(true).queue)
+    expect(res.status).toBe(503)
+    const { results } = await env.DB.prepare(`SELECT processing_status, processing_error FROM candidates WHERE job_id = ?`).bind(jobId).all()
+    expect(results).toEqual([{ processing_status: 'error', processing_error: 'Could not queue the resume for processing' }])
+  })
+
+  it('marks the row error and sends nothing when storing the file fails', async () => {
+    const spy = queueSpy()
+    const form = new FormData()
+    form.append('jobId', jobId)
+    form.append('file', new File([BLANK_PDF], 'resume.pdf', { type: 'application/pdf' }))
+    const ctx = createExecutionContext()
+    const res = await worker.fetch(
+      new Request('https://test.local/api/candidates/upload', { method: 'POST', body: form, headers: authHeader(token) }),
+      { ...env, RESUME_QUEUE: spy.queue, RESUME_BUCKET: { put: async () => { throw new Error('r2 down') } } } as unknown as Env,
+      ctx,
+    )
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    const { results } = await env.DB.prepare(`SELECT processing_status, processing_error FROM candidates WHERE job_id = ?`).bind(jobId).all()
+    expect(results).toEqual([{ processing_status: 'error', processing_error: 'Could not store the uploaded file' }])
+    expect(spy.sent).toEqual([])
   })
 })
