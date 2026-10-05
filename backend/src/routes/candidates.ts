@@ -97,7 +97,9 @@ router.post('/upload', async (c) => {
     await setCandidateResumeUrl(env.DB, candidateId, key)
   } catch (err) {
     console.error('[upload] storing the file failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
-    await updateCandidateError(env.DB, candidateId, 'Could not store the uploaded file')
+    await updateCandidateError(env.DB, candidateId, 'Could not store the uploaded file').catch((e) =>
+      console.error('[upload] could not record the storage failure', { candidateId, err: e instanceof Error ? e.message : String(e) })
+    )
     throw err
   }
 
@@ -108,7 +110,9 @@ router.post('/upload', async (c) => {
     await env.RESUME_QUEUE.send(message)
   } catch (err) {
     console.error('[upload] queue send failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
-    await updateCandidateError(env.DB, candidateId, 'Could not queue the resume for processing')
+    await updateCandidateError(env.DB, candidateId, 'Could not queue the resume for processing').catch((e) =>
+      console.error('[upload] could not record the queue-send failure', { candidateId, err: e instanceof Error ? e.message : String(e) })
+    )
     return c.json({ success: false, error: 'Could not queue the resume for processing — please try again' }, 503)
   }
 

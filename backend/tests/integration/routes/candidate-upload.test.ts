@@ -98,4 +98,35 @@ describe('POST /api/candidates/upload — enqueues processing', () => {
     expect(results).toEqual([{ processing_status: 'error', processing_error: 'Could not store the uploaded file' }])
     expect(spy.sent).toEqual([])
   })
+
+  it('still reports the original storage failure when recording it in D1 also fails', async () => {
+    const spy = queueSpy()
+    const form = new FormData()
+    form.append('jobId', jobId)
+    form.append('file', new File([BLANK_PDF], 'resume.pdf', { type: 'application/pdf' }))
+    const ctx = createExecutionContext()
+    // Only the error-recording UPDATE throws; other DB calls (createCandidate, etc.) pass through.
+    const flakyDb = {
+      prepare: (sql: string) => {
+        if (sql.includes("processing_status = 'error'")) {
+          return { bind: () => ({ run: async () => { throw new Error('D1 unavailable') } }) }
+        }
+        return env.DB.prepare(sql)
+      },
+    }
+    const res = await worker.fetch(
+      new Request('https://test.local/api/candidates/upload', { method: 'POST', body: form, headers: authHeader(token) }),
+      {
+        ...env,
+        RESUME_QUEUE: spy.queue,
+        RESUME_BUCKET: { put: async () => { throw new Error('r2 down') } },
+        DB: flakyDb,
+      } as unknown as Env,
+      ctx,
+    )
+    await waitOnExecutionContext(ctx)
+    expect(res.status).toBeGreaterThanOrEqual(400)
+    const body = (await res.json()) as { error?: string }
+    expect(body.error ?? '').not.toMatch(/D1 unavailable/)
+  })
 })
