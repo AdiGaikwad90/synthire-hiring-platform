@@ -27,7 +27,7 @@ CI (`.github/workflows/ci.yml`) gates on `typecheck` + `test`. `tsconfig.json` s
 |---|---|---|
 | **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional). Production currently holds only `JWT_SECRET` + `SENDGRID_API_KEY` — `RESEND_WEBHOOK_SECRET` is unset, so the Resend webhook would 401 if `EMAIL_PROVIDER` were switched to resend. |
 | **Runtime vars** | `wrangler.toml [vars]` | model names, thresholds, TTLs — safe to commit |
-| **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI` |
+| **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI`, `env.RESUME_QUEUE` |
 
 > **Cloudflare bindings are not environment variables.** There is no `D1_DATABASE_ID`, `ACCOUNT_ID`, or `ZONE_ID` at runtime — D1/R2/KV/Vectorize/AI arrive as typed binding objects. Those IDs are wrangler CLI concerns only.
 
@@ -148,6 +148,16 @@ Background via `ctx.waitUntil`: validate magic bytes + size → create row (`par
 
 
 A pipeline that dies mid-way (waitUntil cut off, worker restarted) would leave the row in `parsing`/`scoring` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error` with an "interrupted — upload again" message.
+
+### Infrastructure not created by `wrangler deploy`
+
+`scripts/provision.sh dev|staging|production` (idempotent) creates the resume
+queue and its DLQ, the dev Vectorize index `synthire-embeddings-dev`, the
+`companyId` and `jobId` metadata indexes, and the R2 lifecycle rule that expires
+`jd-pending/` after 1 day. Run it before the first deploy that binds them;
+`wrangler deploy` fails if a bound queue is missing. Dev Vectorize writes go to
+`synthire-embeddings-dev` — the top-level config must never name a production
+resource that has no local simulator.
 
 ---
 

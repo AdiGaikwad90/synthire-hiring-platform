@@ -90,12 +90,31 @@ binding = "KV_CACHE"
 id = "6da4fc72343e4286a9080b741ad98bc7"
 preview_id = "a808db59def7494d8ad4718dea31cf3b"
 
-# After running: wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
-# IMPORTANT: Before first production deploy, create the companyId metadata index:
-# wrangler vectorize create-metadata-index synthire-embeddings --property-name=companyId --type=string
+# Dev gets its own index: Vectorize has no local simulator, so wrangler dev
+# talks to a real index — this one, never production. Set up by scripts/provision.sh.
 [[vectorize]]
 binding = "VECTORIZE"
-index_name = "synthire-embeddings"
+index_name = "synthire-embeddings-dev"
+
+# Resume processing runs on Queues (15-min consumer wall clock), not
+# ctx.waitUntil (cancelled 30 s after the response). Miniflare runs these
+# locally; provision.sh creates the remote ones.
+[[queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs-dev"
+
+[[queues.consumers]]
+queue = "synthire-resume-jobs-dev"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-dev-dlq"
+
+[[queues.consumers]]
+queue = "synthire-resume-jobs-dev-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
 
 # Workers AI (built-in, no setup needed)
 [ai]
@@ -191,6 +210,23 @@ id = "6da4fc72343e4286a9080b741ad98bc7"
 binding = "VECTORIZE"
 index_name = "synthire-embeddings"
 
+[[env.production.queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs"
+
+[[env.production.queues.consumers]]
+queue = "synthire-resume-jobs"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-dlq"
+
+[[env.production.queues.consumers]]
+queue = "synthire-resume-jobs-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
+
 [env.production.ai]
 binding = "AI"
 
@@ -281,6 +317,23 @@ preview_id = "39cec25e6bae4510808fe1aeb4294aba"
 [[env.staging.vectorize]]
 binding = "VECTORIZE"
 index_name = "synthire-embeddings-staging"
+
+[[env.staging.queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "synthire-resume-jobs-staging"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "synthire-resume-jobs-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
 
 [env.staging.ai]
 binding = "AI"

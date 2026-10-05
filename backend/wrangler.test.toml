@@ -84,3 +84,7 @@ id = "test_kv_namespace"
 [[r2_buckets]]
 binding = "RESUME_BUCKET"
 bucket_name = "synthire-resumes-test"
+
+[[queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs-test"

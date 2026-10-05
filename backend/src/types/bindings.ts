@@ -1,3 +1,5 @@
+import type { ResumeQueueMessage } from '../queue/messages'
+
 export interface Env {
   // ── Cloudflare bindings (wrangler.toml — NOT runtime env vars) ─────────────
   // NOTE: D1, R2, KV, Vectorize, AI are injected as typed objects by the CF
@@ -7,6 +9,7 @@ export interface Env {
   KV_CACHE: KVNamespace
   VECTORIZE: VectorizeIndex
   AI: Ai
+  RESUME_QUEUE: Queue<ResumeQueueMessage>  // [[queues.producers]] — resume processing + candidate purge
   RATE_LIMITER?: RateLimit   // [[ratelimits]] binding — optional so tests/old configs still boot
 
   // ── Secrets (.dev.vars locally / wrangler secret put in production) ────────
