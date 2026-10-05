@@ -5,6 +5,18 @@ import { isGuardrailEnabled } from '../../utils/env'
 
 export type NeuronOperation = 'LLM_PARSE' | 'LLM_SCORE' | 'LLM_QUESTIONS' | 'EMBEDDING'
 
+/**
+ * The daily Neuron budget is spent. A distinct type (still an AppError 503, so
+ * HTTP behaviour is unchanged) lets the queue consumer wait for the reset
+ * instead of treating it like "all models exhausted".
+ */
+export class NeuronBudgetError extends AppError {
+  constructor(message: string, readonly resetInSeconds: number) {
+    super(message, 503)
+    this.name = 'NeuronBudgetError'
+  }
+}
+
 export interface NeuronLimitConfig {
   enabled: boolean      // false → usage is still counted, but never blocked
   dailyLimit: number
@@ -53,9 +65,9 @@ export async function checkNeuronBudget(
     const resetIn = secondsUntilMidnightUTC()
     const hours = Math.floor(resetIn / 3600)
     const minutes = Math.floor((resetIn % 3600) / 60)
-    throw new AppError(
+    throw new NeuronBudgetError(
       `Daily AI usage limit reached (${current}/${dailyLimit} Neurons used). Resets in ${hours}h ${minutes}m at midnight UTC.`,
-      503
+      resetIn,
     )
   }
 }

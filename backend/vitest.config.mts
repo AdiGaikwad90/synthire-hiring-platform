@@ -86,6 +86,8 @@ export default defineConfig({
         'src/services/budget/**': { statements: 80, branches: 65, functions: 80, lines: 80 },
         'src/services/scoring/skill-matches.ts': { statements: 100, branches: 95, functions: 100, lines: 100 },
         'src/services/scoring/attribution.ts': { statements: 100, branches: 90, functions: 100, lines: 100 },
+        'src/queue/messages.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/queue/failures.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

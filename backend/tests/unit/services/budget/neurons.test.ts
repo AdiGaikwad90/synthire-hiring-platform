@@ -5,7 +5,9 @@ import {
   deductNeurons,
   buildNeuronLimitConfig,
   NEURON_COSTS,
+  NeuronBudgetError,
 } from '../../../../src/services/budget/neurons'
+import { AppError } from '../../../../src/types/api'
 import type { Env } from '../../../../src/types/bindings'
 
 // Minimal KV stand-in — checkNeuronBudget only needs get/put.
@@ -93,5 +95,17 @@ describe('deductNeurons', () => {
     // Disabled config is never passed to deduct — it counts unconditionally.
     await deductNeurons(kv, 'LLM_SCORE')
     expect(store.get(today())).toBe(String(500 + NEURON_COSTS.LLM_SCORE))
+  })
+})
+
+describe('checkNeuronBudget — budget exhausted error type', () => {
+  it('throws NeuronBudgetError (still an AppError 503) carrying seconds until reset', async () => {
+    const kv = { get: async () => '10000' } as unknown as KVNamespace
+    const err = await checkNeuronBudget(kv, 'LLM_SCORE', { enabled: true, dailyLimit: 10000 }).catch((e) => e)
+    expect(err).toBeInstanceOf(NeuronBudgetError)
+    expect(err).toBeInstanceOf(AppError)
+    expect(err.statusCode).toBe(503)
+    expect(err.resetInSeconds).toBeGreaterThan(0)
+    expect(err.resetInSeconds).toBeLessThanOrEqual(86400)
   })
 })
