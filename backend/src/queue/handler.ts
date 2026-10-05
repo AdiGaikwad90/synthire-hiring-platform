@@ -1,6 +1,6 @@
 import type { Env } from '../types/bindings'
 import { parseQueueMessage } from './messages'
-import { classifyFailure } from './failures'
+import { classifyFailure, RETRY_BACKOFF_SECONDS } from './failures'
 import { processResume } from './process-resume'
 import { purgeCandidateArtifacts } from '../services/candidates/purge'
 import { failCandidateIfActive, setProcessingStatus, updateCandidateError } from '../db/queries/candidates'
@@ -23,9 +23,20 @@ export async function handleResumeQueue(batch: MessageBatch<unknown>, env: Env):
     } catch (err) {
       const action = classifyFailure(err, message.attempts)
       if (action.kind === 'fail') {
-        if (msg.type === 'process-resume') await updateCandidateError(env.DB, msg.candidateId, action.reason)
-        console.warn('[queue] permanent failure', { type: msg.type, candidateId: msg.candidateId, reason: action.reason })
-        message.ack()
+        try {
+          if (msg.type === 'process-resume') await updateCandidateError(env.DB, msg.candidateId, action.reason)
+          console.warn('[queue] permanent failure', { type: msg.type, candidateId: msg.candidateId, reason: action.reason })
+          message.ack()
+        } catch (writeErr) {
+          // Couldn't record the failure — retry rather than silently dropping
+          // the message; the next attempt re-classifies and tries again, and
+          // exhausted retries land it on the DLQ.
+          console.error('[queue] could not record permanent failure', {
+            candidateId: msg.candidateId,
+            error: writeErr instanceof Error ? writeErr.message : String(writeErr),
+          })
+          message.retry({ delaySeconds: RETRY_BACKOFF_SECONDS[0] })
+        }
       } else {
         // Back to 'queued' while waiting: honest, and the stale sweep gives
         // queued rows 25 h instead of 10 min.
@@ -43,11 +54,21 @@ export async function handleResumeQueue(batch: MessageBatch<unknown>, env: Env):
 export async function handleDeadLetters(batch: MessageBatch<unknown>, env: Env): Promise<void> {
   for (const message of batch.messages) {
     const msg = parseQueueMessage(message.body)
-    if (msg?.type === 'process-resume') {
-      await failCandidateIfActive(env.DB, msg.candidateId, DEAD_LETTER_MESSAGE)
-    } else {
-      console.error('[dlq] message exhausted its retries', { id: message.id, body: message.body })
+    try {
+      if (msg?.type === 'process-resume') {
+        await failCandidateIfActive(env.DB, msg.candidateId, DEAD_LETTER_MESSAGE)
+      } else {
+        console.error('[dlq] message exhausted its retries', { id: message.id, body: message.body })
+      }
+      message.ack()
+    } catch (err) {
+      // One bad message must never stop the rest of the DLQ batch — retry
+      // this one instead of acking it away unrecorded.
+      console.error('[dlq] could not mark candidate failed', {
+        candidateId: msg?.type === 'process-resume' ? msg.candidateId : undefined,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      message.retry()
     }
-    message.ack()
   }
 }

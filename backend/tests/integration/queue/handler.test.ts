@@ -1,11 +1,36 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { env, createMessageBatch, createExecutionContext, getQueueResult } from 'cloudflare:test'
+import type { D1Database } from '@cloudflare/workers-types'
 import worker from '../../../src/index'
-import { DEAD_LETTER_MESSAGE } from '../../../src/queue/handler'
+import { DEAD_LETTER_MESSAGE, handleResumeQueue, handleDeadLetters } from '../../../src/queue/handler'
 import { createJob } from '../../../src/db/queries/jobs'
 import type { Env } from '../../../src/types/bindings'
 import { seedCompanyAndRecruiter, makeJobData, insertCandidate } from '../../setup/factories'
 import { stubAi, stubVectorize } from '../../setup/ai-stub'
+
+/** A batch built by hand, with ack/retry spies, for asserting call args directly. */
+function fakeBatch(queue: string, msgBody: unknown, attempts = 1) {
+  const ack = vi.fn()
+  const retry = vi.fn()
+  const message = { id: 'm1', timestamp: new Date(), attempts, body: msgBody, ack, retry }
+  const batch = { queue, messages: [message], metadata: { metrics: { backlogCount: 0, backlogBytes: 0 } }, ackAll: vi.fn(), retryAll: vi.fn() }
+  return { batch: batch as unknown as MessageBatch<unknown>, ack, retry }
+}
+
+/** Wraps a real D1Database so any UPDATE writing processing_status = 'error' throws. */
+function dbThrowingOnErrorWrite(db: D1Database): D1Database {
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'prepare') {
+        return (sql: string) => {
+          if (sql.includes(`processing_status = 'error'`)) throw new Error('simulated D1 write failure')
+          return (target.prepare as (s: string) => unknown)(sql)
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+  }) as unknown as D1Database
+}
 
 let companyId: string
 let jobId: string
@@ -62,6 +87,43 @@ describe('resume queue consumer', () => {
     expect((await status())?.s).toBe('queued')
   })
 
+  it('retries a transient AI failure with the exact backoff delay (direct call, spy retry)', async () => {
+    await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+    const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 2)
+    const e = { ...env, AI: stubAi({ failOn: 'parse' }).ai, VECTORIZE: stubVectorize().index } as unknown as Env
+    await handleResumeQueue(batch, e)
+    expect(retry).toHaveBeenCalledWith({ delaySeconds: 120 })
+    expect(ack).not.toHaveBeenCalled()
+  })
+
+  it('retries with a budget-reset delay when the Neuron budget is exhausted', async () => {
+    const key = `neurons:daily:${new Date().toISOString().slice(0, 10)}`
+    await env.KV_CACHE.put(key, '10000')
+    try {
+      await env.RESUME_BUCKET.put(r2Key(), new Uint8Array([0x50, 0x4b]))
+      const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 1)
+      const e = { ...env, AI: stubAi().ai, VECTORIZE: stubVectorize().index } as unknown as Env
+      await handleResumeQueue(batch, e)
+      expect(retry).toHaveBeenCalledTimes(1)
+      const [[call]] = retry.mock.calls
+      expect(call.delaySeconds).toBeGreaterThan(60)
+      expect(call.delaySeconds).toBeLessThanOrEqual(86400)
+      expect(ack).not.toHaveBeenCalled()
+    } finally {
+      await env.KV_CACHE.delete(key)
+    }
+  })
+
+  it('retries instead of acking when recording a permanent failure throws', async () => {
+    const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test', body(), 1)
+    const e = { ...env, DB: dbThrowingOnErrorWrite(env.DB), AI: stubAi().ai, VECTORIZE: stubVectorize().index } as unknown as Env
+    // No file in R2 → processResume throws PermanentProcessingError → the
+    // fail branch tries updateCandidateError, which the wrapped DB rejects.
+    await handleResumeQueue(batch, e)
+    expect(retry).toHaveBeenCalledWith({ delaySeconds: 30 })
+    expect(ack).not.toHaveBeenCalled()
+  })
+
   it('runs a purge-candidate message', async () => {
     const v = stubVectorize()
     const batch = createMessageBatch('synthire-resume-jobs-test', [
@@ -85,5 +147,14 @@ describe('dead-letter consumer', () => {
     await env.DB.prepare(`UPDATE candidates SET processing_status = 'complete' WHERE id = ?`).bind(candidateId).run()
     await deliver('synthire-resume-jobs-test-dlq', body())
     expect((await status())?.s).toBe('complete')
+  })
+
+  it('retries instead of acking when the DB write throws, without stopping the rest of the batch', async () => {
+    const { batch, ack, retry } = fakeBatch('synthire-resume-jobs-test-dlq', body(), 1)
+    const e = { ...env, DB: dbThrowingOnErrorWrite(env.DB) } as unknown as Env
+    await handleDeadLetters(batch, e)
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(ack).not.toHaveBeenCalled()
+    expect((await status())?.s).toBe('queued') // write never landed
   })
 })
