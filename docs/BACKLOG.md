@@ -21,7 +21,7 @@ the history is readable.
 - **Statuses:** `Open` · `In progress` · `Done` · `Won't fix`.
 - **Adding an issue:** take the next free ID, add a row to the table and a
   section under its priority, and add the same issue to the tracker.
-- **Fixing an issue:** follow `TESTING.md` (regression test that fails without
+- **Fixing an issue:** follow the root `TESTING.md` (regression test that fails without
   the fix, then the Playwright pass with real LLM calls). Then set the status to
   `Done`, add the PR link and date to the section, and update the tracker in the
   same session (its `issues/<ID>` document, plus one line in `changes`).
@@ -383,6 +383,6 @@ the history is readable.
 ### SYN-042 · Docs-only pushes to main redeploy production
 **P3** · CI · Chore · Status: **Open** · Found 2026-10-25
 
-- **Problem:** The workflow deploys on every push to `main` with no path filter, so a change to `BACKLOG.md` or any other doc triggers a full production backend and frontend deploy. Backlog status updates therefore wait for the next code PR instead of merging on their own.
+- **Problem:** The workflow deploys on every push to `main` with no path filter, so a change to `docs/BACKLOG.md` or any other doc triggers a full production backend and frontend deploy. Backlog status updates therefore wait for the next code PR instead of merging on their own.
 - **Where:** `.github/workflows/ci.yml:3-7` (triggers) and the deploy jobs.
 - **Done when:** a push that only touches `*.md` / `docs/**` still runs the checks but skips the deploy jobs.
