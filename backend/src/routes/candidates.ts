@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { Env } from '../types/bindings'
 import {
@@ -24,6 +24,8 @@ import {
 import { listSkillMatches } from '../db/queries/skill-matches'
 import { getJob } from '../db/queries/jobs'
 import { authMiddleware } from '../middleware/auth'
+import { recruiterOnly, requireInterviewAccess } from '../middleware/authorize'
+import { hasAssignedInterview } from '../db/queries/interviews'
 import type { ResumeQueueMessage } from '../queue/messages'
 import { purgeCandidateArtifacts } from '../services/candidates/purge'
 
@@ -31,9 +33,17 @@ const router = new Hono<{ Bindings: Env }>()
 
 router.use('*', authMiddleware)
 
+// Interviewers may read a candidate only from an interview assigned to them.
+// Runs after the company-scoped fetch: another company's id stays a 404.
+function requireCandidateAccess(c: Context<{ Bindings: Env }>, candidateId: string) {
+  const user = c.get('user')
+  return requireInterviewAccess(user, () =>
+    hasAssignedInterview(c.env.DB, user.company_id, user.sub, { candidateId }))
+}
+
 // ── POST /upload — async candidate processing (returns candidateId immediately, client polls) ──
 
-router.post('/upload', async (c) => {
+router.post('/upload', recruiterOnly, async (c) => {
   const payload = c.get('user')
   const companyId = payload.company_id
 
@@ -121,7 +131,7 @@ router.post('/upload', async (c) => {
 
 // ── GET / — list candidates ───────────────────────────────────────────────────
 
-router.get('/', zValidator('query', listCandidatesSchema), async (c) => {
+router.get('/', recruiterOnly, zValidator('query', listCandidatesSchema), async (c) => {
   const payload = c.get('user')
   const { job_id, status, min_score, page, limit } = c.req.valid('query')
 
@@ -146,6 +156,7 @@ router.get('/:id', async (c) => {
   if (!candidate) {
     return c.json({ success: false, error: 'Candidate not found' }, 404)
   }
+  await requireCandidateAccess(c, id)
 
   const skill_matches = await listSkillMatches(c.env.DB, id, payload.company_id)
   return c.json(apiResponse({ ...candidate, skill_matches }))
@@ -153,7 +164,7 @@ router.get('/:id', async (c) => {
 
 // ── PATCH /:id — update candidate status ──────────────────────────────────────
 
-router.patch('/:id', zValidator('json', updateCandidateSchema), async (c) => {
+router.patch('/:id', recruiterOnly, zValidator('json', updateCandidateSchema), async (c) => {
   const payload = c.get('user')
   const id = c.req.param('id')
   const { status } = c.req.valid('json')
@@ -177,7 +188,12 @@ router.get('/:id/resume', async (c) => {
   const id = c.req.param('id')
 
   const candidate = await getCandidate(c.env.DB, id, payload.company_id)
-  if (!candidate || !candidate.resume_url) {
+  if (!candidate) {
+    return c.json({ success: false, error: 'Resume not found' }, 404)
+  }
+  // Before the resume check, so a refused caller can't learn whether one exists.
+  await requireCandidateAccess(c, id)
+  if (!candidate.resume_url) {
     return c.json({ success: false, error: 'Resume not found' }, 404)
   }
 
@@ -216,6 +232,8 @@ router.post('/:id/questions', async (c) => {
   if (!candidate) {
     return c.json({ success: false, error: 'Candidate not found' }, 404)
   }
+  // Before the cache and the model call: a refusal must cost no Neurons.
+  await requireCandidateAccess(c, id)
 
   // Check KV cache first
   const cacheKey = `questions:${id}`
@@ -259,7 +277,7 @@ router.post('/:id/questions', async (c) => {
 
 // ── DELETE /:id — delete candidate + R2 ──────────────────────────────────────
 
-router.delete('/:id', async (c) => {
+router.delete('/:id', recruiterOnly, async (c) => {
   const payload = c.get('user')
   const id = c.req.param('id')
 

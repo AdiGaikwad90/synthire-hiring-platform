@@ -9,10 +9,13 @@ import {
   deleteInterviewType,
 } from '../db/queries/interviews'
 import { authMiddleware } from '../middleware/auth'
+import { recruiterOnly } from '../middleware/authorize'
 
 const router = new Hono<{ Bindings: Env }>()
 
 router.use('*', authMiddleware)
+// Interview rounds are company configuration: recruiters and admins only.
+router.use('*', recruiterOnly)
 
 // GET /api/interview-types — list all interview types for the company
 router.get('/', async (c) => {

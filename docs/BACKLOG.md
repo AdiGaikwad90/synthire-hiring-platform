@@ -51,7 +51,7 @@ the history is readable.
 | SYN-007 | P1 | Open | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
-| SYN-043 | P1 | Open | Security | Interviewers can change recruiter data |
+| SYN-043 | P1 | In progress | Security | Interviewers can change recruiter data |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -173,7 +173,7 @@ the history is readable.
 - **Done when:** the edited body is what the candidate receives, or the preview is read-only.
 
 ### SYN-043 · Interviewers can change recruiter data
-**P1** · Security · Bug · Status: **Open** · Found 2026-10-25
+**P1** · Security · Bug · Status: **In progress** · Found 2026-10-25
 
 - **Problem:** Role checks cover analytics, skill gaps, email logs and an interviewer's own interview and feedback, but none of the write routes. A user with the `interviewer` role can create, edit and delete jobs (including JD parsing), upload, re-stage and delete candidates, list every candidate in the company, create and delete interview rounds, schedule interviews, and change any interview's status (`PATCH /api/interviews/:id` has no ownership check and accepts any status string). The UI can't reach this today only because no interviewer can join a company yet (SYN-003); fix it before SYN-003 ships.
 - **Where:** `backend/src/routes/jobs.ts:116`, `:145`, `:292`, `:316`; `backend/src/routes/candidates.ts:36`, `:124`, `:156`, `:262`; `backend/src/routes/interview-types.ts:25`, `:33`, `:44`; `backend/src/routes/interviews.ts:56`, `:240-257`; guards live in `backend/src/middleware/authorize.ts`.

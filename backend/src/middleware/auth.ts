@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import type { Env } from '../types/bindings'
 import type { JWTPayload } from '../types/auth'
 import { AppError } from '../types/api'
+import { isRole } from './authorize'
 
 // Extend Hono context variables
 declare module 'hono' {
@@ -41,16 +42,24 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
 
   const secret = new TextEncoder().encode(jwtSecret)
 
+  let payload: Awaited<ReturnType<typeof jwtVerify>>['payload']
   try {
-    const { payload } = await jwtVerify(token, secret, {
+    ;({ payload } = await jwtVerify(token, secret, {
       issuer: ISS,
       audience: AUD,
       clockTolerance: 5,
-    })
-    c.set('user', payload as unknown as JWTPayload)
+    }))
   } catch {
     throw new AppError('Invalid or expired token', 401)
   }
+
+  // A correctly signed token for a role the product doesn't have is refused
+  // here, so no route ever sees one. Guards that compared against a single
+  // role used to let such a token fall through to company-wide access.
+  if (!isRole(payload.role)) {
+    throw new AppError('Forbidden: unsupported account role', 403)
+  }
+  c.set('user', payload as unknown as JWTPayload)
 
   await next()
 })

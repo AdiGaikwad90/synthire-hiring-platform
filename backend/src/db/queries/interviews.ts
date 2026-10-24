@@ -225,6 +225,27 @@ export async function getInterview(
     .first<InterviewWithCandidateName>()
 }
 
+/**
+ * True when this interviewer has an interview (any status) for the candidate
+ * or job. It is what lets an interviewer read that record; the check runs on
+ * every request, so a future reassignment takes effect immediately.
+ */
+export async function hasAssignedInterview(
+  db: D1Database,
+  companyId: string,
+  interviewerId: string,
+  target: { candidateId: string } | { jobId: string }
+): Promise<boolean> {
+  const [column, value] = 'candidateId' in target
+    ? ['candidate_id', target.candidateId]
+    : ['job_id', target.jobId]
+  const row = await db
+    .prepare(`SELECT 1 AS ok FROM interviews WHERE company_id = ? AND interviewer_id = ? AND ${column} = ? LIMIT 1`)
+    .bind(companyId, interviewerId, value)
+    .first()
+  return row !== null
+}
+
 export async function updateInterview(
   db: D1Database,
   id: string,

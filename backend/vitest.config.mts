@@ -88,6 +88,7 @@ export default defineConfig({
         'src/services/scoring/attribution.ts': { statements: 100, branches: 90, functions: 100, lines: 100 },
         'src/queue/messages.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'src/queue/failures.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'src/middleware/authorize.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

@@ -36,6 +36,22 @@ export async function seedCompanyAndRecruiter(
   return { companyId, recruiterId }
 }
 
+/** A user of any role inside an existing company. */
+export async function seedUser(
+  db: D1Database,
+  companyId: string,
+  role: JWTPayload['role'],
+): Promise<string> {
+  const userId = testId('usr')
+  await db.prepare(
+    `INSERT INTO users (id, company_id, email, password_hash, name, role)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(userId, companyId, `${userId}@test.local`, 'x'.repeat(60), `Test ${role}`, role)
+    .run()
+  return userId
+}
+
 /**
  * Inserts a job with RAW column values, bypassing createJob(), so a test can
  * put deliberately malformed JSON into a TEXT column the way a bad migration

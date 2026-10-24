@@ -21,7 +21,9 @@ import analyticsRoutes from './routes/analytics'
 import emailRoutes from './routes/email'
 import healthRoutes from './routes/health'
 
-const app = new Hono<{ Bindings: Env }>()
+// Exported for tests only (route-coverage check in role-scoping.test.ts); the
+// Worker entry point is the default export below.
+export const app = new Hono<{ Bindings: Env }>()
 
 // Global middleware
 app.use('*', loggerMiddleware)
