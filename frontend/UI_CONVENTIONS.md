@@ -50,7 +50,7 @@ here rather than in a screen file.
 | `Tabs` | In-page section switching | hand-rolled button rows |
 | `Badge` | Small status/label chip | a styled `<span>` |
 | `StagePill` + `STAGE` | Candidate pipeline stage | your own stage colour map |
-| `ScoreRing`, `ScoreBar`, `ScorePill` | Any score display | a hand-rolled percentage bar |
+| `ScoreRing`, `ScoreBar` (optional `display` overrides the `%` readout), `ScorePill` | Any score display | a hand-rolled percentage bar |
 | `AIPill` | Marking AI-generated surfaces | a plain label |
 | `Avatar` | Person representation | your own initials logic |
 | `SearchInput` | Search fields | `Input` with a magnifier bolted on |
@@ -84,6 +84,8 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── auth.ts               # token storage
     ├── types.ts              # domain types
     ├── utils.ts              # cn(), initials(), formatDate()
+    ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
+    ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     └── icons.tsx             # the icon set
 ```
 

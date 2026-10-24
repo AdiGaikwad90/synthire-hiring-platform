@@ -27,11 +27,11 @@ CI (`.github/workflows/ci.yml`) gates on `typecheck` + `test`. `tsconfig.json` s
 |---|---|---|
 | **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional). Production currently holds only `JWT_SECRET` + `SENDGRID_API_KEY` — `RESEND_WEBHOOK_SECRET` is unset, so the Resend webhook would 401 if `EMAIL_PROVIDER` were switched to resend. |
 | **Runtime vars** | `wrangler.toml [vars]` | model names, thresholds, TTLs — safe to commit |
-| **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI` |
+| **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI`, `env.RESUME_QUEUE` |
 
 > **Cloudflare bindings are not environment variables.** There is no `D1_DATABASE_ID`, `ACCOUNT_ID`, or `ZONE_ID` at runtime — D1/R2/KV/Vectorize/AI arrive as typed binding objects. Those IDs are wrangler CLI concerns only.
 
-All resource IDs are already provisioned and committed for dev, staging, and production. `src/types/bindings.ts` is the authoritative list of every var with its default — read it rather than duplicating it here.
+All resource IDs are already committed in `wrangler.toml` for dev, staging, and production, but the resources themselves — the resume queue + DLQ, the dev Vectorize index, its `companyId`/`jobId` metadata indexes, and the R2 `jd-pending/` lifecycle rule — are provisioned separately by `scripts/provision.sh` (see below), not by `wrangler deploy`. `src/types/bindings.ts` is the authoritative list of every var with its default — read it rather than duplicating it here.
 
 ---
 
@@ -39,7 +39,7 @@ All resource IDs are already provisioned and committed for dev, staging, and pro
 
 - **`authMiddleware` is registered inside each route file**, not in `src/index.ts`. Hono's `path/*` matcher does not match the bare `path`, which once silently bypassed auth on list endpoints like `GET /api/candidates`. Any new protected router must call `router.use('*', authMiddleware)` itself.
 - **Never `JSON.parse` a D1 text column without try/catch.** Follow `src/db/queries/jobs.ts::toJob()`. Every query file exports a `toX()` deserializer; routes call those and never write raw SQL.
-- **`candidates.ai_analysis` is a plain string** — do not `JSON.stringify` or `JSON.parse` it.
+- **`candidates.ai_analysis` is JSON TEXT** — `{ summary, strengths, concerns }`, written by `pipeline.ts`. Parse it with try/catch like every JSON column. `candidates.score_attribution` is the same (a `ScoreAttribution` snapshot).
 - **Emails never send inline.** Routes call `queueEmail()`; the every-minute cron drains `email_queue`.
 - **`bcryptjs`, not `bcrypt`** — native bindings crash in Workers.
 - **`nodejs_compat` is required** by the PDF/DOCX parsers for Buffer support.
@@ -48,9 +48,9 @@ All resource IDs are already provisioned and committed for dev, staging, and pro
 
 ## Database (D1)
 
-12 tables across migrations `0001`–`0008`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`.
+13 tables across migrations `0001`–`0009`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
 
-Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget).
+Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`.
 
 ---
 
@@ -76,9 +76,17 @@ Public routes: `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/email
 
 `src/services/ai/fallback.ts`. Models come from `wrangler.toml`, so changing them needs no code edit:
 
-| Env | Primary | Fallback |
-|---|---|---|
-| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Used for | Primary | Fallback | Vars |
+|---|---|---|---|
+| Parsing, questions | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `LLM_MODEL_*` |
+| Candidate scoring | `@cf/openai/gpt-oss-120b` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `LLM_SCORE_MODEL_*` |
+
+Scoring uses `buildScoringLlmConfig()`. Picked by a live benchmark (two resumes
+× 3 runs): gpt-oss-120b got 18/18 skill verdicts right, identical every run, at
+~105 Neurons a resume; llama-3.3-70b 16/18 at ~97; the 8B model never produced a
+`transferable` verdict. gpt-oss replies in chat-completions shape (`choices[0]`,
+no `response`) — `callWorkersAI()` reads both. DeepSeek V4 Flash and GLM-5.3
+Flash need the paid Workers plan.
 
 The fallback is deliberately **stronger** than the primary — the chain fires on
 invalid JSON or schema failure, which a weaker model is less likely to resolve.
@@ -91,7 +99,7 @@ no such table: quota_usage` warnings appear on every request:
 
 - Bad JSON, failed Zod validation, or any error → try next model. Exhausted → `AppError(503)`.
 - **Token budgets are per-operation** (`MAX_TOKENS_BY_OPERATION` in `fallback.ts`):
-  `LLM_PARSE` 4000, `LLM_SCORE` 2000, `LLM_QUESTIONS` 1500. A single global
+  `LLM_PARSE` 4000, `LLM_SCORE` 4000, `LLM_QUESTIONS` 1500. A single global
   `LLM_MAX_TOKENS` does not work — it was 800, which truncated resume JSON
   mid-object. That surfaces as **"returned invalid JSON"**, not as an obvious
   truncation, and JD parsing kept working because its output is small. If you
@@ -128,13 +136,31 @@ overall         = component_score * SCORE_LLM_WEIGHT + semantic * SCORE_SEMANTIC
 
 If the LLM ignores the v2 sub-dimension structure, `rollupDimension()` falls back to the legacy flat `{id}_score` field. Keep that fallback.
 
+**Skill matching and attribution.** The same LLM call also returns a verdict per job skill — `evidenced` / `claimed` / `transferable` / `missing` (`services/scoring/skill-matches.ts`). At most 25 skills, required first. The model is **not** told dimension weights; scores stay independent and weighting stays arithmetic. Output is normalised fail-closed (unknown verdict → `missing`; nothing usable → `[]`, shown as "not available") and written to `candidate_skill_matches` via `replaceSkillMatches()` (one `db.batch()`, delete-then-insert). `aggregateScore()` also returns `contributions` that sum to the unrounded overall; `buildAttribution()` snapshots them into `candidates.score_attribution` at score time so later weight edits cannot break the breakdown. `GET /api/candidates/:id` returns `skill_matches` and `score_attribution`; `GET /api/jobs/:id/skill-gaps` (recruiter/admin) aggregates verdicts per skill over candidates that have rows.
+
 ---
 
 ## Resume upload pipeline
 
-`POST /api/candidates/upload` (multipart: `file`, `jobId`) returns `{ candidateId }` at **202** immediately; the client polls `GET /api/candidates/:id` until `processing_status` is `complete` or `failed`.
+`POST /api/candidates/upload` validates (magic bytes, size), creates the row as `queued`, stores the file in R2, records `resume_url`, sends a `process-resume` message to `RESUME_QUEUE`, and returns **202** `{ candidateId }`. The client polls `GET /api/candidates/:id`.
 
-Background via `ctx.waitUntil`: validate magic bytes + size → create row (`parsing`) → R2 → extract text (`unpdf` for PDF, `mammoth` for DOCX) → LLM parse → update DB (`scoring`) → embed → Vectorize upsert → score → update DB (`complete`) → queue `resume_uploaded` email.
+The `queue()` consumer (`src/queue/`) runs `processResume`: parse (8B) → score (gpt-oss-120b) → `complete`. It is idempotent (finished or deleted candidates are skipped) and resumable (a candidate with `parsed_resume` skips parsing). `classifyFailure` decides: permanent (unreadable/missing file, missing job) → `error` + ack; AI budget exhausted → retry at the UTC reset; anything else → retry after 30 s / 120 s / 600 s. After 3 retries the message goes to the DLQ, whose consumer marks the row `error`. Any retry puts the row back to `queued`. Statuses: `queued` → `parsing` → `scoring` → `complete` | `error`.
+
+`DELETE /api/candidates/:id` deletes the row and sends `purge-candidate`; `purgeCandidateArtifacts` removes the R2 file (with accounting), the vector and `questions:{id}`. If the send fails it purges inline.
+
+A pipeline that dies mid-way (abandoned in a retry wait) would leave the row in `parsing`/`scoring` or `queued` for ever. The every-minute cron runs `failStaleProcessing()`, which marks rows in `pending`/`parsing`/`scoring` untouched for 10 minutes (`STALE_PROCESSING_MINUTES`) as `error`, and `queued` rows untouched for 25 hours (`QUEUED_STALE_HOURS`) as `error`, both with an "interrupted — upload again" message.
+
+**JD files.** `POST /api/jobs/parse-jd` stores the upload at `jd-pending/{company}/{parseId}.{ext}` (expired by an R2 lifecycle rule after 1 day) and keeps a tenant-tagged record in KV for 24 h. The client creates the job with `jd_parse_id`, never a storage path; the server checks the record belongs to the caller's company (422 otherwise), moves the file to `jd/{company}/{jobId}.{ext}` and sets `jd_url`. If the pending file expired in between, the job is still created and the response carries `jd_attached: false`. A `jd-pending/` upload is counted in R2 storage accounting as soon as it's written; the lifecycle rule that deletes it after 1 day does **not** decrement that count — a small known overstatement in `GET /api/analytics/r2-usage`, not a leak of the real object.
+
+### Infrastructure not created by `wrangler deploy`
+
+`scripts/provision.sh dev|staging|production` (idempotent) creates the resume
+queue and its DLQ, the dev Vectorize index `synthire-embeddings-dev`, the
+`companyId` and `jobId` metadata indexes, and the R2 lifecycle rule that expires
+`jd-pending/` after 1 day. Run it before the first deploy that binds them;
+`wrangler deploy` fails if a bound queue is missing. Dev Vectorize writes go to
+`synthire-embeddings-dev` — the top-level config must never name a production
+resource that has no local simulator.
 
 ---
 

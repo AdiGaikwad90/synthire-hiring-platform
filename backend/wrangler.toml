@@ -24,6 +24,10 @@ EMAIL_MAX_RETRIES = "3"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 # Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
 # budget. 800 truncated resume JSON mid-object, which surfaced as "returned
@@ -86,12 +90,32 @@ binding = "KV_CACHE"
 id = "6da4fc72343e4286a9080b741ad98bc7"
 preview_id = "a808db59def7494d8ad4718dea31cf3b"
 
-# After running: wrangler vectorize create synthire-embeddings --dimensions=1024 --metric=cosine
-# IMPORTANT: Before first production deploy, create the companyId metadata index:
-# wrangler vectorize create-metadata-index synthire-embeddings --property-name=companyId --type=string
+# Dev gets its own index: Vectorize has no local simulator, so wrangler dev
+# talks to a real index — this one, never production. Set up by scripts/provision.sh.
 [[vectorize]]
 binding = "VECTORIZE"
-index_name = "synthire-embeddings"
+index_name = "synthire-embeddings-dev"
+remote = true  # Sends dev embeddings to the dev-only remote index — local wrangler dev has no Vectorize simulator
+
+# Resume processing runs on Queues (15-min consumer wall clock), not
+# ctx.waitUntil (cancelled 30 s after the response). Miniflare runs these
+# locally; provision.sh creates the remote ones.
+[[queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs-dev"
+
+[[queues.consumers]]
+queue = "synthire-resume-jobs-dev"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-dev-dlq"
+
+[[queues.consumers]]
+queue = "synthire-resume-jobs-dev-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
 
 # Workers AI (built-in, no setup needed)
 [ai]
@@ -129,6 +153,10 @@ EMAIL_MAX_RETRIES = "3"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 # Floor only — MAX_TOKENS_BY_OPERATION in fallback.ts sets the real per-call
 # budget. 800 truncated resume JSON mid-object, which surfaced as "returned
@@ -183,6 +211,23 @@ id = "6da4fc72343e4286a9080b741ad98bc7"
 binding = "VECTORIZE"
 index_name = "synthire-embeddings"
 
+[[env.production.queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs"
+
+[[env.production.queues.consumers]]
+queue = "synthire-resume-jobs"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-dlq"
+
+[[env.production.queues.consumers]]
+queue = "synthire-resume-jobs-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
+
 [env.production.ai]
 binding = "AI"
 
@@ -213,6 +258,10 @@ SENDGRID_FROM_EMAIL = "adigaikwad4321@gmail.com"
 # broke JD parsing with error 5028).
 LLM_MODEL_PRIMARY  = "@cf/meta/llama-3.1-8b-instruct-fp8"
 LLM_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# Candidate scoring only — per-skill verdicts need a stronger model than parsing.
+# Benchmarked live: gpt-oss-120b 18/18 verdicts, ~105 Neurons/resume. See fallback.ts.
+LLM_SCORE_MODEL_PRIMARY  = "@cf/openai/gpt-oss-120b"
+LLM_SCORE_MODEL_FALLBACK = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 LLM_TEMPERATURE = "0.1"
 LLM_MAX_TOKENS = "2000"
 NEURONS_DAILY_LIMIT = "1000"
@@ -269,6 +318,23 @@ preview_id = "39cec25e6bae4510808fe1aeb4294aba"
 [[env.staging.vectorize]]
 binding = "VECTORIZE"
 index_name = "synthire-embeddings-staging"
+
+[[env.staging.queues.producers]]
+binding = "RESUME_QUEUE"
+queue = "synthire-resume-jobs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "synthire-resume-jobs-staging"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+max_concurrency = 5
+dead_letter_queue = "synthire-resume-jobs-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "synthire-resume-jobs-staging-dlq"
+max_batch_size = 10
+max_batch_timeout = 5
 
 [env.staging.ai]
 binding = "AI"

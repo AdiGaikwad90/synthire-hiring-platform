@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import type { CandidateRow } from '../../types/db'
 import type { ParsedResume } from '../../services/ai/prompts/parse-resume'
 import type { ScoringResult } from '../../services/scoring/pipeline'
+import type { ScoreAttribution } from '../../services/scoring/attribution'
 
 // ── Deserialization helper ────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ export function toCandidate(row: CandidateRow) {
   let achievements: string[] = []
   let ai_analysis: string | null = null
   let parsed_resume: ParsedResume | null = null
+  let score_attribution: ScoreAttribution | null = null
 
   try { technical_skills = JSON.parse(row.technical_skills) } catch { technical_skills = [] }
   try { professional_experience = JSON.parse(row.professional_experience) } catch { professional_experience = [] }
@@ -22,6 +24,7 @@ export function toCandidate(row: CandidateRow) {
   try { achievements = JSON.parse(row.achievements) } catch { achievements = [] }
   ai_analysis = row.ai_analysis ?? null
   try { parsed_resume = row.parsed_resume ? JSON.parse(row.parsed_resume) : null } catch { parsed_resume = null }
+  try { score_attribution = row.score_attribution ? JSON.parse(row.score_attribution) : null } catch { score_attribution = null }
 
   return {
     ...row,
@@ -32,6 +35,7 @@ export function toCandidate(row: CandidateRow) {
     achievements,
     ai_analysis,
     parsed_resume,
+    score_attribution,
   }
 }
 
@@ -161,6 +165,7 @@ export async function updateCandidateScores(
         education_score = ?,
         achievements_score = ?,
         ai_analysis = ?,
+        score_attribution = ?,
         model_used = ?,
         processing_status = 'complete',
         updated_at = ?
@@ -174,11 +179,22 @@ export async function updateCandidateScores(
       scores.education_score,
       scores.achievements_score,
       scores.ai_analysis,
+      scores.score_attribution,
       modelUsed,
       now,
       id
     )
     .run()
+}
+
+// ── Record the stored file ────────────────────────────────────────────────────
+
+/**
+ * Written as soon as the file is in R2, not after parsing — otherwise the
+ * viewer 404s while a resume processes and for ever if processing fails.
+ */
+export async function setCandidateResumeUrl(db: D1Database, id: string, resumeUrl: string): Promise<void> {
+  await db.prepare('UPDATE candidates SET resume_url = ? WHERE id = ?').bind(resumeUrl, id).run()
 }
 
 // ── Update candidate on error ─────────────────────────────────────────────────
@@ -200,6 +216,59 @@ export async function updateCandidateError(
     )
     .bind(error, now, id)
     .run()
+}
+
+export type ActiveProcessingStatus = 'queued' | 'parsing' | 'scoring'
+
+/** Also bumps updated_at, which the stale sweep reads. */
+export async function setProcessingStatus(db: D1Database, id: string, status: ActiveProcessingStatus): Promise<void> {
+  await db
+    .prepare('UPDATE candidates SET processing_status = ?, updated_at = ? WHERE id = ?')
+    .bind(status, new Date().toISOString(), id)
+    .run()
+}
+
+/** Marks the row error unless it already finished — a late DLQ message must not overwrite a result. */
+export async function failCandidateIfActive(db: D1Database, id: string, reason: string): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE candidates SET processing_status = 'error', processing_error = ?, updated_at = ?
+        WHERE id = ? AND processing_status NOT IN ('complete', 'error')`
+    )
+    .bind(reason, new Date().toISOString(), id)
+    .run()
+  return (res.meta.changes ?? 0) > 0
+}
+
+// ── Fail interrupted processing ───────────────────────────────────────────────
+
+/** Longer than any real parse + score; a row older than this was abandoned. */
+export const STALE_PROCESSING_MINUTES = 10
+export const STALE_PROCESSING_MESSAGE =
+  'Processing was interrupted before it finished — please upload the resume again'
+
+/** Longer than the 24 h free-plan message retention plus the longest budget wait. */
+export const QUEUED_STALE_HOURS = 25
+
+/**
+ * Run by the cron. Active rows (pending/parsing/scoring) untouched past
+ * `activeBeforeIso` were abandoned mid-run; `queued` rows get the far longer
+ * `queuedBeforeIso` because they legitimately wait for retries or the AI
+ * budget reset. Both cutoffs are ISO strings — updated_at is toISOString().
+ */
+export async function failStaleProcessing(
+  db: D1Database,
+  cutoffs: { activeBeforeIso: string; queuedBeforeIso: string },
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `UPDATE candidates SET processing_status = 'error', processing_error = ?, updated_at = ?
+        WHERE (processing_status IN ('pending', 'parsing', 'scoring') AND updated_at < ?)
+           OR (processing_status = 'queued' AND updated_at < ?)`
+    )
+    .bind(STALE_PROCESSING_MESSAGE, new Date().toISOString(), cutoffs.activeBeforeIso, cutoffs.queuedBeforeIso)
+    .run()
+  return res.meta.changes ?? 0
 }
 
 // ── Get single candidate ──────────────────────────────────────────────────────

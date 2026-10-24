@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MAX_TOKENS_BY_OPERATION, buildLlmConfig } from '../../../../src/services/ai/fallback'
+import { MAX_TOKENS_BY_OPERATION, buildLlmConfig, buildScoringLlmConfig } from '../../../../src/services/ai/fallback'
 import { NEURON_COSTS } from '../../../../src/services/budget/neurons'
 import type { Env } from '../../../../src/types/bindings'
 
@@ -44,6 +44,10 @@ describe('MAX_TOKENS_BY_OPERATION', () => {
   it('leaves EMBEDDING at 0 — it generates no tokens', () => {
     expect(MAX_TOKENS_BY_OPERATION.EMBEDDING).toBe(0)
   })
+
+  it('gives LLM_SCORE room for up to 25 per-skill verdicts with evidence', () => {
+    expect(MAX_TOKENS_BY_OPERATION.LLM_SCORE).toBeGreaterThanOrEqual(4000)
+  })
 })
 
 describe('buildLlmConfig', () => {
@@ -68,5 +72,37 @@ describe('buildLlmConfig', () => {
     const c = buildLlmConfig({ LLM_TEMPERATURE: '0.7', LLM_MAX_TOKENS: '1234' } as Env)
     expect(c.temperature).toBeCloseTo(0.7)
     expect(c.maxTokens).toBe(1234)
+  })
+})
+
+// Scoring has its own models. Picked by a live benchmark (two resumes x 3 runs):
+// gpt-oss-120b got 18/18 skill verdicts right with identical output each run, for
+// ~105 Neurons a resume; llama-3.3-70b got 16/18 for ~97; the 8B parse model got
+// 9/12 and never produced a "transferable" verdict.
+describe('buildScoringLlmConfig', () => {
+  it('defaults to gpt-oss-120b with llama-3.3-70b as fallback', () => {
+    expect(buildScoringLlmConfig({} as Env).models).toEqual([
+      '@cf/openai/gpt-oss-120b',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    ])
+  })
+
+  it('is independent of the parse models', () => {
+    const c = buildScoringLlmConfig({ LLM_MODEL_PRIMARY: '@cf/x/parse' } as Env)
+    expect(c.models).not.toContain('@cf/x/parse')
+  })
+
+  it('reads its own env vars so a swap needs no code change', () => {
+    const c = buildScoringLlmConfig({
+      LLM_SCORE_MODEL_PRIMARY: '@cf/x/score',
+      LLM_SCORE_MODEL_FALLBACK: '@cf/x/score-fb',
+    } as Env)
+    expect(c.models).toEqual(['@cf/x/score', '@cf/x/score-fb'])
+  })
+
+  it('keeps the shared temperature and token settings', () => {
+    const c = buildScoringLlmConfig({ LLM_TEMPERATURE: '0.3', LLM_MAX_TOKENS: '999' } as Env)
+    expect(c.temperature).toBeCloseTo(0.3)
+    expect(c.maxTokens).toBe(999)
   })
 })

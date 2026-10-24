@@ -12,6 +12,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { apiFetchBlob } from "@/lib/api";
+import type { ApiJob } from "@/lib/api";
+import { VERDICT_META, VERDICT_ORDER, attributionRows, evaluationCoverage, parseAttribution, skillsUnavailableReason, sortSkillMatches, verdictCounts } from "@/lib/scoring";
 
 // Candidate Detail — Resume + AI Analysis
 const { useState: useS_cd, useEffect: useE_cd } = React;
@@ -125,7 +127,8 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div className="tsCD-overall">
-            <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: "var(--success)" }}>{c.score}</div>
+            {/* null until scoring completes — "0" in green would read as a real score */}
+            <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: apiCandidate.overall_score == null ? "var(--muted)" : "var(--success)" }}>{apiCandidate.overall_score ?? "—"}</div>
             <div className="tiny">Overall</div>
           </div>
           <div className="tsCD-divider"/>
@@ -185,13 +188,13 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
         <div className="tsCD-analysis">
           <div className="tsCD-tabs">
             <button className={`tsTab ${tab === "overview" ? "tsTab-active" : ""}`} onClick={() => setTab("overview")}>Overview</button>
-            <button className={`tsTab ${tab === "breakdown" ? "tsTab-active" : ""}`} onClick={() => setTab("breakdown")}>Resume breakdown <span className="tsTab-count">12</span></button>
+            <button className={`tsTab ${tab === "breakdown" ? "tsTab-active" : ""}`} onClick={() => setTab("breakdown")}>Resume breakdown</button>
             <button className={`tsTab ${tab === "ai" ? "tsTab-active" : ""}`} onClick={() => setTab("ai")}>AI analysis</button>
             <button className={`tsTab ${tab === "activity" ? "tsTab-active" : ""}`} onClick={() => setTab("activity")}>Activity</button>
           </div>
 
           <div className="tsCD-tabBody">
-            {tab === "overview" && <OverviewTab c={c}/>}
+            {tab === "overview" && <OverviewTab c={c} job={appliedJob}/>}
             {tab === "breakdown" && <BreakdownTab c={c}/>}
             {tab === "ai" && <AITab c={c}/>}
             {tab === "activity" && <ActivityTab c={c}/>}
@@ -253,12 +256,17 @@ const ResumePreview = ({ c }: any) => (
 );
 
 // ===== Overview tab =====
-function OverviewTab({ c }: any) {
-    const skillsTable = c.skills.map((skill: string) => ({
-    name: skill,
-    required: true,
-    status: 'met' as const,
-  }));
+function OverviewTab({ c, job }: { c: any; job?: ApiJob }) {
+  const attribution = parseAttribution(c.score_attribution);
+  const matches = sortSkillMatches(c.skill_matches ?? []);
+  const counts = verdictCounts(matches);
+  const coverage = evaluationCoverage(matches, job?.required_skills ?? [], job?.nice_to_have_skills ?? []);
+  // Nothing to match against: no skills on the job and no stored verdicts.
+  const showSkills = matches.length > 0 || coverage.total > 0;
+  const unavailable = skillsUnavailableReason(c.processing_status, attribution !== null);
+  // Until scoring completes there is nothing to break down — a 0 ring and four
+  // 0% bars would present an unscored candidate as one that scored zero.
+  const scored = c.processing_status === "complete";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -267,43 +275,100 @@ function OverviewTab({ c }: any) {
         <div style={{ padding: 22, position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <AIPill>AI score breakdown</AIPill>
-            <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${formatDate(c.updated_at)}` : 'Scored recently'}</span>
+            {scored && <span className="small" style={{ color: "var(--muted)" }}>{c.updated_at ? `Scored ${formatDate(c.updated_at)}` : 'Scored recently'}</span>}
           </div>
+          {!scored ? (
+            <span className="small" style={{ color: "var(--muted)" }}>{unavailable.attribution}</span>
+          ) : (
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
             <ScoreRing score={c.score} size={132} stroke={9} label="Match"/>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <ScoreBar label="Technical skills (40%)" value={c.skillsScore}/>
-              <ScoreBar label="Experience relevance (30%)" value={c.expScore}/>
-              <ScoreBar label="Education & certs (20%)" value={c.eduScore}/>
-              <ScoreBar label="Achievements (10%)" value={c.achScore}/>
+              {attribution ? attributionRows(attribution).map(r => (
+                <div key={r.id}>
+                  <ScoreBar
+                    label={<>{r.label} <span style={{ color: "var(--muted)" }}>· {Math.round(r.weightPct)}% weight</span></>}
+                    value={r.score}
+                    display={`${r.points.toFixed(1)} pts`}
+                  />
+                  {r.subDimensions.length > 0 && (
+                    <details className="tsAttr">
+                      <summary className="small">Sub-scores</summary>
+                      <div className="tsAttr-subs">
+                        {r.subDimensions.map(s => (
+                          <React.Fragment key={s.key}>
+                            <span className="small">{s.label}</span>
+                            <span className="small mono">{s.score}</span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )) : (
+                <>
+                  {/* Scored before attribution shipped: the scores are real, the weights were never recorded. */}
+                  <ScoreBar label="Skills" value={c.skillsScore}/>
+                  <ScoreBar label="Experience" value={c.expScore}/>
+                  <ScoreBar label="Education & certifications" value={c.eduScore}/>
+                  <ScoreBar label="Achievements" value={c.achScore}/>
+                  <span className="small" style={{ color: "var(--muted)" }}>{unavailable.attribution}</span>
+                </>
+              )}
             </div>
           </div>
+          )}
         </div>
       </Card>
 
-      {/* Skills heatmap */}
-      <Card padded={false}>
-        <div className="tsCardHead" style={{ paddingBottom: 8 }}>
-          <div className="h3">Skills match</div>
-          <span className="small" style={{ color: "var(--muted)" }}>{c.skills.length} skills detected</span>
-        </div>
-        <div className="tsSkillTable">
-          <div className="tsSkillTable-head">
-            <div>Skill</div>
-            <div>Required</div>
-            <div></div>
-          </div>
-          {skillsTable.map(s => (
-            <div key={s.name} className="tsSkillTable-row">
-              <div style={{ fontWeight: 500 }}>{s.name}</div>
-              <div>{s.required ? <Badge variant="primary">Required</Badge> : <span className="small" style={{ color: "var(--muted)" }}>Nice-to-have</span>}</div>
-              <div>
-                {s.status === "met" && <span className="tsSkillStatus tsSkillStatus-met"><Icon.Check size={11} stroke={3}/></span>}
+      {/* Skills match */}
+      {showSkills && (
+        <Card padded={false}>
+          <div className="tsCardHead" style={{ paddingBottom: 8 }}>
+            <div className="h3">Skills match</div>
+            {matches.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {VERDICT_ORDER.filter(v => counts[v] > 0).map(v => (
+                  <Badge key={v} variant={VERDICT_META[v].variant}>{counts[v]} {VERDICT_META[v].label.toLowerCase()}</Badge>
+                ))}
               </div>
+            )}
+          </div>
+          {matches.length === 0 ? (
+            <div className="small" style={{ padding: "0 22px 18px", color: "var(--muted)" }}>
+              {unavailable.skills}
             </div>
-          ))}
-        </div>
-      </Card>
+          ) : (
+            <div className="tsSkillTable">
+              <div className="tsSkillTable-head">
+                <div>Skill</div>
+                <div>Requirement</div>
+                <div>Verdict</div>
+              </div>
+              {matches.map(m => (
+                <div key={m.skill} className="tsSkillTable-row">
+                  <div>
+                    {m.evidence || m.via ? (
+                      <details>
+                        <summary style={{ fontWeight: 500, cursor: "pointer" }}>{m.skill}</summary>
+                        <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
+                          {m.via && <>Credited via <strong>{m.via}</strong>. </>}{m.evidence}
+                        </div>
+                      </details>
+                    ) : <span style={{ fontWeight: 500 }}>{m.skill}</span>}
+                  </div>
+                  <div>{m.requirement === "required" ? <Badge variant="primary">Required</Badge> : <span className="small" style={{ color: "var(--muted)" }}>Nice-to-have</span>}</div>
+                  <div><Badge variant={VERDICT_META[m.verdict].variant}>{VERDICT_META[m.verdict].label}</Badge></div>
+                </div>
+              ))}
+            </div>
+          )}
+          {matches.length > 0 && coverage.notEvaluated.length > 0 && (
+            <div className="small" style={{ padding: "10px 22px 16px", color: "var(--muted)" }}>
+              Not evaluated ({coverage.notEvaluated.length} of {coverage.total}): {coverage.notEvaluated.join(", ")}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Experience timeline */}
       <Card padded={false}>
@@ -356,7 +421,7 @@ function OverviewTab({ c }: any) {
             <Icon.AlertTriangle size={12}/> Concerns
           </div>
           {c.concerns.length ? c.concerns.map((s, i) => <div key={i} className="tsFlag-row"><Icon.AlertTriangle size={11} style={{ color: "var(--warning)" }}/>{s}</div>) :
-            <div className="small" style={{ color: "var(--muted)" }}>No major concerns identified.</div>}
+            <div className="small" style={{ color: "var(--muted)" }}>{scored ? "No major concerns identified." : "—"}</div>}
         </div>
       </div>
     </div>
@@ -371,12 +436,12 @@ function BreakdownTab({ c }: any) {
   const sections = [
     skills.length > 0 && { id: "skills", title: "Technical skills", count: skills.length, icon: <Icon.Code size={14}/>,
       groups: [
-        { name: "Detected skills", items: skills.map(s => ({ v: s, years: 0, match: "met" })) },
+        { name: "Detected skills", items: skills.map(s => ({ v: s, years: 0 })) },
       ]},
     c.experience?.length > 0 && { id: "exp", title: "Professional experience", count: c.experience.length, icon: <Icon.Briefcase size={14}/>, experience: c.experience },
     c.education?.length > 0 && { id: "edu", title: "Education", count: c.education.length, icon: <Icon.Book size={14}/>, education: c.education },
     certs.length > 0 && { id: "certs", title: "Certifications", count: certs.length, icon: <Icon.ShieldCheck size={14}/>,
-      certs: certs.map(name => ({ name, issuer: '', date: '', match: 'met' })) },
+      certs: certs.map(name => ({ name })) },
     achievements.length > 0 && { id: "ach", title: "Achievements", count: achievements.length, icon: <Icon.Award size={14}/>,
       items: achievements },
   ].filter(Boolean) as any[];
@@ -407,12 +472,9 @@ function BreakdownSection({ s }: any) {
               <div className="tiny" style={{ marginBottom: 6 }}>{g.name}</div>
               <div className="tsBreakdown-items">
                 {g.items.map(it => (
-                  <div key={it.v} className={`tsBreakdown-item tsBreakdown-item-${it.match}`}>
+                  <div key={it.v} className="tsBreakdown-item">
                     <span>{it.v}</span>
                     {it.years > 0 && <span className="mono tiny" style={{ color: "var(--muted)" }}>{it.years}y</span>}
-                    {it.match === "met" && <Icon.Check size={11} stroke={3} style={{ color: "var(--success)" }}/>}
-                    {it.match === "partial" && <Icon.AlertTriangle size={11} style={{ color: "var(--warning)" }}/>}
-                    {it.match === "missing" && <Icon.X size={11} stroke={3} style={{ color: "var(--danger)" }}/>}
                   </div>
                 ))}
               </div>
@@ -422,13 +484,10 @@ function BreakdownSection({ s }: any) {
             <div className="tsBreakdown-items" style={{ flexDirection: "column", gap: 8 }}>
               {s.certs.map(cert => (
                 <div key={cert.name} className="tsCertCard">
-                  <Icon.Award size={16} style={{ color: cert.match === "met" ? "var(--success)" : cert.match === "partial" ? "var(--warning)" : "var(--text-2)" }}/>
+                  <Icon.Award size={16} style={{ color: "var(--text-2)" }}/>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 500, fontSize: 13 }}>{cert.name}</div>
-                    <div className="small" style={{ color: "var(--muted)" }}>{cert.issuer} · {cert.date}</div>
                   </div>
-                  {cert.match === "met" && <Badge variant="success">Required</Badge>}
-                  {cert.match === "partial" && <Badge variant="warning">Nice-to-have</Badge>}
                 </div>
               ))}
             </div>

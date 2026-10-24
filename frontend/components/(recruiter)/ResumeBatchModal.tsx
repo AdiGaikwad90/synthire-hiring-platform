@@ -5,12 +5,13 @@ import { Modal, Button, Badge, AIPill, Select, useToast } from "@/components/ui"
 import { Dropzone, FileRow } from "./Dropzone";
 import { useJobs } from "@/hooks/queries/useJobs";
 import { apiFetch, apiUpload } from "@/lib/api";
+import { nextUploadRowStatus, isSettledUploadStatus, type UploadRowStatus } from "@/lib/upload-status";
 
 interface BatchFile {
   id: string;
   name: string;
   size: string;
-  status: "queued" | "parsing" | "scoring" | "done" | "error";
+  status: UploadRowStatus;
   score: number | null;
   cand: any;
   sub?: string;
@@ -52,35 +53,26 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
       apiUpload<{ candidateId: string }>("/api/candidates/upload", fd)
         .then(({ candidateId }) => {
           setFiles((arr) =>
-            arr.map((x) => x.id === entry.id ? { ...x, status: "parsing" } : x)
+            arr.map((x) => x.id === entry.id ? { ...x, status: "queued" } : x)
           );
 
-          // Poll GET /api/candidates/:id every 2s until complete or failed
+          // Poll GET /api/candidates/:id every 2s until complete, error, or the window lapses
           let ticks = 0;
           const poll = setInterval(async () => {
             ticks++;
             try {
               const cand = await apiFetch<any>(`/api/candidates/${candidateId}`);
-              const ps = cand?.processing_status;
-              if (ps === "complete") {
-                clearInterval(poll);
-                setFiles((arr) =>
-                  arr.map((x) =>
-                    x.id === entry.id
+              const next = nextUploadRowStatus(cand?.processing_status, ticks);
+              if (next === null) return;
+              if (next === "done" || next === "error" || next === "background") clearInterval(poll);
+              setFiles((arr) =>
+                arr.map((x) =>
+                  x.id !== entry.id ? x
+                    : next === "done"
                       ? { ...x, status: "done", score: cand.overall_score ?? null, sub: cand.overall_score != null ? `Score: ${cand.overall_score}%` : undefined, cand }
-                      : x
-                  )
-                );
-              } else if (ps === "failed" || ticks > 60) {
-                clearInterval(poll);
-                setFiles((arr) =>
-                  arr.map((x) => x.id === entry.id ? { ...x, status: "error" } : x)
-                );
-              } else if (ps === "scoring") {
-                setFiles((arr) =>
-                  arr.map((x) => x.id === entry.id && x.status === "parsing" ? { ...x, status: "scoring" } : x)
-                );
-              }
+                      : { ...x, status: next }
+                )
+              );
             } catch { /* network blip — keep polling */ }
           }, 2000);
         })
@@ -95,13 +87,15 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
   // Watch for all done/error to advance stage
   React.useEffect(() => {
     if (stage !== "processing" || files.length === 0) return;
-    const allSettled = files.every((f) => f.status === "done" || f.status === "error");
+    const allSettled = files.every((f) => isSettledUploadStatus(f.status));
     if (allSettled) setStage("done");
   }, [files, stage]);
 
   const sortedFiles = [...files].sort((a, b) => (b.score || 0) - (a.score || 0));
   const highMatches = sortedFiles.filter((f) => (f.score || 0) >= 80).length;
   const mediumMatches = sortedFiles.filter((f) => (f.score || 0) >= 60 && (f.score || 0) < 80).length;
+  // Only files that were actually scored — a failed upload is not a low score.
+  const belowThreshold = sortedFiles.filter((f) => f.score != null && f.score < 60).length;
 
   return (
     <Modal
@@ -218,7 +212,7 @@ export function ResumeBatchModal({ onClose, onMatched, defaultJobId = "", jobId 
               </div>
               <div className="tsResStat">
                 <div className="mono" style={{ fontSize: 24, fontWeight: 600, color: "var(--muted)" }}>
-                  {files.length - highMatches - mediumMatches}
+                  {belowThreshold}
                 </div>
                 <div className="small" style={{ color: "var(--muted)" }}>Below threshold</div>
               </div>

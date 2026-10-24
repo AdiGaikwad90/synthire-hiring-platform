@@ -25,3 +25,14 @@ export function getContentType(type: FileType): string {
     ? 'application/pdf'
     : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 }
+
+/**
+ * Below this, extraction produced nothing a model can read — a blank or
+ * image-only (scanned) PDF. Sending "" to the parse model makes it invent a
+ * candidate; that happened ("John Doe", scored 32%), so the pipeline stops here.
+ */
+export const MIN_RESUME_TEXT_CHARS = 50
+
+export function hasReadableResumeText(text: string | null | undefined): boolean {
+  return (text ?? '').trim().length >= MIN_RESUME_TEXT_CHARS
+}

@@ -40,6 +40,8 @@ This has already caught real mistakes twice.
 | Nothing but inputs and outputs | `unit` | `backend/tests/unit/**` mirroring `src/` |
 | `env.DB`, `env.KV_CACHE`, `env.RESUME_BUCKET` | `integration` | `backend/tests/integration/**` |
 | `env.AI`, `env.VECTORIZE` | `unit`, with a hand-written stub | — |
+| Real `env.DB`/`env.KV_CACHE` **and** `env.AI`/`env.VECTORIZE` | `integration` | `backend/tests/integration/**`, passing `{ ...env, AI: stub, VECTORIZE: stub }` — see `tests/integration/scoring/pipeline.test.ts` |
+| Queue consumers | `integration`, drive `worker.queue()` with `createMessageBatch` and assert with `getQueueResult` | `backend/tests/integration/queue/**` — see `tests/integration/queue/handler.test.ts` |
 
 **A unit test that reaches for `env` is in the wrong suite.** Move it rather
 than mocking a binding.
@@ -212,6 +214,7 @@ Three hard constraints, learned the hard way:
 - [ ] A bug fix has a regression test that **fails without the fix** — verify by
       reverting the fix locally and watching it go red
 - [ ] Any deliberate limitation is pinned by a commented test
+- [ ] Verified in the running app with the Playwright MCP, real LLM calls (§10)
 
 ### Fixing a bug
 
@@ -224,11 +227,12 @@ Three hard constraints, learned the hard way:
 
 ---
 
-## 10. Manual browser checks
+## 10. Live-app verification with the Playwright MCP — mandatory
 
-`TESTING_RULES.md` holds the 9-step recruiter journey. Treat it as a
-**pre-release manual checklist**, not a per-PR gate — nothing enforces it and
-Playwright is not installed. Do not claim it as coverage.
-
-If it should be a real gate, it needs automating as Playwright specs in CI.
-Until then, run it by hand before a release and say plainly that it was manual.
+Tests prove the code does what the tests assume, not that the screen is right —
+the fabricated "every skill met" table passed every test for months. Every
+change ends with a pass through the running app using the Playwright MCP, with
+**real** LLM calls, following `TESTING_RULES.md`. Exercise every changed
+behaviour the way a user would and check what is rendered against the API,
+including empty, legacy and error states. Fix and repeat until clean. Nothing
+is "done" before that.

@@ -22,7 +22,7 @@ export interface LlmConfig {
  */
 export const MAX_TOKENS_BY_OPERATION: Record<NeuronOperation, number> = {
   LLM_PARSE: 4000,
-  LLM_SCORE: 2000,
+  LLM_SCORE: 4000, // dimension scores + up to 25 per-skill verdicts with evidence
   LLM_QUESTIONS: 1500,
   EMBEDDING: 0,
 }
@@ -43,6 +43,23 @@ export function buildLlmConfig(env: Env): LlmConfig {
     ],
     temperature: parseFloat(env.LLM_TEMPERATURE ?? '0.1'),
     maxTokens: parseInt(env.LLM_MAX_TOKENS ?? '2000', 10),
+  }
+}
+
+/**
+ * Candidate scoring gets its own, stronger models. Parsing is extraction and
+ * the 8B model does it well; per-skill verdicts are judgement, and the 8B
+ * model never produced "transferable". Chosen by a live benchmark on two
+ * resumes x 3 runs: gpt-oss-120b 18/18 verdicts, identical every run, ~105
+ * Neurons a resume; llama-3.3-70b 16/18 at ~97 — so it is the fallback.
+ */
+export function buildScoringLlmConfig(env: Env): LlmConfig {
+  return {
+    ...buildLlmConfig(env),
+    models: [
+      env.LLM_SCORE_MODEL_PRIMARY  ?? '@cf/openai/gpt-oss-120b',
+      env.LLM_SCORE_MODEL_FALLBACK ?? '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    ],
   }
 }
 

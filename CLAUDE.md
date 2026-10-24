@@ -38,7 +38,7 @@ cd backend  && npm run deploy:staging
 cd frontend && npm run deploy     # next-on-pages build + wrangler pages deploy
 ```
 
-Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and fill it in, and set `NEXT_PUBLIC_API_URL=http://localhost:8787` in `frontend/.env.local`. Cloudflare resource IDs are already provisioned and committed in `backend/wrangler.toml`.
+Before first run, copy `backend/.dev.vars.example` → `backend/.dev.vars` and fill it in, and set `NEXT_PUBLIC_API_URL=http://localhost:8787` in `frontend/.env.local`. Cloudflare resource IDs are already committed in `backend/wrangler.toml`, but the resources themselves — the resume queue + DLQ, the dev Vectorize index, its metadata indexes, and the R2 lifecycle rule — are provisioned separately by `scripts/provision.sh dev|staging|production`; `wrangler deploy` fails if a bound queue doesn't exist yet. **Run `scripts/provision.sh production` before merging to main** — a push to main auto-deploys, so provisioning after the merge is too late. `npm run dev` now needs `wrangler login` first: dev Vectorize is a remote binding with no local simulator.
 
 Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own code — a non-zero exit is a real error in `src/`, not dependency noise. Don't turn it off: `unpdf`, `mammoth`, and `tinybench` ship `.d.ts` files that produce ~88 errors under this repo's `lib`/`types` settings.
 
@@ -52,8 +52,8 @@ Both tsconfigs set `skipLibCheck: true`, so `typecheck` reports only your own co
 
 @TESTING.md
 
-`TESTING_RULES.md` is the manual pre-release browser checklist. `TESTING.md` is
-the automated strategy CI enforces — read that one before writing a test.
+`TESTING.md` is the automated strategy CI enforces — read it before writing a test.
+`TESTING_RULES.md` is the mandatory live-app Playwright pass for every change (`TESTING.md` §10).
 
 ## Keeping these docs current
 
@@ -73,6 +73,7 @@ are worse than none, because they get trusted.
 | Changed a guardrail or its default | guardrails table in `backend/CLAUDE.md` |
 | Changed testing setup, tiers, or thresholds | `TESTING.md` |
 | **Fixed** something in a "known drift" table | **delete that row** — the table must shrink as it is worked off |
+| Found a bug, or started/fixed a `BACKLOG.md` item | `BACKLOG.md` (row + section, status, PR) **and** the tracker page it links to — same session, see "How this backlog works" there |
 | Wired up something previously listed as a placeholder | "Not yet wired" section below |
 
 Two rules that keep this honest:
@@ -88,8 +89,8 @@ Two rules that keep this honest:
 
 - **Never `JSON.parse` a D1 text column without a try/catch.** All JSON columns are stored as `TEXT`. Follow `backend/src/db/queries/jobs.ts::toJob()`.
 - **Emails never send inline.** Everything goes into the `email_queue` D1 table; a cron (every minute) drains it via `processEmailQueue()`. Queue with `queueEmail()` in `src/db/queries/email.ts`. Atomic dequeue uses `UPDATE...RETURNING` — don't replace it with select-then-update.
-- **Resume upload returns 202 immediately.** `POST /api/candidates/upload` creates the row, stores to R2, returns `{ candidateId }`; parsing/scoring runs in `waitUntil`. The client polls `GET /api/candidates/:id` for `processing_status`. Don't make the upload synchronous.
-- **Cloudflare bindings are not env vars.** `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI` are injected objects declared in `wrangler.toml` — there is no `D1_DATABASE_ID` at runtime.
+- **Resume upload returns 202 immediately.** `POST /api/candidates/upload` creates the row, stores to R2, returns `{ candidateId }`, and sends a `process-resume` message to `RESUME_QUEUE`; the queue consumer (`backend/src/queue/`) does the parsing/scoring, not `waitUntil`. The client polls `GET /api/candidates/:id` for `processing_status`. Don't make the upload synchronous.
+- **Cloudflare bindings are not env vars.** `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI`, `env.RESUME_QUEUE` are injected objects declared in `wrangler.toml` — there is no `D1_DATABASE_ID` at runtime.
 - **Frontend `strict: false`.** Don't fight type warnings in existing components; do type new code properly.
 - **Never call `apiFetch` directly in components** — use the hooks in `frontend/hooks/queries/`.
 
@@ -108,9 +109,10 @@ Two rules that keep this honest:
 
 LLM calls go through Workers AI (not OpenRouter) with a two-model fallback chain set in `wrangler.toml`:
 
-| Env | Primary | Fallback |
+| Used for | Primary | Fallback |
 |---|---|---|
-| all | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Parsing, questions | `@cf/meta/llama-3.1-8b-instruct-fp8` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
+| Candidate scoring | `@cf/openai/gpt-oss-120b` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` |
 
 **The fallback must be equal or stronger than the primary.** The chain exists for
 invalid-JSON and schema failures, and a weaker model is less likely to fix those.

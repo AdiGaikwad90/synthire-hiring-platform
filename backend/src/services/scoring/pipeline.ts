@@ -4,10 +4,12 @@ import type { ScoringDimensions } from '../scoring/dimensions'
 import { generateEmbedding } from '../embeddings/generator'
 import { upsertEmbedding } from '../embeddings/vectorize'
 import { cosineSimilarity } from '../embeddings/similarity'
-import { callWithFallback, buildLlmConfig } from '../ai/fallback'
+import { callWithFallback, buildScoringLlmConfig } from '../ai/fallback'
 import { buildScoringMessages, validateLLMScores, type LLMScores } from '../ai/prompts/score-candidate'
 import { aggregateScore, buildScoreConfig } from './aggregator'
 import { checkNeuronBudget, deductNeurons, buildNeuronLimitConfig } from '../budget/neurons'
+import { selectSkillsForAdjudication, normalizeSkillMatches, type SkillMatch } from './skill-matches'
+import { buildAttribution } from './attribution'
 
 export interface ScoringInput {
   candidateId: string
@@ -31,6 +33,10 @@ export interface ScoringResult {
   education_score: number
   achievements_score: number
   ai_analysis: string
+  /** JSON of ScoreAttribution — persisted as-is to candidates.score_attribution. */
+  score_attribution: string
+  /** [] when the model gave nothing usable; the UI shows "not available". */
+  skill_matches: SkillMatch[]
 }
 
 export async function runScoringPipeline(
@@ -70,27 +76,29 @@ export async function runScoringPipeline(
         jobId,
         companyId,
       })
-    } catch {
-      // Vectorize not available locally — continue without semantic scoring
+    } catch (err) {
+      // Non-fatal: the semantic score is computed in memory, so a failed
+      // upsert only loses future similarity search for this candidate.
+      console.error('[scoring] vectorize upsert failed', { candidateId, err: err instanceof Error ? err.message : String(err) })
     }
   }
 
   // Step 4: Compute cosine similarity → semanticScore (0-100)
   const semanticScore = (resumeEmbedding && jobEmbedding)
-    ? Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100)
+    ? Math.max(0, Math.round(cosineSimilarity(resumeEmbedding, jobEmbedding) * 100))
     : 0
 
-  // Step 5: LLM scoring
+  // Step 5: LLM scoring (dimension scores + per-skill verdicts in one call)
+  const skillsToAdjudicate = selectSkillsForAdjudication(requiredSkills, input.niceToHaveSkills)
   const messages = buildScoringMessages(
     resumeText,
     jobTitle,
     jobDescription,
-    requiredSkills,
+    skillsToAdjudicate,
     minYearsExperience,
-    scoringWeights
   )
 
-  const config = buildLlmConfig(env)
+  const config = buildScoringLlmConfig(env)
   const llmResult = await callWithFallback(
     env.AI,
     env.KV_CACHE,
@@ -120,5 +128,7 @@ export async function runScoringPipeline(
     education_score: aggregated.dimensionScores.education,
     achievements_score: aggregated.dimensionScores.achievements,
     ai_analysis,
+    score_attribution: JSON.stringify(buildAttribution(aggregated, llmResult, scoreConfig)),
+    skill_matches: normalizeSkillMatches(llmResult.skill_matches, skillsToAdjudicate),
   }
 }

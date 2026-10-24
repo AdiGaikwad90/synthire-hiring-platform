@@ -1,3 +1,4 @@
+import { candidatePollInterval } from '@/lib/scoring'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { candidatesApi } from '@/lib/api'
 
@@ -12,7 +13,13 @@ export function useCandidates(params?: Record<string, string>) {
 }
 
 export function useCandidate(id: string) {
-  return useQuery({ queryKey: candidateKeys.detail(id), queryFn: () => candidatesApi.get(id), enabled: !!id })
+  return useQuery({
+    queryKey: candidateKeys.detail(id),
+    queryFn: () => candidatesApi.get(id),
+    enabled: !!id,
+    // Keeps the page live while parsing/scoring runs in the background.
+    refetchInterval: (query) => candidatePollInterval(query.state.data?.processing_status),
+  })
 }
 
 export function useUpdateCandidateStage() {

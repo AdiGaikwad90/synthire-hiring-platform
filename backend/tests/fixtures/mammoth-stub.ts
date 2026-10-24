@@ -11,7 +11,7 @@
  */
 export default {
   extractRawText: async (_input: { arrayBuffer: ArrayBuffer }) => ({
-    value: 'stubbed docx text',
+    value: 'Jane Doe — Senior Backend Engineer. 6 years building Go services and PostgreSQL schemas at Acme Payments.',
     messages: [] as unknown[],
   }),
 }

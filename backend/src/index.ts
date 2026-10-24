@@ -5,6 +5,8 @@ import { loggerMiddleware } from './middleware/logger'
 import { rateLimitMiddleware } from './middleware/rate-limit'
 import type { Env } from './types/bindings'
 import { processEmailQueue } from './services/email/queue'
+import { failStaleProcessing, STALE_PROCESSING_MINUTES, QUEUED_STALE_HOURS } from './db/queries/candidates'
+import { handleResumeQueue, handleDeadLetters } from './queue/handler'
 import { meterD1, meterKV, newTally } from './services/budget/meters'
 import { flushUsage } from './services/budget/quotas'
 import { quotaMiddleware } from './middleware/quota'
@@ -81,5 +83,33 @@ export default {
         // if (env.SENTRY_DSN) createSentry(new Request('https://worker/scheduled'), ctx, env.SENTRY_DSN).captureException(err)
       }),
     )
+    ctx.waitUntil(
+      failStaleProcessing(env.DB, {
+        activeBeforeIso: new Date(Date.now() - STALE_PROCESSING_MINUTES * 60_000).toISOString(),
+        queuedBeforeIso: new Date(Date.now() - QUEUED_STALE_HOURS * 3_600_000).toISOString(),
+      })
+        .then((n) => { if (n > 0) console.warn(`[scheduled] failed ${n} interrupted candidate(s)`) })
+        .catch((err) => console.error('[scheduled] failStaleProcessing failed', err)),
+    )
+  },
+  /**
+   * One Worker consumes both queues; dead-letter queue names end in "-dlq".
+   * D1/KV are metered the same way as fetchWithQuotaMetering: a fresh env is
+   * spread per batch (never mutate the isolate-shared env), and the flush
+   * uses the raw DB so it does not count itself.
+   */
+  async queue(batch: MessageBatch<unknown>, env: Env, ctx: ExecutionContext) {
+    const tally = newTally()
+    const metered: Env = {
+      ...env,
+      DB: meterD1(env.DB, tally),
+      KV_CACHE: meterKV(env.KV_CACHE, tally),
+    }
+    try {
+      if (batch.queue.endsWith('-dlq')) await handleDeadLetters(batch, metered)
+      else await handleResumeQueue(batch, metered)
+    } finally {
+      ctx.waitUntil(flushUsage(env.DB, tally))
+    }
   },
 }

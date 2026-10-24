@@ -17,14 +17,26 @@ import {
   updateJob,
   deleteJob,
 } from '../db/queries/jobs'
+import { getJobSkillGaps } from '../db/queries/skill-matches'
 import { authMiddleware } from '../middleware/auth'
+import { requireRecruiter } from '../middleware/authorize'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
+import { coerceYears } from '../utils/numbers'
 import { extractPdfText } from '../services/parsing/pdf'
 import { extractDocxText } from '../services/parsing/docx'
-import { uploadToR2, getFromR2 } from '../services/storage/r2'
+import { uploadToR2, getFromR2, deleteFromR2 } from '../services/storage/r2'
 import { callWithFallback, buildLlmConfig } from '../services/ai/fallback'
 import { buildNeuronLimitConfig } from '../services/budget/neurons'
 import type { WorkersAIRequest } from '../services/ai/workers-ai'
+import {
+  JD_PARSE_TTL_SECONDS,
+  jdParseKvKey,
+  pendingJdKey,
+  readJdParse,
+  resolveJdParse,
+  attachJd,
+  type JdParseRecord,
+} from '../services/jd/attachment'
 
 // ── JD parse schema ───────────────────────────────────────────────────────────
 
@@ -40,7 +52,7 @@ const parsedJdSchema = z.object({
   required_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
   nice_to_have_skills: z.array(z.string()).nullable().optional().transform(v => v ?? []),
   min_years_experience: z.union([z.number(), z.string(), z.null()]).optional()
-    .transform(v => (v === null || v === undefined || v === '') ? null : Number(v) || null),
+    .transform(v => coerceYears(v)),
   education_requirement: z.string().nullable().optional(),
 })
 
@@ -102,14 +114,31 @@ router.get('/', zv('query', listJobsSchema), async (c) => {
 
 // POST /api/jobs — create a new job
 router.post('/', zv('json', createJobSchema), async (c) => {
-  const body = c.req.valid('json')
+  const { jd_parse_id, ...body } = c.req.valid('json')
   const user = c.get('user')
-  const job = await createJob(c.env.DB, {
+  // Validate before inserting, so a bad parse ID creates nothing.
+  const jdParse = jd_parse_id ? await resolveJdParse(c.env.KV_CACHE, jd_parse_id, user.company_id) : null
+
+  let job = await createJob(c.env.DB, {
     ...body,
     company_id: user.company_id,
     recruiter_id: user.sub,
   })
-  return c.json(apiResponse(job), 201)
+  if (!jdParse) return c.json(apiResponse(job), 201)
+
+  let jdUrl: string | null = null
+  try {
+    jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
+  } catch (err) {
+    console.error('[jobs] attaching the JD failed', { jobId: job.id, error: err instanceof Error ? err.message : String(err) })
+  }
+  if (jdUrl) {
+    job = (await updateJob(c.env.DB, job.id, user.company_id, { jd_url: jdUrl })) ?? job
+    await c.env.KV_CACHE.delete(jdParseKvKey(jd_parse_id as string))
+  } else {
+    console.warn('[jobs] JD pending file expired before attach', { jobId: job.id })
+  }
+  return c.json(apiResponse({ ...job, jd_attached: jdUrl !== null }), 201)
 })
 
 // POST /api/jobs/parse-jd — start async JD parse; returns parseId immediately (202)
@@ -147,12 +176,11 @@ router.post('/parse-jd', async (c) => {
   // Generate a parse ID and store 'processing' status in KV immediately
   const parseId = crypto.randomUUID()
   const user = c.get('user')
-  const kvKey = `jdparse:${parseId}`
-  await c.env.KV_CACHE.put(kvKey, JSON.stringify({ status: 'processing' }), { expirationTtl: 3600 })
-
+  const kvKey = jdParseKvKey(parseId)
   const env = c.env
-  const ext = getExtension(fileType)
-  const jdKey = `jd/${user.company_id}/${Date.now()}.${ext}`
+  const ext = getExtension(fileType) as 'pdf' | 'docx'
+  const base = { companyId: user.company_id, pendingKey: pendingJdKey(user.company_id, parseId, ext), ext } satisfies Omit<JdParseRecord, 'status'>
+  await c.env.KV_CACHE.put(kvKey, JSON.stringify({ ...base, status: 'processing' } satisfies JdParseRecord), { expirationTtl: JD_PARSE_TTL_SECONDS })
 
   // Run LLM in background — client gets parseId immediately and polls
   c.executionCtx.waitUntil(
@@ -160,7 +188,7 @@ router.post('/parse-jd', async (c) => {
       try {
         // Store original file in R2
         try {
-          await uploadToR2(env, jdKey, buffer, getContentType(fileType))
+          await uploadToR2(env, base.pendingKey, buffer, getContentType(fileType))
         } catch {
           // Non-fatal
         }
@@ -168,7 +196,7 @@ router.post('/parse-jd', async (c) => {
         const messages = buildJdParseMessages(jdText)
         const llmConfig = buildLlmConfig(env)
 
-        const parsed = await callWithFallback(
+        const raw = await callWithFallback(
           env.AI,
           env.KV_CACHE,
           buildNeuronLimitConfig(env),
@@ -176,22 +204,26 @@ router.post('/parse-jd', async (c) => {
           validateParsedJd,
           'LLM_PARSE',
           llmConfig
-        ) as ParsedJd
-
-        const result: ParsedJd = {
-          ...parsed,
-          required_skills: parsed.required_skills ?? [],
-          nice_to_have_skills: parsed.nice_to_have_skills ?? [],
-        }
+        )
+        // validateParsedJd only checks shape (data is ParsedJd); re-parse here
+        // so the schema's transforms (e.g. coerceYears) actually apply — the
+        // raw LLM output must never be stored as-is.
+        // parsedJdSchema's own transforms already default these to [], so no
+        // extra `?? []` is needed here.
+        const result: ParsedJd = parsedJdSchema.parse(raw)
 
         await env.KV_CACHE.put(
           kvKey,
-          JSON.stringify({ status: 'done', result: { ...result, jd_url: jdKey } }),
-          { expirationTtl: 3600 }
+          JSON.stringify({ ...base, status: 'done', result: { ...result, parse_id: parseId } } satisfies JdParseRecord),
+          { expirationTtl: JD_PARSE_TTL_SECONDS }
         )
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Parsing failed'
-        await env.KV_CACHE.put(kvKey, JSON.stringify({ status: 'error', error: message }), { expirationTtl: 3600 })
+        await env.KV_CACHE.put(
+          kvKey,
+          JSON.stringify({ ...base, status: 'error', error: message } satisfies JdParseRecord),
+          { expirationTtl: JD_PARSE_TTL_SECONDS }
+        )
       }
     })()
   )
@@ -201,18 +233,12 @@ router.post('/parse-jd', async (c) => {
 
 // GET /api/jobs/parse-jd/:parseId — poll for async JD parse result
 router.get('/parse-jd/:parseId', async (c) => {
-  const parseId = c.req.param('parseId')
-  const raw = await c.env.KV_CACHE.get(`jdparse:${parseId}`)
-  if (!raw) return c.json(apiResponse({ status: 'processing' }))
-
-  let state: { status: string; result?: unknown; error?: string }
-  try {
-    state = JSON.parse(raw)
-  } catch {
-    return c.json(apiResponse({ status: 'processing' }))
-  }
-
-  return c.json(apiResponse(state))
+  const user = c.get('user')
+  const record = await readJdParse(c.env.KV_CACHE, c.req.param('parseId'))
+  // Unknown, malformed or another tenant's parse all look like "still processing".
+  if (!record || record.companyId !== user.company_id) return c.json(apiResponse({ status: 'processing' }))
+  const { status, result, error } = record
+  return c.json(apiResponse({ status, ...(result ? { result } : {}), ...(error ? { error } : {}) }))
 })
 
 // GET /api/jobs/:id/jd — stream the original JD file from R2
@@ -243,6 +269,15 @@ router.get('/:id/jd', async (c) => {
   })
 })
 
+// GET /api/jobs/:id/skill-gaps — per-skill verdict counts across scored applicants
+router.get('/:id/skill-gaps', async (c) => {
+  const user = c.get('user')
+  requireRecruiter(user)
+  const jobId = c.req.param('id')
+  if (!(await getJob(c.env.DB, jobId, user.company_id))) throw new AppError('Job not found', 404)
+  return c.json(apiResponse(await getJobSkillGaps(c.env.DB, jobId, user.company_id)))
+})
+
 // GET /api/jobs/:id — get a single job
 router.get('/:id', async (c) => {
   const user = c.get('user')
@@ -255,13 +290,26 @@ router.get('/:id', async (c) => {
 
 // PATCH /api/jobs/:id — partial update
 router.patch('/:id', zv('json', updateJobSchema), async (c) => {
-  const body = c.req.valid('json')
+  const { jd_parse_id, ...body } = c.req.valid('json')
   const user = c.get('user')
-  const job = await updateJob(c.env.DB, c.req.param('id'), user.company_id, body)
-  if (!job) {
-    throw new AppError('Job not found', 404)
+  const jdParse = jd_parse_id ? await resolveJdParse(c.env.KV_CACHE, jd_parse_id, user.company_id) : null
+  let job = await updateJob(c.env.DB, c.req.param('id'), user.company_id, body)
+  if (!job) throw new AppError('Job not found', 404)
+  if (!jdParse) return c.json(apiResponse(job))
+
+  const previous = job.jd_url
+  let jdUrl: string | null = null
+  try {
+    jdUrl = await attachJd(c.env, jdParse, user.company_id, job.id)
+  } catch (err) {
+    console.error('[jobs] attaching the JD failed', { jobId: job.id, error: err instanceof Error ? err.message : String(err) })
   }
-  return c.json(apiResponse(job))
+  if (jdUrl) {
+    job = (await updateJob(c.env.DB, job.id, user.company_id, { jd_url: jdUrl })) ?? job
+    if (previous && previous !== jdUrl) await deleteFromR2(c.env, previous).catch(() => {})
+    await c.env.KV_CACHE.delete(jdParseKvKey(jd_parse_id as string))
+  }
+  return c.json(apiResponse({ ...job, jd_attached: jdUrl !== null }))
 })
 
 // DELETE /api/jobs/:id — soft delete (set status='closed')

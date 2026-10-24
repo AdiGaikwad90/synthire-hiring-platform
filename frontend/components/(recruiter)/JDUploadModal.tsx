@@ -15,6 +15,7 @@ interface ParsedJD {
   required_skills: string[];
   nice_to_have_skills: string[];
   mustHave?: string[];
+  parse_id?: string;
 }
 
 interface JDUploadModalProps {

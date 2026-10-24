@@ -3,6 +3,8 @@ import {
   detectFileType,
   getExtension,
   getContentType,
+  hasReadableResumeText,
+  MIN_RESUME_TEXT_CHARS,
 } from '../../../../src/services/parsing/detector'
 
 /**
@@ -92,3 +94,32 @@ describe('getExtension / getContentType', () => {
     )
   })
 })
+
+// Regression: a blank or image-only PDF extracts to "", and the parse model
+// then INVENTED a candidate ("John Doe") and the pipeline scored it 32%. Found
+// in the live-app Playwright pass. Nothing may reach the model without text.
+describe('hasReadableResumeText — happy path', () => {
+  it('accepts real resume text', () => {
+    expect(hasReadableResumeText('Priya Raman — backend engineer, 6 years of Go and PostgreSQL.')).toBe(true)
+  })
+})
+
+describe('hasReadableResumeText — boundaries', () => {
+  it(`rejects text shorter than ${MIN_RESUME_TEXT_CHARS} characters and accepts exactly that many`, () => {
+    expect(hasReadableResumeText('x'.repeat(MIN_RESUME_TEXT_CHARS - 1))).toBe(false)
+    expect(hasReadableResumeText('x'.repeat(MIN_RESUME_TEXT_CHARS))).toBe(true)
+  })
+
+  it('measures after trimming whitespace', () => {
+    expect(hasReadableResumeText(' \n\t'.repeat(100) + 'short')).toBe(false)
+  })
+})
+
+describe('hasReadableResumeText — empty / invalid', () => {
+  it.each([['empty string', ''], ['whitespace only', '   \n\n  '], ['null', null], ['undefined', undefined]])(
+    'rejects %s', (_n, v) => {
+      expect(hasReadableResumeText(v as string)).toBe(false)
+    },
+  )
+})
+// Error contract: N/A — returns a boolean; the caller throws.

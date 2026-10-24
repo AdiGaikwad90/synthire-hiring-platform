@@ -195,3 +195,104 @@ describe('aggregateScore — semantic blending', () => {
     expect(r.overall).toBe(65) // 50*0.7 + 100*0.3
   })
 })
+
+const CFG = { llmWeight: 0.7, semanticWeight: 0.3 }
+const sumContrib = (c: { skills: number; experience: number; education: number; achievements: number; semantic: number }) =>
+  c.skills + c.experience + c.education + c.achievements + c.semantic
+
+/** Sets one dimension's importance, leaving the rest of a v2 config intact. */
+const withImportance = (base: ScoringDimensions, over: Partial<Record<keyof ScoringDimensions, number>>): ScoringDimensions => {
+  const out = structuredClone(base)
+  for (const [id, imp] of Object.entries(over)) out[id as keyof ScoringDimensions].importance = imp as number
+  return out
+}
+
+describe('aggregateScore contributions — happy path', () => {
+  it('sums exactly to the unrounded overall and rounds to the stored overall', () => {
+    const r = aggregateScore(scores(), 70, DEFAULT_SCORING_DIMENSIONS, CFG)
+    const raw = r.contributions.skills + r.contributions.experience + r.contributions.education + r.contributions.achievements
+    expect(raw).toBeCloseTo(
+      // component * llmWeight, recomputed independently from the default importances 80/70/50/60
+      ((80 * 80 + 60 * 70 + 40 * 50 + 20 * 60) / 260) * 0.7,
+      9,
+    )
+    expect(r.contributions.semantic).toBeCloseTo(70 * 0.3, 9)
+    expect(Math.round(sumContrib(r.contributions))).toBe(r.overall)
+  })
+
+  it('echoes the importances it actually used', () => {
+    const r = aggregateScore(scores(), 50, DEFAULT_SCORING_DIMENSIONS, CFG)
+    expect(r.importances).toEqual({ skills: 80, experience: 70, education: 50, achievements: 60 })
+  })
+})
+
+describe('aggregateScore contributions — positive variants', () => {
+  it.each([
+    ['all importances equal', flatDims(50)],
+    ['one dimension only', withImportance(flatDims(50), { experience: 0, education: 0, achievements: 0 })],
+    ['extreme spread', withImportance(flatDims(50), { skills: 100, experience: 1, education: 0, achievements: 33 })],
+  ])('keeps the sum invariant with %s', (_name, dims) => {
+    const r = aggregateScore(scores(), 63, dims, CFG)
+    expect(Math.round(sumContrib(r.contributions))).toBe(r.overall)
+  })
+
+  it('gives the semantic part 0 points when semanticWeight is 0, and the rest still sum to overall', () => {
+    const r = aggregateScore(scores(), 99, DEFAULT_SCORING_DIMENSIONS, { llmWeight: 1, semanticWeight: 0 })
+    expect(r.contributions.semantic).toBe(0)
+    expect(Math.round(sumContrib(r.contributions))).toBe(r.overall)
+  })
+})
+
+describe('aggregateScore contributions — boundaries', () => {
+  it('a zero-importance dimension contributes exactly 0 even with a perfect score', () => {
+    const dims = withImportance(DEFAULT_SCORING_DIMENSIONS, { education: 0 })
+    const r = aggregateScore(scores({ education: { degree_level: 100, field_relevance: 100, certifications: 100 } }), 50, dims, CFG)
+    expect(r.contributions.education).toBe(0)
+    expect(r.importances.education).toBe(0) // not silently replaced by the default 50
+  })
+
+  it('reaches 100 points when every score is 100', () => {
+    const perfect = scores({
+      skills: { technical: 100, soft: 100, domain: 100 },
+      experience: { years_relevant: 100, industry_match: 100, leadership: 100 },
+      education: { degree_level: 100, field_relevance: 100, certifications: 100 },
+      achievements: { impact: 100, recognition: 100 },
+    })
+    const r = aggregateScore(perfect, 100, DEFAULT_SCORING_DIMENSIONS, CFG)
+    expect(sumContrib(r.contributions)).toBeCloseTo(100, 9)
+    expect(r.overall).toBe(100)
+  })
+})
+
+describe('aggregateScore contributions — invalid input', () => {
+  it('treats a negative importance as 0 rather than producing negative points or NaN', () => {
+    const dims = withImportance(DEFAULT_SCORING_DIMENSIONS, { achievements: -10 })
+    const r = aggregateScore(scores(), 50, dims, CFG)
+    expect(r.contributions.achievements).toBe(0)
+    expect(Number.isNaN(sumContrib(r.contributions))).toBe(false)
+    expect(Math.round(sumContrib(r.contributions))).toBe(r.overall)
+  })
+})
+
+describe('aggregateScore contributions — empty / zero', () => {
+  it('returns 0 for every dimension (not NaN) when all importances are 0', () => {
+    const dims = withImportance(DEFAULT_SCORING_DIMENSIONS, { skills: 0, experience: 0, education: 0, achievements: 0 })
+    const r = aggregateScore(scores(), 40, dims, CFG)
+    expect([r.contributions.skills, r.contributions.experience, r.contributions.education, r.contributions.achievements]).toEqual([0, 0, 0, 0])
+    expect(r.contributions.semantic).toBeCloseTo(12, 9)
+    expect(r.overall).toBe(12)
+  })
+
+  it('returns all-zero contributions for an all-zero candidate', () => {
+    const zero = scores({
+      skills: { technical: 0, soft: 0, domain: 0 },
+      experience: { years_relevant: 0, industry_match: 0, leadership: 0 },
+      education: { degree_level: 0, field_relevance: 0, certifications: 0 },
+      achievements: { impact: 0, recognition: 0 },
+    })
+    const r = aggregateScore(zero, 0, DEFAULT_SCORING_DIMENSIONS, CFG)
+    expect(sumContrib(r.contributions)).toBe(0)
+  })
+})
+
+// Error contract: N/A — aggregateScore never throws; bad numbers degrade to 0 (covered above).
