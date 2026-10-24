@@ -73,6 +73,7 @@ are worse than none, because they get trusted.
 | Changed a guardrail or its default | guardrails table in `backend/CLAUDE.md` |
 | Changed testing setup, tiers, or thresholds | `TESTING.md` |
 | **Fixed** something in a "known drift" table | **delete that row** — the table must shrink as it is worked off |
+| Found a bug, or started/fixed a `BACKLOG.md` item | `BACKLOG.md` (row + section, status, PR) **and** the tracker page it links to — same session, see "How this backlog works" there |
 | Wired up something previously listed as a placeholder | "Not yet wired" section below |
 
 Two rules that keep this honest:
