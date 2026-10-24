@@ -39,7 +39,7 @@ the history is readable.
 
 | ID | Pri | Status | Area | Title |
 |---|---|---|---|---|
-| SYN-001 | P0 | In progress | Deploy | Ship the queue-backed resume pipeline to production |
+| SYN-001 | P0 | Done | Deploy | Ship the queue-backed resume pipeline to production |
 | SYN-002 | P1 | Open | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Open | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
@@ -80,17 +80,19 @@ the history is readable.
 | SYN-039 | P3 | Open | Chore | Remove 11 stale agent worktrees |
 | SYN-040 | P3 | Open | Auth | Login page illustration uses a made-up candidate |
 | SYN-041 | P3 | Open | Analytics | Analytics Sources and Round performance are not wired |
+| SYN-042 | P3 | Open | CI | Docs-only pushes to main redeploy production |
 
 ---
 
 ## P0
 
 ### SYN-001 · Ship the queue-backed resume pipeline to production
-**P0** · Deploy · Chore · Status: **In progress** · Found 2026-10-24
+**P0** · Deploy · Chore · Status: **Done** · Found 2026-10-24
 
 - **Problem:** Production still runs the old pipeline, which parses and scores in `ctx.waitUntil()`. Cloudflare cancels that work 30 s after the response and a resume takes 35–52 s, so production uploads most likely never finish.
 - **Where:** branches `feature/skill-matching` + `feature/resume-queue` (35 commits not on `main`). Production queues, metadata indexes and the `jd-pending/` lifecycle rule were provisioned on 2026-10-25.
 - **Done when:** merged to `main`, both deploy jobs report `success`, production `/health` is ok and the queue consumer is attached.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/1 — merged 2026-10-25 as `64960db`. Deploy run 40126383633: backend and frontend production jobs `success`; `/health` ok; `synthire-resume-jobs` and its DLQ have `synthire-backend-production` as consumer; D1 reports no pending migrations. Not yet exercised: a real resume upload in production.
 
 ## P1
 
@@ -377,3 +379,10 @@ the history is readable.
 - **Problem:** Known placeholders (root `CLAUDE.md` → "Not yet wired"): `GET /api/analytics/sources` returns zeros and nothing tracks candidate source; there is no per-round aggregation, so "Round pass rate" stayed empty after a completed interview with feedback.
 - **Where:** `backend/src/routes/analytics.ts`, `frontend/components/(recruiter)/Analytics.tsx`.
 - **Done when:** both are built, and the "Not yet wired" section in `CLAUDE.md` shrinks accordingly.
+
+### SYN-042 · Docs-only pushes to main redeploy production
+**P3** · CI · Chore · Status: **Open** · Found 2026-10-25
+
+- **Problem:** The workflow deploys on every push to `main` with no path filter, so a change to `BACKLOG.md` or any other doc triggers a full production backend and frontend deploy. Backlog status updates therefore wait for the next code PR instead of merging on their own.
+- **Where:** `.github/workflows/ci.yml:3-7` (triggers) and the deploy jobs.
+- **Done when:** a push that only touches `*.md` / `docs/**` still runs the checks but skips the deploy jobs.
