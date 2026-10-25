@@ -51,7 +51,7 @@ the history is readable.
 | SYN-007 | P1 | Open | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
-| SYN-043 | P1 | In progress | Security | Interviewers can change recruiter data |
+| SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
 | SYN-058 | P1 | Open | Candidates | Resume and JD previews are blank in Safari |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
@@ -175,13 +175,13 @@ the history is readable.
 - **Done when:** the edited body is what the candidate receives, or the preview is read-only.
 
 ### SYN-043 · Interviewers can change recruiter data
-**P1** · Security · Bug · Status: **In progress** · Found 2026-10-25
+**P1** · Security · Bug · Status: **Done** · Found 2026-10-25
 
 - **Problem:** Role checks cover analytics, skill gaps, email logs and an interviewer's own interview and feedback, but none of the write routes. A user with the `interviewer` role can create, edit and delete jobs (including JD parsing), upload, re-stage and delete candidates, list every candidate in the company, create and delete interview rounds, schedule interviews, and change any interview's status (`PATCH /api/interviews/:id` has no ownership check and accepts any status string). The UI can't reach this today only because no interviewer can join a company yet (SYN-003); fix it before SYN-003 ships.
 - **Where:** `backend/src/routes/jobs.ts:116`, `:145`, `:292`, `:316`; `backend/src/routes/candidates.ts:36`, `:124`, `:156`, `:262`; `backend/src/routes/interview-types.ts:25`, `:33`, `:44`; `backend/src/routes/interviews.ts:56`, `:240-257`; guards live in `backend/src/middleware/authorize.ts`.
 - **Done when:** every write route calls `requireRecruiter`, interviewer reads are limited to the candidates and jobs of their own interviews, `PATCH /api/interviews/:id` checks ownership and validates status against the enum, and `tests/integration/routes/auth-matrix.test.ts` covers each route for the interviewer role.
 - **Source:** production-readiness A1 (the part still open).
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/2 — CI and Safari pass green 2026-10-25; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/2 — merged 2026-10-25 as `b7d803e`; deploy run 40199641813 (backend + frontend production `success`), `/health` ok. Verified in Safari/WebKit before merge: interviewer flow works, 15 recruiter-only/unassigned API calls → 403, other company → 404, no data changed.
 
 ### SYN-058 · Resume and JD previews are blank in Safari
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-25
