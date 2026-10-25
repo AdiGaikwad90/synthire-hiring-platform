@@ -60,7 +60,7 @@ PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
 - **Primary**: JWT in `localStorage` under `synthire_token`, sent as `Authorization: Bearer`.
 - **Secondary**: a non-HttpOnly cookie of the same name, written by `setToken()`. It exists solely so `middleware.ts` can gate routes server-side; it only works same-domain.
 - `lib/api.ts` injects the Bearer header, and on a 401 attempts `POST /api/auth/refresh` **once** (coalesced across concurrent requests) before redirecting to `/login`.
-- `middleware.ts` redirects to `/login?from=<path>` when the cookie is absent; matcher excludes `_next/*`, `favicon.ico`, and `api`.
+- `middleware.ts` redirects to `/login?from=<path>` when the cookie is absent; matcher excludes `_next/*`, `favicon.ico`, and `api`. It also sets the security headers (CSP, framing, HSTS, nosniff) from `lib/security-headers.ts` on every page response, redirects included — `next.config.mjs` `headers()` is ignored by the Cloudflare Pages build, so headers must not live there (`UI_CONVENTIONS.md` §4b).
 - `AuthContext` verifies the session on mount via `GET /api/auth/me`.
 
 ---

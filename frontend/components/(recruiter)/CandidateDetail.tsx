@@ -48,9 +48,13 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
   const [showSchedule, setShowSchedule] = useS_cd(false);
   const [resumeBlobUrl, setResumeBlobUrl] = useS_cd<string | null>(null);
   const [resumeError, setResumeError] = useS_cd<string | null>(null);
+  // Browsers can't render a Word file in a frame (and may start a download
+  // instead), so only PDFs are previewed; Word files get a download prompt.
+  const resumeExt = apiCandidate?.resume_url?.endsWith('.docx') ? 'docx' : 'pdf';
+  const canPreview = !!apiCandidate?.resume_url && resumeExt === 'pdf';
 
   useE_cd(() => {
-    if (!actualId) return;
+    if (!actualId || !canPreview) return;
     let revoked = false;
     (async () => {
       try {
@@ -66,7 +70,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
       revoked = true;
       setResumeBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
     };
-  }, [actualId]);
+  }, [actualId, canPreview]);
 
   if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading candidate...</div>;
   if (!apiCandidate) return <div style={{padding:32,color:'var(--danger)'}}>Candidate not found</div>;
@@ -101,6 +105,8 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
     title: '',
     years: 0,
   };
+
+  const resumeFilename = `${c.name.replace(/\s+/g, '_')}_Resume.${resumeExt}`;
 
   return (
     <div className="tsCD">
@@ -155,13 +161,13 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
           <div className="tsCD-resumeBar">
             <div className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Icon.FileText size={14}/>
-              <span>{c.name.replace(/\s+/g, '_')}_Resume.pdf</span>
+              <span>{resumeFilename}</span>
             </div>
             <div className="tsZoom">
               <button className="tsIconBtn" onClick={() => setZoom(z => Math.max(50, z - 10))}><Icon.ChevronDown size={14}/></button>
               <span className="mono small" style={{ width: 40, textAlign: "center" }}>{zoom}%</span>
               <button className="tsIconBtn" onClick={() => setZoom(z => Math.min(200, z + 10))}><Icon.ChevronUp size={14}/></button>
-              <button className="tsIconBtn" title="Download resume" onClick={() => downloadResume(actualId, `${c.name.replace(/\s+/g, '_')}_Resume.pdf`)}><Icon.Download size={14}/></button>
+              <button className="tsIconBtn" title="Download resume" onClick={() => downloadResume(actualId, resumeFilename)}><Icon.Download size={14}/></button>
             </div>
           </div>
           <div className="tsCD-resumeView">
@@ -173,6 +179,12 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
               />
             ) : (
               <div className="tsResume" style={{ transform: `scale(${zoom/100})`, transformOrigin: "top center" }}>
+                {resumeExt === 'docx' && apiCandidate.resume_url && (
+                  <div className="small" style={{ color: "var(--muted)", padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span>Preview isn&apos;t available for Word files. Showing the parsed resume instead.</span>
+                    <Button variant="secondary" size="sm" icon={<Icon.Download size={12}/>} onClick={() => downloadResume(actualId, resumeFilename)}>Download .docx</Button>
+                  </div>
+                )}
                 {resumeError && (
                   <div className="small" style={{ color: "var(--danger)", padding: "8px 12px" }}>
                     {resumeError} Showing the parsed preview instead.

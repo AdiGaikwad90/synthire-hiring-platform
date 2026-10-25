@@ -88,6 +88,26 @@ describe('role routing', () => {
   })
 })
 
+// SYN-060: the middleware is the one place security headers are set, so every
+// response it returns — pass-through AND redirect — must carry them.
+describe('security headers on every response', () => {
+  const cases: [string, ReturnType<typeof req>][] = [
+    ['a public page', req('/login')],
+    ['a protected page with a cookie', req('/dashboard', recruiter)],
+    ['the redirect to /login', req('/jobs/abc')],
+    ['the interviewer redirect away from recruiter pages', req('/dashboard', interviewer)],
+    ['a malformed cookie let through', req('/dashboard', 'garbage')],
+  ]
+  for (const [label, request] of cases) {
+    it(`sets the CSP and framing headers on ${label}`, () => {
+      const res = middleware(request)
+      expect(res.headers.get('Content-Security-Policy'), label).toContain("frame-ancestors 'self'")
+      expect(res.headers.get('X-Frame-Options'), label).toBe('SAMEORIGIN')
+      expect(res.headers.get('X-Content-Type-Options'), label).toBe('nosniff')
+    })
+  }
+})
+
 describe('malformed and hostile cookies', () => {
   /**
    * The payload is attacker-controlled: this decodes base64 without verifying
