@@ -53,6 +53,7 @@ the history is readable.
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
 | SYN-058 | P1 | Open | Candidates | Resume and JD previews are blank in Safari |
+| SYN-060 | P1 | Open | Security | Production serves no security headers |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -189,6 +190,13 @@ the history is readable.
 - **Problem:** In Safari (WebKit 26.6) the resume pane on the candidate page and the resume and JD tabs in the interview room stay empty, with "Refused to load blob:… because it does not appear in the frame-ancestors directive of the Content Security Policy". The viewers fetch the file, wrap it in a `blob:` URL and frame it; a `blob:` document inherits the page's CSP, so `frame-ancestors 'none'` (and `X-Frame-Options: DENY`) forbids framing it even by the app itself. Chrome doesn't apply the inherited rule, which is why it went unnoticed.
 - **Where:** `frontend/next.config.mjs:17-18` and `:59`; iframes in `frontend/components/(recruiter)/CandidateDetail.tsx:169`, `frontend/components/(interviewer)/InterviewConduct.tsx:293` and `:405`.
 - **Done when:** all three previews render in Safari and Chrome, other sites still can't frame the app (clickjacking protection kept), and the fix is verified in the Safari Playwright pass.
+
+### SYN-060 · Production serves no security headers
+**P1** · Security · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** The CSP, `X-Frame-Options`, HSTS, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy` defined in `next.config.mjs` `headers()` are served by `next dev` but not by the Cloudflare Pages build (`@cloudflare/next-on-pages`): production `/login` returns none of them. Any site can frame the app (clickjacking) and there is no CSP. It also hides SYN-058 in production — once the headers are served, Safari previews break there too unless the framing rule changes with them.
+- **Where:** `frontend/next.config.mjs:7-64`, `frontend/middleware.ts`, `npm run build:cf` / `deploy` in `frontend/package.json`.
+- **Done when:** production page responses carry the full header set from one source shared with local dev, verified with `curl` against production after the deploy.
 
 ## P2
 
