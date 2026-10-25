@@ -43,7 +43,7 @@ the history is readable.
 | ID | Pri | Status | Area | Title |
 |---|---|---|---|---|
 | SYN-001 | P0 | Done | Deploy | Ship the queue-backed resume pipeline to production |
-| SYN-002 | P1 | In progress | Scheduling | Interview timezone picker is ignored |
+| SYN-002 | P1 | Done | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Open | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
@@ -77,7 +77,7 @@ the history is readable.
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
 | SYN-026 | P3 | Open | UX | Some dates bypass the shared date formatters |
-| SYN-027 | P3 | In progress | Scheduling | Scheduler allows dates in the past |
+| SYN-027 | P3 | Done | Scheduling | Scheduler allows dates in the past |
 | SYN-028 | P3 | Open | Scheduling | Empty "Which round?" gives no hint |
 | SYN-029 | P3 | Open | UX | Dangling separators and singular/plural mistakes |
 | SYN-030 | P3 | Open | Interviews | "Open Zoom" label for every meeting link |
@@ -124,12 +124,12 @@ the history is readable.
 ## P1
 
 ### SYN-002 · Interview timezone picker is ignored
-**P1** · Scheduling · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Scheduling · Bug · Status: **Done** · Found 2026-10-24
 
 - **Problem:** `scheduled_at` is built from the browser's local time; the timezone dropdown changes nothing. Picking 2 PM Pacific from an IST browser saved `2026-10-28T08:30Z` (2 PM IST), 12.5 h off. The dropdown always defaults to Pacific, and the invitation email shows a time with no timezone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:107` (`new Date(calYear, calMonth - 1, date, hour, minute)`), `:39` (default `America/Los_Angeles`), email text built at `:56-80`.
 - **Done when:** the saved instant equals the chosen wall time in the chosen zone, the default is the browser's zone, and emails name the zone.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — merged 2026-10-26 as `38698d2`; deploy run 40229899579 `success`, migration 0010 applied on production (`interviews.timezone` present), `/health` ok.
 
 ### SYN-003 · Interviewers cannot join a company
 **P1** · Interviewers · Gap · Status: **Open** · Found 2026-10-24
@@ -383,12 +383,12 @@ the history is readable.
 - **Done when:** all go through `@/lib/utils` formatters.
 
 ### SYN-027 · Scheduler allows dates in the past
-**P3** · Scheduling · Bug · Status: **In progress** · Found 2026-10-24
+**P3** · Scheduling · Bug · Status: **Done** · Found 2026-10-24
 
 - **Problem:** Every day of the month is selectable, including days already gone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:51` (`disabledDays` is always empty).
 - **Done when:** past days and past times today are disabled, and the backend rejects a past `scheduled_at`.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — merged 2026-10-26 as `38698d2`; deploy run 40229899579 `success`, migration 0010 applied on production (`interviews.timezone` present), `/health` ok.
 
 ### SYN-028 · Empty "Which round?" gives no hint
 **P3** · Scheduling · UX · Status: **Open** · Found 2026-10-24
