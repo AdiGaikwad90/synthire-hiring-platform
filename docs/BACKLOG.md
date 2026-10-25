@@ -129,6 +129,7 @@ the history is readable.
 - **Problem:** `scheduled_at` is built from the browser's local time; the timezone dropdown changes nothing. Picking 2 PM Pacific from an IST browser saved `2026-10-28T08:30Z` (2 PM IST), 12.5 h off. The dropdown always defaults to Pacific, and the invitation email shows a time with no timezone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:107` (`new Date(calYear, calMonth - 1, date, hour, minute)`), `:39` (default `America/Los_Angeles`), email text built at `:56-80`.
 - **Done when:** the saved instant equals the chosen wall time in the chosen zone, the default is the browser's zone, and emails name the zone.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
 
 ### SYN-003 · Interviewers cannot join a company
 **P1** · Interviewers · Gap · Status: **Open** · Found 2026-10-24
@@ -387,6 +388,7 @@ the history is readable.
 - **Problem:** Every day of the month is selectable, including days already gone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:51` (`disabledDays` is always empty).
 - **Done when:** past days and past times today are disabled, and the backend rejects a past `scheduled_at`.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
 
 ### SYN-028 · Empty "Which round?" gives no hint
 **P3** · Scheduling · UX · Status: **Open** · Found 2026-10-24
