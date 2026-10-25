@@ -181,6 +181,7 @@ the history is readable.
 - **Where:** `backend/src/routes/jobs.ts:116`, `:145`, `:292`, `:316`; `backend/src/routes/candidates.ts:36`, `:124`, `:156`, `:262`; `backend/src/routes/interview-types.ts:25`, `:33`, `:44`; `backend/src/routes/interviews.ts:56`, `:240-257`; guards live in `backend/src/middleware/authorize.ts`.
 - **Done when:** every write route calls `requireRecruiter`, interviewer reads are limited to the candidates and jobs of their own interviews, `PATCH /api/interviews/:id` checks ownership and validates status against the enum, and `tests/integration/routes/auth-matrix.test.ts` covers each route for the interviewer role.
 - **Source:** production-readiness A1 (the part still open).
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/2 — CI and Safari pass green 2026-10-25; awaiting merge.
 
 ### SYN-058 · Resume and JD previews are blank in Safari
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-25
