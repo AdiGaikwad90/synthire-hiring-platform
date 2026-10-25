@@ -97,6 +97,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
     duration_minutes: body.duration_minutes,
     video_link: body.video_link,
     meeting_notes: body.meeting_notes,
+    timezone: body.timezone,
     company_id: user.company_id,
   })
 
@@ -110,6 +111,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
       const candidateName = candidate.name
       const jobTitle = job?.title ?? 'Unknown Position'
       const scheduledAt = body.scheduled_at
+      const timeZone = body.timezone ?? null
       const durationMinutes = body.duration_minutes ?? 60
       const videoLink = body.video_link
       const frontendUrl = c.env.FRONTEND_ORIGIN
@@ -125,6 +127,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             candidateName,
             jobTitle,
             scheduledAt,
+            timeZone,
             durationMinutes,
             videoLink: videoLink ?? undefined,
             overallScore: undefined,
@@ -144,6 +147,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             candidateName,
             jobTitle,
             scheduledAt,
+            timeZone,
             durationMinutes,
             videoLink: videoLink ?? undefined,
             overallScore: candidate.overall_score ?? undefined,
@@ -162,6 +166,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             companyName,
             jobTitle,
             scheduledAt,
+            timeZone,
             durationMinutes,
             videoLink: videoLink ?? undefined,
             interviewId: interview.id,
@@ -185,6 +190,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             companyName,
             jobTitle,
             scheduledAt,
+            timeZone,
             durationMinutes,
             videoLink: videoLink ?? undefined,
             frontendUrl,
@@ -205,6 +211,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             companyName,
             jobTitle,
             scheduledAt,
+            timeZone,
             durationMinutes,
             videoLink: videoLink ?? undefined,
             frontendUrl,

@@ -1,18 +1,6 @@
 import type { FeedbackReminderTemplateData } from '../../../types/email'
 import { escapeHtml, safeHref } from '../../../utils/html'
-
-function formatDateTime(isoString: string): string {
-  const date = new Date(isoString)
-  return date.toLocaleString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  })
-}
+import { formatInterviewTime } from '../../../utils/dates'
 
 export function renderFeedbackReminder(data: FeedbackReminderTemplateData): { subject: string; html: string } {
   const subject = `Feedback Pending: ${data.candidateName}`
@@ -32,7 +20,7 @@ export function renderFeedbackReminder(data: FeedbackReminderTemplateData): { su
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
       <p style="color: #374151; margin: 8px 0;"><strong>Candidate:</strong> ${escapeHtml(data.candidateName)}</p>
       <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Interview Date:</strong> ${escapeHtml(formatDateTime(data.scheduledAt))}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Interview Date:</strong> ${escapeHtml(formatInterviewTime(data.scheduledAt, data.timeZone))}</p>
     </div>
 
     <div style="background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 12px 16px; margin: 16px 0; border-radius: 0 6px 6px 0;">

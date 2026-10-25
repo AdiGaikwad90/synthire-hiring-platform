@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid'
+import { isValidTimeZone } from '../utils/dates'
 import { z } from 'zod'
 import type { ValidationTargets } from 'hono'
 import { zValidator as _zValidator } from '@hono/zod-validator'
@@ -155,7 +156,15 @@ export const createInterviewSchema = z.object({
   interviewer_id: z.string().optional(),
   interviewer_email: z.string().email().optional(),
   interview_type_id: z.string().optional(),
-  scheduled_at: z.string().datetime(),
+  // SYN-027: a past time is refused here, not only in the form.
+  scheduled_at: z.string().datetime().refine((v) => Date.parse(v) > Date.now(), {
+    message: 'scheduled_at must be in the future',
+  }),
+  // SYN-002: the zone the recruiter picked; emails render in it. Optional for
+  // older clients — a missing zone renders in UTC.
+  timezone: z.string().refine(isValidTimeZone, {
+    message: 'timezone must be an IANA timezone name, e.g. America/Los_Angeles',
+  }).optional(),
   duration_minutes: z.number().int().min(15).max(480).default(60),
   video_link: z.string().transform(v => {
     if (!v) return undefined

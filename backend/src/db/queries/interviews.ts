@@ -124,6 +124,7 @@ export async function createInterview(
     duration_minutes: number
     video_link?: string
     meeting_notes?: string
+    timezone?: string
   }
 ): Promise<InterviewRow> {
   const id = nanoid()
@@ -133,9 +134,9 @@ export async function createInterview(
     .prepare(
       `INSERT INTO interviews (
         id, candidate_id, job_id, company_id, interviewer_id, interviewer_email, interview_type_id,
-        scheduled_at, duration_minutes, video_link, meeting_notes, status,
+        scheduled_at, duration_minutes, video_link, meeting_notes, timezone, status,
         email_sent_at, reminder_sent_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', NULL, NULL, ?)`
     )
     .bind(
       id,
@@ -149,6 +150,7 @@ export async function createInterview(
       data.duration_minutes,
       data.video_link ?? null,
       data.meeting_notes ?? null,
+      data.timezone ?? null,
       now
     )
     .run()

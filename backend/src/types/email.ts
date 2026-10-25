@@ -11,6 +11,8 @@ export interface MagicLinkTemplateData {
   candidateName: string
   jobTitle: string
   scheduledAt: string
+  /** IANA zone the interview was scheduled in; null/absent → UTC. */
+  timeZone?: string | null
   durationMinutes: number
   videoLink?: string
   overallScore?: number
@@ -37,6 +39,8 @@ export interface InterviewScheduledTemplateData {
   companyName: string
   jobTitle: string
   scheduledAt: string
+  /** IANA zone the interview was scheduled in; null/absent → UTC. */
+  timeZone?: string | null
   durationMinutes: number
   videoLink?: string
   interviewId: string
@@ -49,6 +53,8 @@ export interface FeedbackReminderTemplateData {
   candidateName: string
   jobTitle: string
   scheduledAt: string
+  /** IANA zone the interview was scheduled in; null/absent → UTC. */
+  timeZone?: string | null
   frontendUrl: string
 }
 
@@ -60,6 +66,8 @@ export interface InterviewReminderTemplateData {
   companyName: string
   jobTitle: string
   scheduledAt: string
+  /** IANA zone the interview was scheduled in; null/absent → UTC. */
+  timeZone?: string | null
   durationMinutes: number
   videoLink?: string
   frontendUrl: string

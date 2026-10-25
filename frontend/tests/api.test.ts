@@ -7,7 +7,7 @@
  * still logic testing, not component rendering (TESTING.md tier D).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { apiFetch, apiFetchBlob, ApiError } from '@/lib/api'
+import { apiFetch, apiFetchBlob, ApiError, apiErrorMessage } from '@/lib/api'
 import { setToken, getToken } from '@/lib/auth'
 
 const ok = (data: unknown, status = 200) =>
@@ -312,5 +312,22 @@ describe('attemptRefresh persists the new access token', () => {
       .mockResolvedValueOnce(ok({ id: 'j1' }))
 
     await expect(apiFetch('/api/jobs')).resolves.toEqual({ id: 'j1' })
+  })
+})
+
+describe('apiErrorMessage', () => {
+  it('prefers the first field-level validation message from a 422', () => {
+    const err = new ApiError('Validation failed', 422, {
+      details: { fieldErrors: { scheduled_at: ['scheduled_at must be in the future'] } },
+    })
+    expect(apiErrorMessage(err, 'fallback')).toBe('scheduled_at must be in the future')
+  })
+
+  it('falls back to the error message, then to the fallback', () => {
+    expect(apiErrorMessage(new ApiError('Job not found', 404, { error: 'Job not found' }), 'fallback')).toBe('Job not found')
+    expect(apiErrorMessage(new ApiError('Validation failed', 422, { details: { fieldErrors: {} } }), 'fallback')).toBe('Validation failed')
+    expect(apiErrorMessage(new Error(''), 'fallback')).toBe('fallback')
+    expect(apiErrorMessage('not an error', 'fallback')).toBe('fallback')
+    expect(apiErrorMessage(null, 'fallback')).toBe('fallback')
   })
 })

@@ -60,6 +60,8 @@ export interface ApiInterview {
   id: string; candidate_id: string; job_id: string; company_id: string
   interviewer_id: string; interview_type_id: string | null; scheduled_at: string
   duration_minutes: number; video_link: string | null; meeting_notes: string | null
+  /** IANA zone it was scheduled in; null for interviews created before it was stored. */
+  timezone: string | null
   status: string; created_at: string; candidate_name?: string | null
 }
 
@@ -106,6 +108,20 @@ export class ApiError extends Error {
   constructor(public message: string, public status: number, public data?: unknown) {
     super(message)
   }
+}
+
+/**
+ * The most specific message an API error carries: the first field-level
+ * validation message from a 422 (e.g. "scheduled_at must be in the future"),
+ * else the error's own message, else the fallback.
+ */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof Error)) return fallback
+  const details = err instanceof ApiError
+    ? (err.data as { details?: { fieldErrors?: Record<string, unknown> } } | undefined)?.details
+    : undefined
+  const first = Object.values(details?.fieldErrors ?? {}).flat().find((m): m is string => typeof m === 'string' && m.length > 0)
+  return first ?? (err.message || fallback)
 }
 
 // ── Refresh coalescing ────────────────────────────────────────────────────────
