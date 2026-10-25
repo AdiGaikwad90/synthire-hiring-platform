@@ -138,6 +138,17 @@ export const listCandidatesSchema = z.object({
   limit: z.coerce.number().int().positive().max(200).default(20),
 })
 
+/** Same limit the schedule form shows (0/500). */
+export const MEETING_NOTES_MAX = 500
+
+/** The interview statuses the product writes and the UI understands. */
+export const INTERVIEW_STATUSES = ['scheduled', 'completed'] as const
+
+export const updateInterviewSchema = z.object({
+  status: z.enum(INTERVIEW_STATUSES).optional(),
+  meeting_notes: z.string().max(MEETING_NOTES_MAX).optional(),
+})
+
 export const createInterviewSchema = z.object({
   candidate_id: z.string(),
   job_id: z.string(),
@@ -151,7 +162,7 @@ export const createInterviewSchema = z.object({
     if (/^https?:\/\//i.test(v)) return v
     return `https://${v}`
   }).pipe(z.string().url()).optional(),
-  meeting_notes: z.string().optional(),
+  meeting_notes: z.string().max(MEETING_NOTES_MAX).optional(),
   candidate_email_override: z.string().email().optional(),
 })
 

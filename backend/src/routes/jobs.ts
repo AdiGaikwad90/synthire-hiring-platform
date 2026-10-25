@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { zv } from '../types/api'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
@@ -19,7 +19,8 @@ import {
 } from '../db/queries/jobs'
 import { getJobSkillGaps } from '../db/queries/skill-matches'
 import { authMiddleware } from '../middleware/auth'
-import { requireRecruiter } from '../middleware/authorize'
+import { recruiterOnly, requireInterviewAccess } from '../middleware/authorize'
+import { hasAssignedInterview } from '../db/queries/interviews'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { coerceYears } from '../utils/numbers'
 import { extractPdfText } from '../services/parsing/pdf'
@@ -104,8 +105,16 @@ const router = new Hono<{ Bindings: Env }>()
 
 router.use('*', authMiddleware)
 
+// Interviewers may read a job only from an interview assigned to them.
+// Runs after the company-scoped fetch: another company's id stays a 404.
+function requireJobAccess(c: Context<{ Bindings: Env }>, jobId: string) {
+  const user = c.get('user')
+  return requireInterviewAccess(user, () =>
+    hasAssignedInterview(c.env.DB, user.company_id, user.sub, { jobId }))
+}
+
 // GET /api/jobs — list jobs for the authenticated user's company
-router.get('/', zv('query', listJobsSchema), async (c) => {
+router.get('/', recruiterOnly, zv('query', listJobsSchema), async (c) => {
   const { status, search, page, limit } = c.req.valid('query')
   const user = c.get('user')
   const { items, total } = await listJobs(c.env.DB, user.company_id, { status, search, page, limit })
@@ -113,7 +122,7 @@ router.get('/', zv('query', listJobsSchema), async (c) => {
 })
 
 // POST /api/jobs — create a new job
-router.post('/', zv('json', createJobSchema), async (c) => {
+router.post('/', recruiterOnly, zv('json', createJobSchema), async (c) => {
   const { jd_parse_id, ...body } = c.req.valid('json')
   const user = c.get('user')
   // Validate before inserting, so a bad parse ID creates nothing.
@@ -142,7 +151,7 @@ router.post('/', zv('json', createJobSchema), async (c) => {
 })
 
 // POST /api/jobs/parse-jd — start async JD parse; returns parseId immediately (202)
-router.post('/parse-jd', async (c) => {
+router.post('/parse-jd', recruiterOnly, async (c) => {
   const maxUploadBytes = parseInt(c.env.MAX_UPLOAD_BYTES ?? '10485760', 10)
 
   let formData: FormData
@@ -232,7 +241,7 @@ router.post('/parse-jd', async (c) => {
 })
 
 // GET /api/jobs/parse-jd/:parseId — poll for async JD parse result
-router.get('/parse-jd/:parseId', async (c) => {
+router.get('/parse-jd/:parseId', recruiterOnly, async (c) => {
   const user = c.get('user')
   const record = await readJdParse(c.env.KV_CACHE, c.req.param('parseId'))
   // Unknown, malformed or another tenant's parse all look like "still processing".
@@ -246,6 +255,7 @@ router.get('/:id/jd', async (c) => {
   const user = c.get('user')
   const job = await getJob(c.env.DB, c.req.param('id'), user.company_id)
   if (!job) throw new AppError('Job not found', 404)
+  await requireJobAccess(c, job.id)
   if (!job.jd_url) return c.json({ success: false, error: 'No JD file uploaded for this job' }, 404)
 
   const object = await getFromR2(c.env, job.jd_url)
@@ -270,9 +280,8 @@ router.get('/:id/jd', async (c) => {
 })
 
 // GET /api/jobs/:id/skill-gaps — per-skill verdict counts across scored applicants
-router.get('/:id/skill-gaps', async (c) => {
+router.get('/:id/skill-gaps', recruiterOnly, async (c) => {
   const user = c.get('user')
-  requireRecruiter(user)
   const jobId = c.req.param('id')
   if (!(await getJob(c.env.DB, jobId, user.company_id))) throw new AppError('Job not found', 404)
   return c.json(apiResponse(await getJobSkillGaps(c.env.DB, jobId, user.company_id)))
@@ -285,11 +294,12 @@ router.get('/:id', async (c) => {
   if (!job) {
     throw new AppError('Job not found', 404)
   }
+  await requireJobAccess(c, job.id)
   return c.json(apiResponse(job))
 })
 
 // PATCH /api/jobs/:id — partial update
-router.patch('/:id', zv('json', updateJobSchema), async (c) => {
+router.patch('/:id', recruiterOnly, zv('json', updateJobSchema), async (c) => {
   const { jd_parse_id, ...body } = c.req.valid('json')
   const user = c.get('user')
   const jdParse = jd_parse_id ? await resolveJdParse(c.env.KV_CACHE, jd_parse_id, user.company_id) : null
@@ -313,7 +323,7 @@ router.patch('/:id', zv('json', updateJobSchema), async (c) => {
 })
 
 // DELETE /api/jobs/:id — soft delete (set status='closed')
-router.delete('/:id', async (c) => {
+router.delete('/:id', recruiterOnly, async (c) => {
   const user = c.get('user')
   const deleted = await deleteJob(c.env.DB, c.req.param('id'), user.company_id)
   if (!deleted) {

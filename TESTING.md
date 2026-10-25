@@ -69,7 +69,7 @@ Chasing 1:1 produces assertion-free filler. Every source file sits in a tier:
 
 | Tier | Applies to | Requirement |
 |---|---|---|
-| **A — Exhaustive** | `services/scoring/**`, `services/budget/**`, `services/parsing/detector.ts`, `middleware/auth.ts`, `middleware/cors.ts`, `utils/**` | Every branch and boundary. New code needs tests in the same PR. |
+| **A — Exhaustive** | `services/scoring/**`, `services/budget/**`, `services/parsing/detector.ts`, `middleware/auth.ts`, `middleware/authorize.ts`, `middleware/cors.ts`, `utils/**` | Every branch and boundary. New code needs tests in the same PR. |
 | **B — Contract** | `routes/**`, `db/queries/**`, `services/email/**` | Happy path + the auth/tenant matrix + at least one malformed-input case |
 | **C — Smoke** | `middleware/logger.ts`, email templates | Runs without throwing |
 | **D — Exempt** | `types/**`, barrel files, `db/migrations/**`, `frontend` `.tsx` components, `frontend/lib/data.ts` | No test. Listed explicitly so it is a decision, not an oversight. |
@@ -103,6 +103,13 @@ At the route level (Tier B) the same six become: 200 on valid input; an
 alternate valid payload; boundary (`limit=1`, `limit=max`, empty result set);
 **422 with Zod detail** on invalid input; **401** on missing/forged/expired
 token; **403/404** for the wrong tenant.
+
+**Role coverage is enforced, not remembered.** `tests/integration/routes/role-scoping.test.ts`
+holds `ACCESS`, the role rule for every route, and its first test compares it
+with `app.routes`: adding a route without classifying it fails the suite. The
+same file sends a *valid* request as an interviewer to every recruiter-only
+route and asserts 403 **and** an unchanged snapshot of rows, files and KV — so a
+missing guard shows up as a real write, not just a status code.
 
 Three rules for invalid input:
 1. Assert the **status and the error shape**, not merely that it failed.

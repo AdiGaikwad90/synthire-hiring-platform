@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
-import { requireRecruiter } from '../middleware/authorize'
-import { apiResponse, paginatedResponse, AppError, updateEmailPreferencesSchema } from '../types/api'
+import { recruiterOnly } from '../middleware/authorize'
+import { apiResponse, paginatedResponse, updateEmailPreferencesSchema } from '../types/api'
 import { authMiddleware } from '../middleware/auth'
 import {
   updateEmailLogStatus,
@@ -204,6 +204,7 @@ router.use('/preferences', authMiddleware)
 // GET /api/email/logs
 router.get(
   '/logs',
+  recruiterOnly,
   zValidator(
     'query',
     z.object({
@@ -215,9 +216,6 @@ router.get(
   ),
   async (c) => {
     const user = c.get('user')
-
-    requireRecruiter(user)
-
     const { type, status, page, limit } = c.req.valid('query')
 
     const result = await listEmailLogs(c.env.DB, user.company_id, {

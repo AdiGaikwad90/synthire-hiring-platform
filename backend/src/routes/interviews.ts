@@ -2,9 +2,10 @@ import { Hono } from 'hono'
 import { zv } from '../types/api'
 import { z } from 'zod'
 import type { Env } from '../types/bindings'
-import { requireOwnInterview } from '../middleware/authorize'
+import { recruiterOnly, requireOwnInterview } from '../middleware/authorize'
 import {
   createInterviewSchema,
+  updateInterviewSchema,
   submitFeedbackSchema,
   apiResponse,
   paginatedResponse,
@@ -53,7 +54,7 @@ router.get('/', zv('query', listInterviewsQuerySchema), async (c) => {
 })
 
 // POST /api/interviews — create a new interview
-router.post('/', zv('json', createInterviewSchema), async (c) => {
+router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => {
   const body = c.req.valid('json')
   const user = c.get('user')
   const db = c.env.DB
@@ -239,10 +240,8 @@ router.get('/:id', async (c) => {
 // PATCH /api/interviews/:id — update status or meeting notes
 router.patch(
   '/:id',
-  zv('json', z.object({
-    status: z.string().optional(),
-    meeting_notes: z.string().optional(),
-  })),
+  recruiterOnly,
+  zv('json', updateInterviewSchema),
   async (c) => {
     const body = c.req.valid('json')
     const user = c.get('user')

@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../types/bindings'
-import { requireRecruiter } from '../middleware/authorize'
-import { apiResponse, AppError } from '../types/api'
+import { recruiterOnly } from '../middleware/authorize'
+import { apiResponse } from '../types/api'
 import { authMiddleware } from '../middleware/auth'
 import {
   getFunnelData,
@@ -24,10 +24,7 @@ router.use('*', authMiddleware)
 // is not populated before it. Guarding the router rather than each route is why
 // /funnel, /time-to-hire, /summary, /activity and /sources cannot be missed
 // again: a new endpoint added below inherits the guard automatically.
-router.use('*', async (c, next) => {
-  requireRecruiter(c.get('user'))
-  await next()
-})
+router.use('*', recruiterOnly)
 
 // GET /api/analytics/funnel
 router.get('/funnel', async (c) => {
@@ -85,7 +82,7 @@ router.get('/r2-usage', async (c) => {
 
 // GET /api/analytics/quota-usage  (recruiter/admin only — D1 + KV daily quotas)
 router.get('/quota-usage', async (c) => {
-  // No per-route guard needed — the router-level requireRecruiter covers it.
+  // No per-route guard needed — the router-level recruiterOnly covers it.
   const snapshot = await getQuotaSnapshot(c.env.DB, buildQuotaConfig(c.env))
   return c.json(apiResponse(snapshot))
 })

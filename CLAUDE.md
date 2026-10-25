@@ -73,7 +73,7 @@ are worse than none, because they get trusted.
 | Changed a guardrail or its default | guardrails table in `backend/CLAUDE.md` |
 | Changed testing setup, tiers, or thresholds | `TESTING.md` |
 | **Fixed** something in a "known drift" table | **delete that row** — the table must shrink as it is worked off |
-| Found a bug, or started/fixed a `BACKLOG.md` item | `BACKLOG.md` (row + section, status, PR) **and** the tracker page it links to — same session, see "How this backlog works" there |
+| Found a bug, or started/fixed a `docs/BACKLOG.md` item | `docs/BACKLOG.md` (row + section, status, PR) **and** the tracker page it links to — same session, see "How this backlog works" there |
 | Wired up something previously listed as a placeholder | "Not yet wired" section below |
 
 Two rules that keep this honest:
@@ -100,7 +100,7 @@ Two rules that keep this honest:
 
 - Access token: JWT HS256 (`jose`), **15-minute** expiry. Refresh token: 30-day opaque token, stored hashed in `refresh_tokens`, rotated on use via `POST /api/auth/refresh`.
 - **Primary auth is the `Authorization: Bearer` header** (token in `localStorage`). The `synthire_token` cookie is secondary — it exists so `frontend/middleware.ts` can gate routes, and only works same-domain.
-- Roles: `recruiter` | `interviewer` | `admin`. **Interviewers are scoped** — they may only see their own interviews. Preserve this in any new query.
+- Roles: `recruiter` | `interviewer` | `admin`. **Interviewers are scoped** — their own interviews, plus the candidate and job of an interview assigned to them; everything else is recruiter/admin only (`backend/CLAUDE.md` → Auth). Every new route must be added to `ACCESS` in `backend/tests/integration/routes/role-scoping.test.ts` — the suite fails until it is.
 - Unauthenticated routes: `/api/auth/*`, `/api/email/resend-callback`, `/api/email/unsubscribe`, `/health`.
 
 ---
