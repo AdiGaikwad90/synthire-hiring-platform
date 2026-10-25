@@ -52,8 +52,8 @@ the history is readable.
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
-| SYN-058 | P1 | Open | Candidates | Resume and JD previews are blank in Safari |
-| SYN-060 | P1 | Open | Security | Production serves no security headers |
+| SYN-058 | P1 | In progress | Candidates | Resume and JD previews are blank in Safari |
+| SYN-060 | P1 | In progress | Security | Production serves no security headers |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -102,6 +102,9 @@ the history is readable.
 | SYN-055 | P3 | Open | Interviews | Recruiters get the interviewer's interview screen |
 | SYN-056 | P3 | Open | Data | No audit log |
 | SYN-057 | P3 | Open | Ops | /health doesn't report AI budget or database latency |
+| SYN-061 | P3 | Open | Interviews | Interview room offers no download for Word resumes |
+| SYN-062 | P3 | Open | UX | Dates rendered on the server use UTC, causing a hydration error near midnight |
+| SYN-063 | P3 | Open | Candidates | Parsed resume preview shows the AI's verdict as the resume's summary |
 
 ---
 
@@ -185,14 +188,14 @@ the history is readable.
 - **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/2 — merged 2026-10-25 as `b7d803e`; deploy run 40199641813 (backend + frontend production `success`), `/health` ok. Verified in Safari/WebKit before merge: interviewer flow works, 15 recruiter-only/unassigned API calls → 403, other company → 404, no data changed.
 
 ### SYN-058 · Resume and JD previews are blank in Safari
-**P1** · Candidates · Bug · Status: **Open** · Found 2026-10-25
+**P1** · Candidates · Bug · Status: **In progress** · Found 2026-10-25
 
 - **Problem:** In Safari (WebKit 26.6) the resume pane on the candidate page and the resume and JD tabs in the interview room stay empty, with "Refused to load blob:… because it does not appear in the frame-ancestors directive of the Content Security Policy". The viewers fetch the file, wrap it in a `blob:` URL and frame it; a `blob:` document inherits the page's CSP, so `frame-ancestors 'none'` (and `X-Frame-Options: DENY`) forbids framing it even by the app itself. Chrome doesn't apply the inherited rule, which is why it went unnoticed.
 - **Where:** `frontend/next.config.mjs:17-18` and `:59`; iframes in `frontend/components/(recruiter)/CandidateDetail.tsx:169`, `frontend/components/(interviewer)/InterviewConduct.tsx:293` and `:405`.
 - **Done when:** all three previews render in Safari and Chrome, other sites still can't frame the app (clickjacking protection kept), and the fix is verified in the Safari Playwright pass.
 
 ### SYN-060 · Production serves no security headers
-**P1** · Security · Bug · Status: **Open** · Found 2026-10-25
+**P1** · Security · Bug · Status: **In progress** · Found 2026-10-25
 
 - **Problem:** The CSP, `X-Frame-Options`, HSTS, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy` defined in `next.config.mjs` `headers()` are served by `next dev` but not by the Cloudflare Pages build (`@cloudflare/next-on-pages`): production `/login` returns none of them. Any site can frame the app (clickjacking) and there is no CSP. It also hides SYN-058 in production — once the headers are served, Safari previews break there too unless the framing rule changes with them.
 - **Where:** `frontend/next.config.mjs:7-64`, `frontend/middleware.ts`, `npm run build:cf` / `deploy` in `frontend/package.json`.
@@ -277,7 +280,7 @@ the history is readable.
 ### SYN-020 · Upload screens promise features that don't exist
 **P2** · Upload · Fake content · Status: **Open** · Found 2026-10-24
 
-- **Problem:** The dropzone says "PDFs, Word docs, or plain text — up to 200 files" and the modal says "Parse 100/min · Concurrent OCR + LLM extraction". The backend accepts only PDF and DOCX, and there is no OCR (scanned PDFs fail).
+- **Problem:** The dropzone says "PDFs, Word docs, or plain text — up to 200 files" and the modal says "Parse 100/min · Concurrent OCR + LLM extraction" and shows a made-up ETA ("0/1 scored · ~1s remaining" while a resume takes 50+ s). The backend accepts only PDF and DOCX, and there is no OCR (scanned PDFs fail).
 - **Where:** `frontend/components/(recruiter)/Dropzone.tsx:52`, `ResumeBatchModal.tsx:166`.
 - **Done when:** the copy states what the product really does.
 
@@ -559,6 +562,27 @@ the history is readable.
 - **Where:** `backend/src/routes/health.ts`.
 - **Done when:** an operator can see today's Neuron usage and D1 latency without opening the analytics pages (on `/health` or an admin route) and without adding KV writes.
 - **Source:** production-readiness D5.
+
+### SYN-061 · Interview room offers no download for Word resumes
+**P3** · Interviews · Gap · Status: **Open** · Found 2026-10-25
+
+- **Problem:** For a `.docx` resume the interview room's Resume tab shows only the parsed data — no note that a preview isn't possible and no way to download the original, which the candidate page now offers.
+- **Where:** `frontend/components/(interviewer)/InterviewConduct.tsx:250-300` (the Download button exists only in the PDF branch).
+- **Done when:** Word resumes show the same "Preview isn't available" note and a Download button as the candidate page.
+
+### SYN-062 · Dates rendered on the server use UTC, causing a hydration error near midnight
+**P3** · UX · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** The dashboard greeting date is rendered on the server in UTC and again in the browser's time zone. Around midnight they differ ("Sunday, October 25" vs "Monday, October 26" in Asia/Kolkata), React logs error #418 and re-renders. Verified on the Pages build on 2026-10-25.
+- **Where:** `frontend/components/(recruiter)/Dashboard.tsx:16` (`formatDateLong(new Date())` during render); check `InterviewerHome.tsx`'s greeting the same way.
+- **Done when:** time-of-day text is computed only in the browser (after mount), and no hydration error appears at any hour.
+
+### SYN-063 · Parsed resume preview shows the AI's verdict as the resume's summary
+**P3** · Candidates · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** On the candidate page, the parsed-resume preview (used for Word files and when the PDF can't load) shows the AI's evaluation ("Strong fit with 6 years… evidencing all required technologies") under "SUMMARY", as if the candidate wrote it. Dana Cho's resume actually says "Data engineer with 6 years building batch and streaming pipelines."
+- **Where:** `ResumePreview` in `frontend/components/(recruiter)/CandidateDetail.tsx`; the parsed resume's own summary field.
+- **Done when:** the preview shows the resume's own summary (or none), and the AI's verdict appears only in the AI analysis areas.
 
 ---
 

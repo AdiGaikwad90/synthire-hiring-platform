@@ -86,6 +86,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── utils.ts              # cn(), initials(), formatDate()
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
     ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
+    ├── security-headers.ts   # CSP + framing/HSTS headers, applied by middleware.ts (pure, tested)
     └── icons.tsx             # the icon set
 ```
 
@@ -122,8 +123,17 @@ const data = await apiFetch("/api/candidates")
 
 ## 4b. Content Security Policy
 
-The CSP lives in `next.config.mjs` and is enforced in `next dev`. Two rules that
-have already cost debugging time:
+The CSP and the other security headers live in `lib/security-headers.ts` and
+are applied to every page by `middleware.ts` — in `next dev` **and** on Cloudflare
+Pages. Never put them back in `next.config.mjs` `headers()`: `next dev` honours
+it, but the Pages build silently drops it, which left production with no headers
+at all (SYN-060). Three rules that have already cost debugging time:
+
+- **`frame-ancestors 'self'`, never `'none'`** (and `X-Frame-Options: SAMEORIGIN`,
+  not `DENY`). Safari applies the page's `frame-ancestors` to the `blob:`
+  documents the viewers frame, so `'none'` blanked our own resume and JD previews
+  there while Chrome showed them (SYN-058). `'self'` still stops other sites from
+  framing the app. A test in `tests/security-headers.test.ts` pins this.
 
 - **`frame-src` has no fallback you can rely on.** It falls back to
   `default-src 'self'`, and a `blob:` URL is not `'self'`. The resume viewer

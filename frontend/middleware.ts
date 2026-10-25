@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { securityHeaders } from '@/lib/security-headers'
 
 const RECRUITER_ROUTES = ['/dashboard', '/jobs', '/candidates', '/pipeline', '/analytics', '/settings']
 const INTERVIEWER_ROUTES = ['/interviewer']
 // /interviews is accessible to both roles
 
+// NEXT_PUBLIC_ vars are inlined at build time, so this is computed once.
+const SECURITY_HEADERS = securityHeaders(process.env.NEXT_PUBLIC_API_URL)
+
+/**
+ * Every page response passes through here, in `next dev` and on Cloudflare
+ * Pages alike — which is why the security headers are set here rather than in
+ * next.config.mjs, whose `headers()` the Pages build ignores (SYN-060).
+ */
 export function middleware(request: NextRequest) {
+  const res = route(request)
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.headers.set(name, value)
+  return res
+}
+
+function route(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl
 
   const isProtected = [...RECRUITER_ROUTES, ...INTERVIEWER_ROUTES, '/interviews'].some(
