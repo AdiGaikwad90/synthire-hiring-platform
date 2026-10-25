@@ -106,6 +106,8 @@ the history is readable.
 | SYN-061 | P3 | Open | Interviews | Interview room offers no download for Word resumes |
 | SYN-062 | P3 | Open | UX | Dates rendered on the server use UTC, causing a hydration error near midnight |
 | SYN-063 | P3 | Open | Candidates | Parsed resume preview shows the AI's verdict as the resume's summary |
+| SYN-065 | P3 | Open | Interviews | Interviewer "Today" tab uses the UTC date |
+| SYN-066 | P3 | Open | Email | An interview less than 24 h away gets its "reminder" immediately |
 
 ---
 
@@ -593,6 +595,20 @@ the history is readable.
 - **Problem:** On the candidate page, the parsed-resume preview (used for Word files and when the PDF can't load) shows the AI's evaluation ("Strong fit with 6 years… evidencing all required technologies") under "SUMMARY", as if the candidate wrote it. Dana Cho's resume actually says "Data engineer with 6 years building batch and streaming pipelines."
 - **Where:** `ResumePreview` in `frontend/components/(recruiter)/CandidateDetail.tsx`; the parsed resume's own summary field.
 - **Done when:** the preview shows the resume's own summary (or none), and the AI's verdict appears only in the AI analysis areas.
+
+### SYN-065 · Interviewer "Today" tab uses the UTC date
+**P3** · Interviews · Bug · Status: **Open** · Found 2026-10-26
+
+- **Problem:** The interviewer home decides which interviews are "today" by comparing `scheduled_at` with today's date in UTC, so for anyone not on UTC the Today tab and count are wrong for part of the day (in India, interviews between midnight and 5:30 AM local count as the previous day).
+- **Where:** `frontend/components/(interviewer)/InterviewerHome.tsx:23-24` (`new Date().toISOString().split('T')[0]` + `startsWith`).
+- **Done when:** "today" is the viewer's local calendar day, with a test around midnight.
+
+### SYN-066 · An interview less than 24 h away gets its "reminder" immediately
+**P3** · Email · Bug · Status: **Open** · Found 2026-10-26
+
+- **Problem:** The 24-hours-before reminder is queued for `scheduled_at − 24 h` even when that moment has already passed, so an interview booked for later today sends the confirmation and a "reminder" back to back.
+- **Where:** `backend/src/routes/interviews.ts:173-212` (`reminderTime` is never compared with now).
+- **Done when:** no reminder is queued when the interview is under 24 h away (or a shorter, sensible lead time is used), covered by a test.
 
 ---
 
