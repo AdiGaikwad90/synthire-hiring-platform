@@ -1,18 +1,6 @@
 import type { InterviewScheduledTemplateData } from '../../../types/email'
 import { escapeHtml, safeHref } from '../../../utils/html'
-
-function formatDateTime(isoString: string): string {
-  const date = new Date(isoString)
-  return date.toLocaleString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZoneName: 'short',
-  })
-}
+import { formatInterviewTime } from '../../../utils/dates'
 
 export function renderInterviewScheduled(data: InterviewScheduledTemplateData): { subject: string; html: string } {
   const subject = `Interview Confirmed — ${data.companyName}`
@@ -20,7 +8,7 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
 
   const calendarSubject = encodeURIComponent(`Interview with ${data.companyName} — ${data.jobTitle}`)
   const calendarBody = encodeURIComponent(
-    `Interview scheduled for ${formatDateTime(data.scheduledAt)}\nDuration: ${data.durationMinutes} minutes${data.videoLink ? `\nVideo Link: ${data.videoLink}` : ''}`
+    `Interview scheduled for ${formatInterviewTime(data.scheduledAt, data.timeZone)}\nDuration: ${data.durationMinutes} minutes${data.videoLink ? `\nVideo Link: ${data.videoLink}` : ''}`
   )
   const calendarHref = `mailto:?subject=${calendarSubject}&body=${calendarBody}`
 
@@ -41,7 +29,7 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
       <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${escapeHtml(data.companyName)}</p>
       <p style="color: #374151; margin: 8px 0;"><strong>Role:</strong> ${escapeHtml(data.jobTitle)}</p>
-      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${escapeHtml(formatDateTime(data.scheduledAt))}</p>
+      <p style="color: #374151; margin: 8px 0;"><strong>Date &amp; Time:</strong> ${escapeHtml(formatInterviewTime(data.scheduledAt, data.timeZone))}</p>
       <p style="color: #374151; margin: 8px 0;"><strong>Duration:</strong> ${escapeHtml(data.durationMinutes)} minutes</p>
       ${videoSection}
     </div>

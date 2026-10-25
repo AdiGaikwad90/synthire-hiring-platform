@@ -93,6 +93,8 @@ export interface InterviewRow {
   duration_minutes: number
   video_link: string | null
   meeting_notes: string | null
+  /** IANA zone it was scheduled in (0010); null for older interviews → emails use UTC. */
+  timezone: string | null
   status: string
   email_sent_at: string | null
   reminder_sent_at: string | null

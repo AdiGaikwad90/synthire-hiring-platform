@@ -5,6 +5,8 @@ import { Modal, Button, Badge, Input, Textarea, useToast, Select } from "@/compo
 import { useInterviewTypes } from "@/hooks/queries/useSettings";
 import { useScheduleInterview } from "@/hooks/queries/useInterviews";
 import { useJob } from "@/hooks/queries/useJobs";
+import { apiErrorMessage } from "@/lib/api";
+import { browserTimeZone, formatInZone, preferredZone, sameZone, timeZoneOptions, wallTimeIn, zonedTimeToUtc } from "@/lib/timezones";
 
 interface ScheduleModalProps {
   c?: { name: string; email: string | null; id?: string; job_id?: string };
@@ -16,7 +18,7 @@ interface ScheduleModalProps {
 export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalProps) {
   const toast = useToast();
   const { data: interviewTypes = [] } = useInterviewTypes();
-  const { mutate: scheduleInterview } = useScheduleInterview();
+  const { mutate: scheduleInterview, isPending: scheduling } = useScheduleInterview();
 
   const actualCandidateId = candidateId ?? c?.id ?? '';
   const actualJobId = jobId ?? c?.job_id ?? '';
@@ -28,15 +30,25 @@ export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalP
     ? c.name
     : 'the candidate';
 
-  const today = new Date();
+  // Default to the viewer's own zone — it used to be hard-coded to Pacific.
+  // preferredZone: Chrome reports India as "Asia/Calcutta"; match the listed "Asia/Kolkata".
+  const viewerZone = React.useMemo(() => preferredZone(browserTimeZone()), []);
+  // Default slot: 2 PM today, or tomorrow if today's 2 PM has already gone by,
+  // so the form never opens on a time it would refuse.
+  const defaultDay = React.useMemo(() => {
+    const now = new Date();
+    const today = wallTimeIn(now, viewerZone);
+    const todayAt2 = zonedTimeToUtc({ ...today, hour: 14, minute: 0 }, viewerZone);
+    return todayAt2.getTime() > now.getTime() ? today : wallTimeIn(new Date(now.getTime() + 24 * 60 * 60 * 1000), viewerZone);
+  }, [viewerZone]);
   const [round, setRound] = React.useState('');
   const [interviewerEmail, setInterviewerEmail] = React.useState('');
-  const [calYear, setCalYear] = React.useState(today.getFullYear());
-  const [calMonth, setCalMonth] = React.useState(today.getMonth() + 1); // 1-based
-  const [date, setDate] = React.useState(today.getDate());
+  const [calYear, setCalYear] = React.useState(defaultDay.year);
+  const [calMonth, setCalMonth] = React.useState(defaultDay.month); // 1-based
+  const [date, setDate] = React.useState(defaultDay.day);
   const [hour, setHour] = React.useState(14);
   const [minute, setMinute] = React.useState(0);
-  const [tz, setTz] = React.useState('America/Los_Angeles');
+  const [tz, setTz] = React.useState(viewerZone);
   const [link, setLink] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [showPreview, setShowPreview] = React.useState(false);
@@ -48,14 +60,30 @@ export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalP
   const daysInMonth = new Date(calYear, calMonth, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const firstDow = new Date(calYear, calMonth - 1, 1).getDay();
-  const disabledDays = new Set<number>();
+
+  // SYN-002: the picked wall time is read IN THE PICKED ZONE. It used to be
+  // `new Date(y, m, d, h, mi)`, i.e. the browser's zone, with the picker ignored.
+  const instant = React.useMemo(() => {
+    try { return zonedTimeToUtc({ year: calYear, month: calMonth, day: date, hour, minute }, tz); }
+    catch { return null; }
+  }, [calYear, calMonth, date, hour, minute, tz]);
+  // SYN-027: no past days, and no time today that has already gone by — judged
+  // in the picked zone, where "today" may differ from the viewer's.
+  const todayInZone = wallTimeIn(new Date(), tz);
+  const monthIndex = (y: number, m: number) => y * 12 + m;
+  const viewingPastMonth = monthIndex(calYear, calMonth) < monthIndex(todayInZone.year, todayInZone.month);
+  const viewingCurrentMonth = monthIndex(calYear, calMonth) === monthIndex(todayInZone.year, todayInZone.month);
+  const disabledDays = new Set<number>(
+    viewingPastMonth ? days : viewingCurrentMonth ? days.filter((d) => d < todayInZone.day) : [],
+  );
+  const isPast = !instant || instant.getTime() <= Date.now();
+  const zoneOptions = React.useMemo(() => timeZoneOptions(viewerZone), [viewerZone]);
 
   const firstName = displayName === 'the candidate' ? 'there' : displayName.split(' ')[0];
 
   React.useEffect(() => {
-    const monthName = new Date(calYear, calMonth - 1, 1).toLocaleString('default', { month: 'long' });
-    const timeStr = `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`;
-    const dateStr = `${monthName} ${date}, ${calYear} at ${timeStr}`;
+    // Same format and zone as the email the backend sends (formatInterviewTime).
+    const dateStr = instant ? formatInZone(instant, tz) : '—';
     const duration = selRound?.duration_minutes ?? 60;
     const roundName = selRound?.name ?? 'next round';
     const formatLine = `Video call${link ? ' — ' + link : ''}`;
@@ -80,7 +108,7 @@ We look forward to speaking with you!
 Best regards,
 The Hiring Team`
     );
-  }, [date, hour, minute, calMonth, calYear, selRound, link, notes, firstName, jobTitle]);
+  }, [instant, tz, selRound, link, notes, firstName, jobTitle]);
 
 
   return (
@@ -98,13 +126,20 @@ The Hiring Team`
           <Button
             variant="primary"
             icon={<Icon.Send size={13} />}
+            disabled={isPast || scheduling}
             onClick={() => {
+              // Re-check at click time: the form may have sat open past the slot.
+              if (!instant || instant.getTime() <= Date.now()) {
+                toast({ message: 'That time has already passed — pick a later one.', variant: 'error' });
+                return;
+              }
               scheduleInterview({
                 candidate_id: actualCandidateId,
                 job_id: actualJobId,
                 interviewer_email: interviewerEmail || undefined,
                 interview_type_id: round || undefined,
-                scheduled_at: new Date(calYear, calMonth - 1, date, hour, minute, 0).toISOString(),
+                scheduled_at: instant.toISOString(),
+                timezone: tz,
                 duration_minutes: selRound?.duration_minutes ?? 60,
                 video_link: link || undefined,
                 meeting_notes: notes || undefined,
@@ -114,8 +149,8 @@ The Hiring Team`
                   toast({ message: `Interview scheduled with ${displayName}.` });
                   onClose();
                 },
-                onError: (err: any) => {
-                  toast({ message: err?.message ?? 'Failed to schedule interview', variant: 'error' });
+                onError: (err) => {
+                  toast({ message: apiErrorMessage(err, 'Failed to schedule interview'), variant: 'error' });
                 },
               });
             }}
@@ -175,7 +210,7 @@ The Hiring Team`
 
           <div className="tsCal">
             <div className="tsCal-head">
-              <button className="tsIconBtn" aria-label="Previous month" onClick={() => {
+              <button className="tsIconBtn" aria-label="Previous month" disabled={viewingPastMonth || viewingCurrentMonth} onClick={() => {
                 if (calMonth === 1) { setCalYear(y => y - 1); setCalMonth(12); } else { setCalMonth(m => m - 1); }
                 setDate(1);
               }}><Icon.ChevronLeft size={14} /></button>
@@ -228,16 +263,20 @@ The Hiring Team`
             <Select
               value={tz}
               onChange={e => setTz(e.target.value)}
-              options={[
-                { value: 'America/Los_Angeles', label: 'Pacific (PT)' },
-                { value: 'America/New_York', label: 'Eastern (ET)' },
-                { value: 'Europe/London', label: 'London (GMT)' },
-                { value: 'Asia/Kolkata', label: 'India (IST)' },
-                { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
-                { value: 'UTC', label: 'UTC' },
-              ]}
+              aria-label="Time zone"
+              options={zoneOptions}
             />
           </div>
+          {isPast ? (
+            <div className="small" role="alert" style={{ color: "var(--danger)", marginTop: 8 }}>
+              That time has already passed{!sameZone(tz, viewerZone) ? ` in ${tz}` : ''}. Pick a later day or time.
+            </div>
+          ) : instant && (
+            <div className="small" style={{ color: "var(--muted)", marginTop: 8, display: "grid", gap: 2 }}>
+              <span>Interview: <b style={{ color: "var(--text-2)" }}>{formatInZone(instant, tz)}</b></span>
+              {!sameZone(tz, viewerZone) && <span>Your time: {formatInZone(instant, viewerZone)}</span>}
+            </div>
+          )}
         </div>
 
         <div className="tsSched-step">

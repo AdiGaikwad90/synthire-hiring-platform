@@ -87,6 +87,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
     ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     ├── security-headers.ts   # CSP + framing/HSTS headers, applied by middleware.ts (pure, tested)
+    ├── timezones.ts          # wall time in a chosen zone ↔ instant, zone picker options (pure, tested)
     └── icons.tsx             # the icon set
 ```
 
@@ -173,6 +174,17 @@ for another. Any new format goes into `lib/utils.ts` as a named export
 (`formatDateTime`, `formatRelative`), not inline.
 
 Same rule for initials: `initials()` from `@/lib/utils`, or just use `Avatar`.
+
+**A time the user picks in a zone goes through `@/lib/timezones`.** Never build
+an instant with `new Date(y, m, d, h, mi)` — that reads the numbers in the
+*browser's* zone, which is how "2 PM Pacific" from an IST browser was saved as
+2 PM IST (SYN-002). Use `zonedTimeToUtc(wallTime, zone)`, and compare zones with
+`sameZone()` (browsers report aliases: Chrome says `Asia/Calcutta` for
+`Asia/Kolkata`).
+
+**Show API validation messages with `apiErrorMessage(err, fallback)`** from
+`@/lib/api` — it surfaces the first field-level 422 message (e.g. "scheduled_at
+must be in the future") instead of a generic "Validation failed".
 
 ---
 

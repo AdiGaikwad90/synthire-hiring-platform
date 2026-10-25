@@ -48,9 +48,9 @@ All resource IDs are already committed in `wrangler.toml` for dev, staging, and 
 
 ## Database (D1)
 
-13 tables across migrations `0001`–`0009`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
+13 tables across migrations `0001`–`0010`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
 
-Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`.
+Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`, `0010` added `interviews.timezone` (the IANA zone an interview was scheduled in; NULL for older rows).
 
 ---
 
@@ -173,6 +173,8 @@ Queue-only. `queueEmail()` inserts into `email_queue` (`status = 'pending'`); th
 1. Atomic `UPDATE...RETURNING` claims up to 10 rows (`status → 'claimed'`) — this is what prevents double-sends across concurrent cron runs. Don't replace it with select-then-update.
 2. `renderTemplate()` → `sendEmail()`, routed by `EMAIL_PROVIDER` to SendGrid (dev + production) or Resend (staging).
 3. Log to `email_logs`; on failure back off exponentially until `EMAIL_MAX_RETRIES`.
+
+**Interview times in emails** go through `formatInterviewTime(iso, timeZone)` (`src/utils/dates.ts`) with the interview's stored `timezone`, passed as `timeZone` in the template data — the Worker runs in UTC, so formatting without a zone showed candidates UTC times. Interviews with no stored zone render in UTC, labelled. Keep its options in step with `formatInZone()` in `frontend/lib/timezones.ts`, which renders the scheduling form's email preview. `POST /api/interviews` rejects (422) an unknown zone and a `scheduled_at` that is not in the future.
 
 Types: `magic_link`, `interview_scheduled`, `interview_reminder`, `resume_uploaded`, `feedback_reminder`. `renderTemplate()` uses an exhaustive switch with a `never` default — adding a type means updating `EmailType` in `src/types/email.ts` too.
 
