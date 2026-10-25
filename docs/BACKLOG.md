@@ -52,6 +52,7 @@ the history is readable.
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | In progress | Security | Interviewers can change recruiter data |
+| SYN-058 | P1 | Open | Candidates | Resume and JD previews are blank in Safari |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -70,6 +71,7 @@ the history is readable.
 | SYN-045 | P2 | Open | Auth | No password reset |
 | SYN-046 | P2 | Open | AI | All companies share one daily AI budget |
 | SYN-047 | P2 | Open | Observability | Production errors are invisible |
+| SYN-059 | P2 | Open | AI | AI question generation fails silently |
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
 | SYN-026 | P3 | Open | UX | Some dates bypass the shared date formatters |
@@ -179,6 +181,13 @@ the history is readable.
 - **Where:** `backend/src/routes/jobs.ts:116`, `:145`, `:292`, `:316`; `backend/src/routes/candidates.ts:36`, `:124`, `:156`, `:262`; `backend/src/routes/interview-types.ts:25`, `:33`, `:44`; `backend/src/routes/interviews.ts:56`, `:240-257`; guards live in `backend/src/middleware/authorize.ts`.
 - **Done when:** every write route calls `requireRecruiter`, interviewer reads are limited to the candidates and jobs of their own interviews, `PATCH /api/interviews/:id` checks ownership and validates status against the enum, and `tests/integration/routes/auth-matrix.test.ts` covers each route for the interviewer role.
 - **Source:** production-readiness A1 (the part still open).
+
+### SYN-058 · Resume and JD previews are blank in Safari
+**P1** · Candidates · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** In Safari (WebKit 26.6) the resume pane on the candidate page and the resume and JD tabs in the interview room stay empty, with "Refused to load blob:… because it does not appear in the frame-ancestors directive of the Content Security Policy". The viewers fetch the file, wrap it in a `blob:` URL and frame it; a `blob:` document inherits the page's CSP, so `frame-ancestors 'none'` (and `X-Frame-Options: DENY`) forbids framing it even by the app itself. Chrome doesn't apply the inherited rule, which is why it went unnoticed.
+- **Where:** `frontend/next.config.mjs:17-18` and `:59`; iframes in `frontend/components/(recruiter)/CandidateDetail.tsx:169`, `frontend/components/(interviewer)/InterviewConduct.tsx:293` and `:405`.
+- **Done when:** all three previews render in Safari and Chrome, other sites still can't frame the app (clickjacking protection kept), and the fix is verified in the Safari Playwright pass.
 
 ## P2
 
@@ -316,6 +325,13 @@ the history is readable.
 - **Where:** `backend/src/index.ts:82-83`, `backend/src/middleware/error.ts`.
 - **Done when:** unhandled errors from the fetch, queue and scheduled handlers reach an error tracker (Sentry via `SENTRY_DSN`, or Workers Logs with alerts) with the request ID.
 - **Source:** production-readiness D6.
+
+### SYN-059 · AI question generation fails silently
+**P2** · AI · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** When `POST /api/candidates/:id/questions` fails (a transient Workers AI error returned 503 during the 2026-10-25 pass), the AI questions panel quietly returns to its empty "Generate questions" state with no message, so the user can't tell it failed or that retrying will help.
+- **Where:** `frontend/components/(interviewer)/InterviewConduct.tsx:464-468` (`generate()` has no `onError`); check the candidate page's generator the same way.
+- **Done when:** a failed generation shows what happened and offers a retry on every screen that generates questions, and the 503 path is covered by a test.
 
 ## P3
 
