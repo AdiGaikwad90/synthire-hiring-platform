@@ -52,8 +52,8 @@ the history is readable.
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
-| SYN-058 | P1 | In progress | Candidates | Resume and JD previews are blank in Safari |
-| SYN-060 | P1 | In progress | Security | Production serves no security headers |
+| SYN-058 | P1 | Done | Candidates | Resume and JD previews are blank in Safari |
+| SYN-060 | P1 | Done | Security | Production serves no security headers |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -73,6 +73,7 @@ the history is readable.
 | SYN-046 | P2 | Open | AI | All companies share one daily AI budget |
 | SYN-047 | P2 | Open | Observability | Production errors are invisible |
 | SYN-059 | P2 | Open | AI | AI question generation fails silently |
+| SYN-064 | P2 | Open | Auth | A wrong password shows "Session expired" |
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
 | SYN-026 | P3 | Open | UX | Some dates bypass the shared date formatters |
@@ -188,20 +189,20 @@ the history is readable.
 - **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/2 — merged 2026-10-25 as `b7d803e`; deploy run 40199641813 (backend + frontend production `success`), `/health` ok. Verified in Safari/WebKit before merge: interviewer flow works, 15 recruiter-only/unassigned API calls → 403, other company → 404, no data changed.
 
 ### SYN-058 · Resume and JD previews are blank in Safari
-**P1** · Candidates · Bug · Status: **In progress** · Found 2026-10-25
+**P1** · Candidates · Bug · Status: **Done** · Found 2026-10-25
 
 - **Problem:** In Safari (WebKit 26.6) the resume pane on the candidate page and the resume and JD tabs in the interview room stay empty, with "Refused to load blob:… because it does not appear in the frame-ancestors directive of the Content Security Policy". The viewers fetch the file, wrap it in a `blob:` URL and frame it; a `blob:` document inherits the page's CSP, so `frame-ancestors 'none'` (and `X-Frame-Options: DENY`) forbids framing it even by the app itself. Chrome doesn't apply the inherited rule, which is why it went unnoticed.
 - **Where:** `frontend/next.config.mjs:17-18` and `:59`; iframes in `frontend/components/(recruiter)/CandidateDetail.tsx:169`, `frontend/components/(interviewer)/InterviewConduct.tsx:293` and `:405`.
 - **Done when:** all three previews render in Safari and Chrome, other sites still can't frame the app (clickjacking protection kept), and the fix is verified in the Safari Playwright pass.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3 (fixed together) — Safari pass and Pages-runtime check green 2026-10-25; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3 (fixed with SYN-060) — merged 2026-10-25 as `e09a5e9`; deploy run 40226482620 `success`. Verified in Safari/WebKit before merge: candidate resume and interview-room resume/JD frames load with 0 console errors; Word resumes get the download fallback.
 
 ### SYN-060 · Production serves no security headers
-**P1** · Security · Bug · Status: **In progress** · Found 2026-10-25
+**P1** · Security · Bug · Status: **Done** · Found 2026-10-25
 
 - **Problem:** The CSP, `X-Frame-Options`, HSTS, `X-Content-Type-Options`, `Referrer-Policy` and `Permissions-Policy` defined in `next.config.mjs` `headers()` are served by `next dev` but not by the Cloudflare Pages build (`@cloudflare/next-on-pages`): production `/login` returns none of them. Any site can frame the app (clickjacking) and there is no CSP. It also hides SYN-058 in production — once the headers are served, Safari previews break there too unless the framing rule changes with them.
 - **Where:** `frontend/next.config.mjs:7-64`, `frontend/middleware.ts`, `npm run build:cf` / `deploy` in `frontend/package.json`.
 - **Done when:** production page responses carry the full header set from one source shared with local dev, verified with `curl` against production after the deploy.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3 (fixed together) — Safari pass and Pages-runtime check green 2026-10-25; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3 (fixed with SYN-058) — merged 2026-10-25 as `e09a5e9`. Production `/login` and the `/dashboard` redirect now carry CSP (`frame-ancestors 'self'`, `connect-src` = production API), `X-Frame-Options: SAMEORIGIN`, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; the production login page in Safari shows no CSP violations and its API calls go through.
 
 ## P2
 
@@ -346,6 +347,13 @@ the history is readable.
 - **Problem:** When `POST /api/candidates/:id/questions` fails (a transient Workers AI error returned 503 during the 2026-10-25 pass), the AI questions panel quietly returns to its empty "Generate questions" state with no message, so the user can't tell it failed or that retrying will help.
 - **Where:** `frontend/components/(interviewer)/InterviewConduct.tsx:464-468` (`generate()` has no `onError`); check the candidate page's generator the same way.
 - **Done when:** a failed generation shows what happened and offers a retry on every screen that generates questions, and the 503 path is covered by a test.
+
+### SYN-064 · A wrong password shows "Session expired"
+**P2** · Auth · Bug · Status: **Open** · Found 2026-10-25
+
+- **Problem:** Signing in with a wrong password shows "Session expired" instead of "Invalid email or password", and fires an unneeded `POST /api/auth/refresh` after each failed attempt. Reproduced on production 2026-10-25.
+- **Where:** `frontend/lib/api.ts` — `authApi.login` (`:341`) goes through `apiFetch`/`authedFetch`, which treats every 401 as an expired session (`:159-176`); the login form shows that message (`frontend/components/(auth)/LoginForm.tsx:44-45`). The backend already returns "Invalid email or password" (`backend/src/routes/auth.ts:138`).
+- **Done when:** login and signup bypass the refresh-on-401 path, a wrong password shows "Invalid email or password", and no refresh call is made on a failed sign-in.
 
 ## P3
 
