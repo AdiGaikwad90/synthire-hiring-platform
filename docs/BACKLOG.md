@@ -145,6 +145,7 @@ the history is readable.
 - **Problem:** Every send in local dev fails with `Maximum credits exceeded`. The local `email_logs` show 6 failures on 2026-10-24 and the last success on 2026-05-24. The production key has not been checked; if it shares the account, no interview emails go out there either.
 - **Where:** `EMAIL_PROVIDER = "sendgrid"` (dev + production) in `backend/wrangler.toml`, the `SENDGRID_API_KEY` secret.
 - **Done when:** the provider sends successfully in production (credits/plan, or switch to Resend) and repeated failures show up somewhere a recruiter or operator will see.
+- **Diagnosis (2026-11-14):** SendGrid's API for the local key reports account type `free`, `total: 0`, `remain: 0`, `is_hard_limit: true`, `last_reset: 2026-07-01` — the free allowance has ended (credits stopped resetting in July), so no email can be sent on that account. Production last sent successfully on 2026-06-20 and has attempted nothing since; its `SENDGRID_API_KEY` is a Worker secret and can't be read, so whether it is the same account is unconfirmed (compare keys in SendGrid → Settings → API Keys). Fix needs an owner decision: upgrade SendGrid to a paid plan, or switch production to Resend (already supported — `EMAIL_PROVIDER`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, verified domain). The 11 production `email_queue` rows still marked `pending` are from 24–25 May and already have `sent_at`, so they will not be re-sent.
 
 ### SYN-005 · Candidate lists stay stale after a resume upload
 **P1** · Upload · Bug · Status: **Open** · Found 2026-10-24
