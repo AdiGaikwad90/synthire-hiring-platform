@@ -53,7 +53,7 @@ than mocking a binding.
 | D1, KV, R2 | **Real** (local Miniflare) | The bug class is "the database behaved differently than assumed". A mock returns what you already assumed and proves nothing. |
 | `env.AI` | **Stub — mandatory** | No local simulator; nondeterministic; costs Neurons; and you *need* to force bad output to exercise the fallback chain. |
 | `env.VECTORIZE` | **Stub — mandatory** | No local simulator. |
-| Outbound `fetch` (Resend/SendGrid) | **Stub — mandatory** | A test must never send real email. |
+| Outbound `fetch` (Brevo/Resend) | **Stub — mandatory** | A test must never send real email. |
 | Time | **Fake timers** | Neuron day rollover, retry backoff, token expiry. |
 
 This is not theoretical. Choosing real local D1 over a mock is what surfaced the
@@ -190,6 +190,10 @@ import { env, applyD1Migrations, createExecutionContext, waitOnExecutionContext 
 - Migrations `0001`–`00NN` are applied by `tests/setup/migrate.ts` before any
   integration test, so tests hit the real schema.
 - The integration project uses **`wrangler.test.toml`**, not `wrangler.toml`.
+- The pool **also loads the developer's `backend/.dev.vars`** over those values.
+  `vitest.config.mts` pins `BREVO_API_KEY` / `RESEND_API_KEY` to fake values in
+  its miniflare `bindings`, so a test can never hold a key able to send email.
+  Pin any new secret that reaches an outside service the same way.
 
 Three hard constraints, learned the hard way:
 

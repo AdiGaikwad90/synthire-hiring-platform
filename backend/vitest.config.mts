@@ -36,8 +36,16 @@ export default defineConfig({
           cloudflareTest({
             wrangler: { configPath: './wrangler.test.toml' },
             miniflare: {
-              // Surfaced to tests as env.TEST_MIGRATIONS.
-              bindings: { TEST_MIGRATIONS: migrations },
+              bindings: {
+                // Surfaced to tests as env.TEST_MIGRATIONS.
+                TEST_MIGRATIONS: migrations,
+                // The pool also loads the developer's .dev.vars, which would put
+                // REAL provider keys into the test env (or empty ones, failing
+                // the email tests on one machine only). Pinned here so a test
+                // can never hold a key that is able to send email.
+                BREVO_API_KEY: 'brevo_test_key',
+                RESEND_API_KEY: 're_test_key',
+              },
             },
           }),
         ],

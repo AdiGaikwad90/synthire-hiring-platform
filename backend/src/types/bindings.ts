@@ -16,7 +16,7 @@ export interface Env {
   JWT_SECRET: string
   RESEND_API_KEY: string
   RESEND_WEBHOOK_SECRET: string
-  SENDGRID_API_KEY: string
+  BREVO_API_KEY: string
 
   // ── Runtime vars (wrangler.toml [vars] — safe to commit, not secret) ───────
 
@@ -54,10 +54,11 @@ export interface Env {
   CACHE_SCORE_TTL: string            // default: "604800"  (7 days)
 
   // Email
-  EMAIL_PROVIDER: string             // "resend" | "sendgrid" — default: "resend"
-  RESEND_FROM_EMAIL: string          // sender address (used by both providers)
-  RESEND_FROM_NAME: string           // sender name (used by both providers)
-  SENDGRID_FROM_EMAIL: string        // optional override for SendGrid sender address
+  EMAIL_PROVIDER: string             // "brevo" | "resend" — required; anything else stops the email queue
+  EMAIL_FALLBACK_PROVIDER: string    // "" (none) | "brevo" | "resend" — tried when EMAIL_PROVIDER fails; must differ
+  EMAIL_FROM_NAME: string            // sender name, both providers — default: "Synthire"
+  BREVO_FROM_EMAIL: string           // Brevo sender address (a sender verified in Brevo)
+  RESEND_FROM_EMAIL: string          // Resend sender address (needs a verified domain to reach anyone but the owner)
   EMAIL_QUEUE_BATCH_SIZE: string     // default: "10"
   EMAIL_MAX_RETRIES: string          // default: "3"
   EMAIL_RETRY_BACKOFF_SECONDS: string // default: "60"

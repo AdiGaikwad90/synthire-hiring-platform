@@ -21,7 +21,7 @@ TS_CF_Hackathon/
 | Vector search | Cloudflare Vectorize |
 | Embeddings | Workers AI (`@cf/baai/bge-large-en-v1.5`) |
 | AI / LLM | OpenRouter (configurable model chain, defaults to free models) |
-| Email | Resend or SendGrid (switchable via `EMAIL_PROVIDER`) |
+| Email | Brevo or Resend (`EMAIL_PROVIDER`, with an optional `EMAIL_FALLBACK_PROVIDER`) |
 | Frontend | Next.js 15, React Query v5, TypeScript |
 | Frontend hosting | Cloudflare Pages (via `@cloudflare/next-on-pages`) |
 
@@ -33,7 +33,7 @@ TS_CF_Hackathon/
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) — `npm i -g wrangler`
 - Cloudflare account (free tier works)
 - [OpenRouter](https://openrouter.ai/) API key (free models available)
-- [Resend](https://resend.com/) or [SendGrid](https://sendgrid.com/) API key
+- [Brevo](https://www.brevo.com/) API key (and optionally a [Resend](https://resend.com/) one)
 
 ---
 
@@ -84,19 +84,20 @@ Fill in all values:
 ```ini
 JWT_SECRET=          # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 OPENROUTER_API_KEY=  # sk-or-... from openrouter.ai → Dashboard → API Keys
-RESEND_API_KEY=      # re_... from resend.com → API Keys (leave blank if using SendGrid)
+BREVO_API_KEY=       # xkeysib-... from brevo.com → SMTP & API → API Keys
+RESEND_API_KEY=      # re_... from resend.com → API Keys (leave blank unless Resend is a provider)
 RESEND_WEBHOOK_SECRET=  # leave blank for local dev
-SENDGRID_API_KEY=    # SG.xxx... from sendgrid.com (leave blank if using Resend)
 ```
 
 **Email provider choice** — set in `backend/wrangler.toml`:
 ```toml
-EMAIL_PROVIDER = "sendgrid"   # or "resend"
+EMAIL_PROVIDER          = "brevo"   # "brevo" or "resend"
+EMAIL_FALLBACK_PROVIDER = ""        # optional second provider, tried when the first fails
 ```
 
-> **Resend note:** `onboarding@resend.dev` only delivers to the Resend account owner's email. To send to any address, verify a domain at resend.com/domains or use SendGrid.
+> **Brevo note:** verify the address in `BREVO_FROM_EMAIL` at brevo.com → Senders before sending, and deactivate IP blocking at app.brevo.com/security/authorised_ips (Brevo otherwise answers 401 "unrecognised IP address", and Workers have no fixed IPs). A single verified sender can email any address; no domain is needed. Free tier: 300 emails/day.
 >
-> **SendGrid note:** Go to app.sendgrid.com → Settings → Sender Authentication → Single Sender Verification → verify your from-address before sending.
+> **Resend note:** without a domain verified at resend.com/domains, Resend only delivers to the account owner's own address. Once a domain is verified, switch with config alone: `EMAIL_PROVIDER = "resend"`, `EMAIL_FALLBACK_PROVIDER = "brevo"`.
 
 ### Step 4 — Create `frontend/.env.local`
 
@@ -195,11 +196,11 @@ wrangler secret put JWT_SECRET --env=production
 wrangler secret put OPENROUTER_API_KEY --env=production
 # paste your sk-or-v1-... key from openrouter.ai
 
-wrangler secret put SENDGRID_API_KEY --env=production
-# paste your SG.xxx... key from sendgrid.com
+wrangler secret put BREVO_API_KEY --env=production
+# paste your xkeysib-... key from brevo.com
 
 wrangler secret put RESEND_API_KEY --env=production
-# paste your re_... key, or press Enter to skip if using SendGrid
+# paste your re_... key, or press Enter to skip unless Resend is a provider
 
 wrangler secret put RESEND_WEBHOOK_SECRET --env=production
 # press Enter to skip (only needed for delivery tracking webhooks)
@@ -214,7 +215,7 @@ Expected output — all 5 should be listed:
 ```
 JWT_SECRET
 OPENROUTER_API_KEY
-SENDGRID_API_KEY
+BREVO_API_KEY
 RESEND_API_KEY
 RESEND_WEBHOOK_SECRET
 ```
@@ -260,8 +261,8 @@ Update the `[env.production.vars]` section with your Pages URL:
 [env.production.vars]
 ENVIRONMENT = "production"
 FRONTEND_ORIGIN = "https://synthire-frontend.pages.dev"   # ← your Pages URL
-EMAIL_PROVIDER = "sendgrid"                                # or "resend"
-SENDGRID_FROM_EMAIL = "your-verified@email.com"            # must be verified in SendGrid
+EMAIL_PROVIDER = "brevo"                                   # or "resend"
+BREVO_FROM_EMAIL = "your-verified@email.com"               # must be a verified sender in Brevo
 ```
 
 Redeploy the backend to apply the CORS change:
@@ -337,7 +338,8 @@ cd backend && npm run deploy
 | `Cannot read properties of undefined (reading 'prepare')` in cron | D1/KV/R2 bindings missing from `[env.production]` — the `[[env.production.d1_databases]]` block must exist in `wrangler.toml` |
 | `Missing Authentication header` from OpenRouter | `OPENROUTER_API_KEY` secret not set — run `wrangler secret put OPENROUTER_API_KEY --env=production` |
 | `Imported HMAC key length (0)` on signup/login | `JWT_SECRET` not set — run `wrangler secret put JWT_SECRET --env=production` |
-| `The from address does not match a verified Sender Identity` | SendGrid from-email not verified — go to app.sendgrid.com → Settings → Sender Authentication → verify your `SENDGRID_FROM_EMAIL` address |
+| `brevo: … sender … not valid` in `email_logs.error_message` | Brevo sender not verified — go to brevo.com → Senders → verify your `BREVO_FROM_EMAIL` address |
+| `EMAIL_PROVIDER is "…" — expected one of: brevo, resend` in the cron log | Mistyped provider — the email queue stops (emails stay pending) until `EMAIL_PROVIDER` / `EMAIL_FALLBACK_PROVIDER` are fixed |
 | CORS errors in browser | `FRONTEND_ORIGIN` in `[env.production.vars]` doesn't exactly match your Pages URL (no trailing slash) |
 | D1 errors on first load | Migrations not applied to remote — run `wrangler d1 migrations apply synthire-prod --remote --env=production` |
 | Resume upload fails | R2 bucket name must be exactly `synthire-resumes` |
@@ -375,10 +377,11 @@ SCORE_MEDIUM_THRESHOLD = "60"
 ### Email
 
 ```toml
-EMAIL_PROVIDER          = "resend"            # "resend" or "sendgrid"
-RESEND_FROM_EMAIL       = "noreply@synthire.io"
-RESEND_FROM_NAME        = "Synthire"
-SENDGRID_FROM_EMAIL     = ""                  # only needed when EMAIL_PROVIDER = "sendgrid"
+EMAIL_PROVIDER          = "brevo"             # "brevo" or "resend"
+EMAIL_FALLBACK_PROVIDER = ""                  # "" (none), "brevo" or "resend" — must differ from EMAIL_PROVIDER
+EMAIL_FROM_NAME         = "Synthire"
+BREVO_FROM_EMAIL        = ""                  # a sender verified in Brevo
+RESEND_FROM_EMAIL       = "noreply@synthire.io"   # needs a domain verified in Resend
 EMAIL_QUEUE_BATCH_SIZE  = "10"
 EMAIL_MAX_RETRIES       = "3"
 EMAIL_RETRY_BACKOFF_SECONDS = "60"
@@ -492,7 +495,7 @@ backend/src/
 ├── services/
 │   ├── ai/                     # OpenRouter client + configurable fallback chain
 │   ├── embeddings/             # Workers AI + Vectorize helpers
-│   ├── email/                  # Resend + SendGrid clients, templates, queue processor
+│   ├── email/                  # Brevo + Resend clients, templates, queue processor
 │   ├── parsing/                # PDF + DOCX text extraction
 │   ├── scoring/                # Skill matcher + score aggregator + pipeline
 │   └── storage/                # R2 helpers
@@ -534,7 +537,7 @@ frontend/
 | SSE for resume upload | Streams real-time parse/score progress to the UI |
 | All config in wrangler.toml | Model names, thresholds, TTLs — tunable without code changes |
 | KV-backed rate limiting | Works on free tier; self-cleaning keys via TTL |
-| Native fetch for Resend/SendGrid | Avoids Node.js npm dependencies that don't run in Workers |
+| Native fetch for Brevo/Resend | Avoids Node.js npm dependencies that don't run in Workers |
 | Cloudflare Pages for frontend | Entire stack on Cloudflare — no Vercel dependency |
 | `@cloudflare/next-on-pages` | Converts Next.js App Router to Cloudflare Pages Worker format |
 | `NEXT_PUBLIC_API_URL` at build time | Next.js bakes public env vars into bundle — set explicitly for production builds |

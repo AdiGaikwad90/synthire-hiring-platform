@@ -1,61 +1,18 @@
 import type { Env } from '../../types/bindings'
-import type { EmailType } from '../../types/email'
-import { logEmail } from '../../db/queries/email'
+import { postJson, requireSetting, type OutboundEmail } from './http'
 
-interface ResendResponse {
-  id?: string
-  statusCode?: number
-  message?: string
-}
-
-export async function sendEmail(
-  env: Env,
-  opts: {
-    to: string
-    subject: string
-    html: string
-    emailType: EmailType
-    companyId?: string
-  }
-): Promise<string | null> {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: `${env.RESEND_FROM_NAME} <${env.RESEND_FROM_EMAIL}>`,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-    }),
+/**
+ * Sends through Resend; returns Resend's email id. Without a verified domain
+ * Resend only delivers to the account owner and answers 403 for anyone else.
+ */
+export async function sendViaResend(env: Env, msg: OutboundEmail): Promise<string | null> {
+  const key = requireSetting('resend', 'RESEND_API_KEY', env.RESEND_API_KEY)
+  const from = requireSetting('resend', 'RESEND_FROM_EMAIL', env.RESEND_FROM_EMAIL)
+  const data = await postJson('resend', 'https://api.resend.com/emails', { Authorization: `Bearer ${key}` }, {
+    from: `${env.EMAIL_FROM_NAME || 'Synthire'} <${from}>`,
+    to: msg.to,
+    subject: msg.subject,
+    html: msg.html,
   })
-
-  const data = (await response.json()) as ResendResponse
-
-  if (!response.ok) {
-    await logEmail(env.DB, {
-      recipientEmail: opts.to,
-      emailType: opts.emailType,
-      subject: opts.subject,
-      resendMessageId: null,
-      status: 'failed',
-      errorMessage: data.message ?? `HTTP ${response.status}`,
-      companyId: opts.companyId,
-    })
-    throw new Error(data.message ?? `Resend API error: ${response.status}`)
-  }
-
-  // Success path
-  await logEmail(env.DB, {
-    recipientEmail: opts.to,
-    emailType: opts.emailType,
-    subject: opts.subject,
-    resendMessageId: data.id ?? null,
-    status: 'sent',
-    errorMessage: null,
-    companyId: opts.companyId,
-  })
-  return data.id ?? null
+  return typeof data.id === 'string' ? data.id : null
 }

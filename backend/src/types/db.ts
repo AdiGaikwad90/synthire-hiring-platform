@@ -131,6 +131,7 @@ export interface EmailLogRow {
   status: string
   error_message: string | null
   created_at: string
+  provider: string | null  // 'brevo' | 'resend'; null before migration 0011 or when nothing was sent
 }
 
 export interface EmailPreferencesRow {
@@ -158,4 +159,5 @@ export interface EmailQueueRow {
   created_at: string
   claimed_at?: number | null
   status?: string
+  limit_deferrals: number  // hour-long waits taken because every provider was at its limit
 }
