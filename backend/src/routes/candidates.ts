@@ -6,6 +6,7 @@ import {
   updateCandidateSchema,
   apiResponse,
   paginatedResponse,
+  zv,
 } from '../types/api'
 import { detectFileType, getExtension, getContentType } from '../services/parsing/detector'
 import { uploadToR2, getFromR2, r2Key } from '../services/storage/r2'
@@ -131,7 +132,7 @@ router.post('/upload', recruiterOnly, async (c) => {
 
 // ── GET / — list candidates ───────────────────────────────────────────────────
 
-router.get('/', recruiterOnly, zValidator('query', listCandidatesSchema), async (c) => {
+router.get('/', recruiterOnly, zv('query', listCandidatesSchema), async (c) => {
   const payload = c.get('user')
   const { job_id, status, min_score, page, limit } = c.req.valid('query')
 

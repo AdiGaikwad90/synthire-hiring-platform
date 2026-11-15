@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 import type { ApiJob } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
+import { STAGE_FILTER_OPTIONS, stageLabel, stageTone } from "@/lib/stages";
 
 const { useState: useS_c } = React;
 
@@ -23,14 +24,6 @@ function Candidates({ jobId, hideUpload }: { jobId?: string; hideUpload?: boolea
 }
 
 // ── Global /candidates — job-grouped layout ───────────────────────────────────
-
-const STAGE_OPTIONS = [
-  { value: "", label: "All Stages" },
-  { value: "applied", label: "Applied" },
-  { value: "shortlisted", label: "Shortlisted" },
-  { value: "interviewing", label: "Interviewing" },
-  { value: "rejected", label: "Rejected" },
-];
 
 function CandidatesGlobal() {
   const router = useRouter();
@@ -68,7 +61,7 @@ function CandidatesGlobal() {
         <Select
           value={stageFilter}
           onChange={e => setStageFilter(e.target.value)}
-          options={STAGE_OPTIONS}
+          options={STAGE_FILTER_OPTIONS}
         />
         <Select
           value={jobFilter}
@@ -547,13 +540,6 @@ const FilterSlider = ({ label, value, onChange, color, max = 100, unit = "%" }: 
 );
 
 // ===== Candidate Card =====
-function stageBadgeVariant(stage: string): "success" | "danger" | "neutral" | "primary" {
-  if (stage === "shortlisted") return "success";
-  if (stage === "rejected") return "danger";
-  if (stage === "interviewing") return "primary";
-  return "neutral";
-}
-
 function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any) {
   const tone = c.score >= 80 ? "success" : c.score >= 60 ? "warning" : "danger";
   return (
@@ -564,8 +550,8 @@ function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <div style={{ fontWeight: 500, fontSize: 14 }}>{c.name}</div>
             {c.stage && (
-              <Badge variant={stageBadgeVariant(c.stage)} style={{ fontSize: 10, padding: "1px 6px" }}>
-                {c.stage.charAt(0).toUpperCase() + c.stage.slice(1)}
+              <Badge variant={stageTone(c.stage)} style={{ fontSize: 10, padding: "1px 6px" }}>
+                {stageLabel(c.stage)}
               </Badge>
             )}
           </div>

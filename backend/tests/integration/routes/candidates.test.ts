@@ -83,3 +83,84 @@ describe('GET /api/candidates/:id — skill matches and attribution', () => {
     expect((await get(candidateId, otherToken)).status).toBe(404)
   })
 })
+
+/**
+ * SYN-006. The Candidates page offered "Applied" (`applied`) and
+ * "Interviewing" (`interviewing`) as stage filters. Neither is a stage the
+ * app stores, and the list endpoint accepted ANY string for `status`, so the
+ * filter came back empty without a word — 0 cards while 14 candidates sat in
+ * `new`. The endpoint now only accepts real stages.
+ */
+describe('GET /api/candidates?status= — stage filter', () => {
+  const STAGES = ['new', 'shortlisted', 'scheduled', 'inprogress', 'feedback', 'hired', 'rejected'] as const
+  type Item = { id: string; status: string }
+
+  const list = (query: string, t: string | null = token) =>
+    SELF.fetch(`https://test.local/api/candidates${query}`, { headers: t ? authHeader(t) : {} })
+  const items = async (res: Response) => ((await res.json()) as { data: { items: Item[] } }).data.items
+  const setStage = (id: string, status: string) =>
+    env.DB.prepare('UPDATE candidates SET status = ? WHERE id = ?').bind(status, id).run()
+
+  /** One candidate per stage, on top of the `new` one from beforeEach. */
+  async function seedOnePerStage() {
+    const byStage: Record<string, string> = {}
+    for (const stage of STAGES) {
+      byStage[stage] = await insertCandidate(env.DB, companyId, jobId, `In ${stage}`)
+      await setStage(byStage[stage], stage)
+    }
+    return byStage
+  }
+
+  it('happy path: returns exactly the candidates in the requested stage', async () => {
+    const byStage = await seedOnePerStage()
+    const res = await list('?status=shortlisted')
+    expect(res.status).toBe(200)
+    expect((await items(res)).map((c) => c.id)).toEqual([byStage.shortlisted])
+  })
+
+  it('positive variants: every real stage is accepted and filters to itself', async () => {
+    const byStage = await seedOnePerStage()
+    for (const stage of STAGES) {
+      const res = await list(`?status=${stage}`)
+      expect(res.status, stage).toBe(200)
+      const got = await items(res)
+      expect(got.every((c) => c.status === stage), `${stage} must only return ${stage}`).toBe(true)
+      expect(got.map((c) => c.id), stage).toContain(byStage[stage])
+    }
+  })
+
+  it('positive variants: no status returns every stage', async () => {
+    await seedOnePerStage()
+    const got = await items(await list('?limit=50'))
+    expect(new Set(got.map((c) => c.status))).toEqual(new Set(STAGES))
+    expect(got).toHaveLength(STAGES.length + 1)
+  })
+
+  it('empty: a real stage nobody is in returns an empty list, not an error', async () => {
+    const res = await list('?status=hired')
+    expect(res.status).toBe(200)
+    expect(await items(res)).toEqual([])
+  })
+
+  it('invalid input: a stage that does not exist is refused with field detail', async () => {
+    // Includes the two the UI used to send, a wrong-case value and a hostile one.
+    for (const bad of ['applied', 'interviewing', 'New', 'shortlisted ', "new' OR '1'='1", '']) {
+      const res = await list(`?status=${encodeURIComponent(bad)}`)
+      expect(res.status, `"${bad}" must be refused`).toBe(422)
+      const body = (await res.json()) as { success: boolean; details: { fieldErrors: Record<string, string[]> } }
+      expect(body.success).toBe(false)
+      expect(body.details.fieldErrors.status?.[0], `"${bad}"`).toBeTruthy()
+    }
+  })
+
+  it('error contract: 401 without a token, and another company sees none of these candidates', async () => {
+    await seedOnePerStage()
+    expect((await list('?status=new', null)).status).toBe(401)
+
+    const other = await seedCompanyAndRecruiter(env.DB)
+    const otherToken = await signTestToken(env.JWT_SECRET, { sub: other.recruiterId, company_id: other.companyId, role: 'recruiter' })
+    const res = await list('?status=new', otherToken)
+    expect(res.status).toBe(200)
+    expect(await items(res)).toEqual([])
+  })
+})

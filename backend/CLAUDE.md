@@ -248,6 +248,8 @@ a hot path.
 
 Paginated responses nest `{ items, pagination: { total, page, limit, pages, has_more } }` inside `data`. `AppError(message, status)` → `errorHandler` → structured JSON; `ZodError` → 422.
 
+**Candidate stages** are `CANDIDATE_STAGES` in `src/types/api.ts` (`new`, `shortlisted`, `scheduled`, `inprogress`, `feedback`, `hired`, `rejected`) — the one list for setting a stage (`PATCH /api/candidates/:id`) and filtering by one (`GET /api/candidates?status=`). An unknown stage is a 422, never an empty list; keep `frontend/lib/stages.ts` in step.
+
 `apiResponse(data)` takes one argument — set the HTTP status on `c.json(apiResponse(x), 202)`, not on `apiResponse`.
 
 ---

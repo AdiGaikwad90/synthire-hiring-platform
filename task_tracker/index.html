@@ -273,11 +273,11 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Candidates",
    "type": "Bug",
-   "status": "open",
+   "status": "in_progress",
    "found": "2026-10-24",
-   "updated": "2026-10-24",
+   "updated": "2026-11-15",
    "problem": "The Candidates page filter offers \"Applied\" (`applied`) and \"Interviewing\" (`interviewing`), which the backend never stores. \"Applied\" showed 0 cards while 14 candidates were `new`.",
-   "where": "`frontend/components/(recruiter)/Candidates.tsx:27-33` vs the status enum in `backend/src/types/api.ts:130` (`new, shortlisted, scheduled, inprogress, feedback, hired, rejected`).",
+   "where": "`frontend/lib/stages.ts`, `frontend/components/(recruiter)/Candidates.tsx`, `backend/src/types/api.ts`; branch `fix/syn-006-stage-filter` (not yet merged)",
    "done_when": "filter options come from the real status list and each one returns matching candidates.",
    "pr": "",
    "source": ""
@@ -739,7 +739,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "type": "Cosmetic",
    "status": "open",
    "found": "2026-10-24",
-   "updated": "2026-10-24",
+   "updated": "2026-11-15",
    "problem": "The JD preview shows \"full_time · senior\"; the review step, job overview and job sidebar show \"bachelors\", \"full time\", \"senior\".",
    "where": "`JDUploadModal.tsx`, `JobForm.tsx` review step, job overview and candidates sidebar.",
    "done_when": "one label map is used everywhere (\"Full-time\", \"Senior\", \"Bachelor's\").",
@@ -1292,6 +1292,14 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-15T14:25:00.000Z",
+   "text": "SYN-006 in progress: the stage filter now offers the seven real stages, the card badge uses them too, and the API refuses a stage that does not exist instead of returning nothing. Tested locally.",
+   "ids": [
+    "SYN-006",
+    "SYN-025"
+   ]
+  },
   {
    "at": "2026-11-15T14:12:00.000Z",
    "text": "SYN-005 done: PR #8 merged and deployed. On production an uploaded resume updated the sidebar count, the job's candidate list and the score without a reload.",

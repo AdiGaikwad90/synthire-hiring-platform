@@ -32,6 +32,7 @@ export default defineConfig({
         'lib/api.ts': { statements: 45, branches: 40, functions: 18, lines: 45 },
         'lib/scoring.ts': { statements: 100, branches: 86, functions: 100, lines: 100 },
         'lib/upload-status.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'lib/stages.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },
