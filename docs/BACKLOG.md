@@ -7,6 +7,11 @@ the history is readable.
 **Tracker page (high-level view):** https://claude.ai/artifact/26CtQULZgXxSJ5FKB3MZEg
 (private to the owner; share it from the page's Share menu)
 
+**Same view inside the repository:** open `task_tracker/index.html` in a browser.
+It is generated from this file — run `python3 task_tracker/build.py` after every
+edit here, and add one line to `task_tracker/changes.json` for the "Recent
+changes" list (the same line that goes into the tracker page's `changes`).
+
 ## How this backlog works
 
 - **This file is the source of truth.** The tracker page mirrors each issue's
