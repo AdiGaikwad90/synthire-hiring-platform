@@ -50,7 +50,7 @@ artifact page, which is no longer updated.
 | SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
 | SYN-006 | P1 | Open | Candidates | Stage filter uses statuses that don't exist |
-| SYN-007 | P1 | Open | Auth | Sessions end early: 15 min in dev, 24 h in production |
+| SYN-007 | P1 | In progress | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
@@ -75,7 +75,7 @@ artifact page, which is no longer updated.
 | SYN-046 | P2 | Open | AI | All companies share one daily AI budget |
 | SYN-047 | P2 | Open | Observability | Production errors are invisible |
 | SYN-059 | P2 | Open | AI | AI question generation fails silently |
-| SYN-064 | P2 | Open | Auth | A wrong password shows "Session expired" |
+| SYN-064 | P2 | In progress | Auth | A wrong password shows "Session expired" |
 | SYN-067 | P2 | Open | Email | Email failures are invisible: logs carry no company |
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
@@ -111,6 +111,7 @@ artifact page, which is no longer updated.
 | SYN-063 | P3 | Open | Candidates | Parsed resume preview shows the AI's verdict as the resume's summary |
 | SYN-065 | P3 | Open | Interviews | Interviewer "Today" tab uses the UTC date |
 | SYN-066 | P3 | Open | Email | An interview less than 24 h away gets its "reminder" immediately |
+| SYN-068 | P3 | Open | Auth | The API still accepts its access cookie as a login |
 
 ---
 
@@ -166,11 +167,13 @@ artifact page, which is no longer updated.
 - **Done when:** filter options come from the real status list and each one returns matching candidates.
 
 ### SYN-007 · Sessions end early: 15 min in dev, 24 h in production
-**P1** · Auth · Bug · Status: **Open** · Found 2026-10-24
+**P1** · Auth · Bug · Status: **In progress** · Found 2026-10-24
 
 - **Problem:** Locally, any navigation 15 minutes after login redirects to `/login`. The backend sets an HttpOnly `synthire_token` cookie with a 15-minute lifetime; cookies ignore the port, so on `localhost` it shadows the frontend's readable 24-hour cookie of the same name (script can't overwrite an HttpOnly cookie). When it expires, `middleware.ts` finds no cookie and redirects, even though a 30-day refresh token exists. The login page then refreshes the token silently but stays on the form. In production (different domains) the frontend cookie expires after 24 h, forcing a login despite the 30-day refresh token.
 - **Where:** `backend/src/middleware/auth.ts:93-95`, `frontend/lib/auth.ts:22`, `frontend/middleware.ts`.
 - **Done when:** the route gate lasts as long as the refresh token, the two cookies have different names, and a logged-in user hitting `/login` is sent on.
+- **Found while fixing (2026-11-15):** production is worse in Safari than recorded: the session ends after **15 minutes**, not 24 h. The app (`pages.dev`) and the API (`workers.dev`) are different sites, so the API's refresh cookie is a third-party cookie, which Safari does not store. Confirmed in WebKit on production: three hours after login the app was back on `/login` and `POST /api/auth/refresh` answered `401 No refresh token`. Also, `apiFetch` and `apiUpload` replayed the request after a refresh with the **old** token; it only worked because the API preferred its own access cookie over the header.
+- **Fix (2026-11-15, branch `fix/syn-007-session-cookies`, not yet merged):** the route gate has its own cookie, `synthire_session` (the role only, 30 days, renewed on every refresh); login, signup, refresh and logout go through the frontend's own `/api/auth/*` forwarder (`frontend/app/api/auth/[...path]/route.ts`), so the refresh cookie is first-party; the forwarder relays only that cookie and drops the API's access cookie; replays carry the new token; `/login` and `/signup` forward a signed-in visitor, and a `?from=` that leaves the site is refused. Also fixes SYN-064. Verified locally in Chrome (renewal after a 20-second token expired, logout, tampered gate cookie, hostile `?from=`) and against the Cloudflare Pages build. **Still to do:** merge, then confirm in WebKit on production that a session survives past 15 minutes. Everyone signs in once more after the deploy (old refresh cookies sit on the API's site and are no longer used).
 
 ### SYN-008 · Failed uploads show as "Processing... · 0%" and hide the reason
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-24
@@ -357,11 +360,12 @@ artifact page, which is no longer updated.
 - **Done when:** a failed generation shows what happened and offers a retry on every screen that generates questions, and the 503 path is covered by a test.
 
 ### SYN-064 · A wrong password shows "Session expired"
-**P2** · Auth · Bug · Status: **Open** · Found 2026-10-25
+**P2** · Auth · Bug · Status: **In progress** · Found 2026-10-25
 
 - **Problem:** Signing in with a wrong password shows "Session expired" instead of "Invalid email or password", and fires an unneeded `POST /api/auth/refresh` after each failed attempt. Reproduced on production 2026-10-25.
 - **Where:** `frontend/lib/api.ts` — `authApi.login` (`:341`) goes through `apiFetch`/`authedFetch`, which treats every 401 as an expired session (`:159-176`); the login form shows that message (`frontend/components/(auth)/LoginForm.tsx:44-45`). The backend already returns "Invalid email or password" (`backend/src/routes/auth.ts:138`).
 - **Done when:** login and signup bypass the refresh-on-401 path, a wrong password shows "Invalid email or password", and no refresh call is made on a failed sign-in.
+- **Fix (2026-11-15, with SYN-007, not yet merged):** a 401 from login, signup or logout is treated as that call's own answer and never triggers a refresh; the login form now shows "Invalid email or password". Verified locally in Chrome.
 
 ### SYN-067 · Email failures are invisible: logs carry no company
 **P2** · Email · Gap · Status: **Open** · Found 2026-11-14
@@ -624,6 +628,14 @@ artifact page, which is no longer updated.
 - **Problem:** The 24-hours-before reminder is queued for `scheduled_at − 24 h` even when that moment has already passed, so an interview booked for later today sends the confirmation and a "reminder" back to back.
 - **Where:** `backend/src/routes/interviews.ts:173-212` (`reminderTime` is never compared with now).
 - **Done when:** no reminder is queued when the interview is under 24 h away (or a shorter, sensible lead time is used), covered by a test.
+
+### SYN-068 · The API still accepts its access cookie as a login
+**P3** · Auth · Chore · Status: **Open** · Found 2026-11-15
+
+- **Problem:** `authMiddleware` reads the `synthire_token` cookie first and only then the `Authorization` header, and login/signup/refresh still issue that cookie. Since SYN-007 the browser never receives it (the frontend forwarder drops it), so it is an unused second way to log in. A cookie credential on a cross-site API is also what makes cross-site request forgery possible (a multipart upload needs no preflight), and "cookie first" means a stale cookie can outrank a fresh header.
+- **Where:** `backend/src/middleware/auth.ts` (cookie-first lookup, `buildAccessCookie`), `backend/src/routes/auth.ts` (three `Set-Cookie` calls for the access cookie).
+- **Done when:** the API authenticates with the `Authorization` header only, the access cookie is no longer issued, and the integration tests that log in by cookie are updated.
+- **Source:** found while fixing SYN-007.
 
 ---
 

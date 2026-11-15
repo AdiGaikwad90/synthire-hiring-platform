@@ -1,7 +1,7 @@
 "use client"
 import * as React from "react"
 import { authApi } from "@/lib/api"
-import { setToken, removeToken, getStoredUser, setStoredUser } from "@/lib/auth"
+import { setToken, removeToken, getStoredUser, setStoredUser, markSession, hasSession, postLoginPath } from "@/lib/auth"
 import type { StoredUser } from "@/lib/auth"
 
 interface AuthContextValue {
@@ -24,7 +24,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (cached) setUser(cached)
 
     authApi.me()
-      .then(u => { setUser(u); setStoredUser(u) })
+      // The session is confirmed: (re)write the route gate from the real role, so
+      // it is right even if the cookie expired or was edited (SYN-007).
+      .then(u => { setUser(u); setStoredUser(u); markSession(u.role) })
       .catch(() => {
         // /me failed — session is gone; clear cached user
         removeToken()
@@ -69,4 +71,18 @@ export function useAuth(): AuthContextValue {
   const ctx = React.useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
   return ctx
+}
+
+/**
+ * On /login and /signup: someone who already has a valid session is sent on to
+ * where they were going instead of being shown the form (SYN-007). Waits for
+ * /api/auth/me to confirm the session, and only forwards when the route gate
+ * will let them in — otherwise the two would bounce off each other.
+ */
+export function useForwardSignedIn(from: string | null): void {
+  const { user, isLoading } = useAuth()
+  React.useEffect(() => {
+    if (isLoading || !user || !hasSession()) return
+    window.location.replace(postLoginPath(from))
+  }, [user, isLoading, from])
 }

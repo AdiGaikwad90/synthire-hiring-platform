@@ -99,7 +99,7 @@ Two rules that keep this honest:
 ## Auth
 
 - Access token: JWT HS256 (`jose`), **15-minute** expiry. Refresh token: 30-day opaque token, stored hashed in `refresh_tokens`, rotated on use via `POST /api/auth/refresh`.
-- **Primary auth is the `Authorization: Bearer` header** (token in `localStorage`). The `synthire_token` cookie is secondary — it exists so `frontend/middleware.ts` can gate routes, and only works same-domain.
+- **Primary auth is the `Authorization: Bearer` header** (token in `localStorage`). Two cookies support it, with deliberately different names: `synthire_session` (the role only, written by the frontend, lets `frontend/middleware.ts` gate routes) and `synthire_refresh` (HttpOnly, renews the session). The frontend and the API are different sites, so login, signup, refresh and logout go through the frontend's own `/api/auth/*` forwarder — that keeps the refresh cookie first-party, which Safari requires (`frontend/CLAUDE.md` → Auth).
 - Roles: `recruiter` | `interviewer` | `admin`. **Interviewers are scoped** — their own interviews, plus the candidate and job of an interview assigned to them; everything else is recruiter/admin only (`backend/CLAUDE.md` → Auth). Every new route must be added to `ACCESS` in `backend/tests/integration/routes/role-scoping.test.ts` — the suite fails until it is.
 - Unauthenticated routes: `/api/auth/*`, `/api/email/resend-callback`, `/api/email/unsubscribe`, `/health`.
 

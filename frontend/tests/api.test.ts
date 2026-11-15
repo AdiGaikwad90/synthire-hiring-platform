@@ -7,7 +7,7 @@
  * still logic testing, not component rendering (TESTING.md tier D).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { apiFetch, apiFetchBlob, ApiError, apiErrorMessage } from '@/lib/api'
+import { apiFetch, apiFetchBlob, apiUpload, authApi, ApiError, apiErrorMessage } from '@/lib/api'
 import { setToken, getToken } from '@/lib/auth'
 
 const ok = (data: unknown, status = 200) =>
@@ -312,6 +312,105 @@ describe('attemptRefresh persists the new access token', () => {
       .mockResolvedValueOnce(ok({ id: 'j1' }))
 
     await expect(apiFetch('/api/jobs')).resolves.toEqual({ id: 'j1' })
+  })
+})
+
+describe('replay after a refresh uses the NEW token (SYN-007 regression)', () => {
+  /**
+   * apiFetch and apiUpload built their Authorization header once and replayed
+   * it after the refresh, so the replay carried the EXPIRED token. It only
+   * worked because the backend preferred its HttpOnly access cookie over the
+   * header. Where that cookie is absent (Safari, and now everywhere) the
+   * replay 401'd and signed the user out despite a successful refresh.
+   */
+  const authOf = (call: unknown[]) => ((call[1] as RequestInit).headers as Record<string, string>).Authorization
+
+  it('apiFetch', async () => {
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(ok({ id: 'j1' }))
+
+    await apiFetch('/api/jobs')
+    expect(authOf(fetchMock.mock.calls[0])).toBe('Bearer stale')
+    expect(authOf(fetchMock.mock.calls.at(-1)!), 'replayed with the dead token').toBe('Bearer fresh')
+  })
+
+  it('apiUpload', async () => {
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(ok({ candidateId: 'c1' }))
+
+    await expect(apiUpload('/api/candidates/upload', new FormData())).resolves.toEqual({ candidateId: 'c1' })
+    expect(authOf(fetchMock.mock.calls.at(-1)!), 'replayed with the dead token').toBe('Bearer fresh')
+  })
+})
+
+describe('cookie-based auth calls go to the app\'s own origin (SYN-007)', () => {
+  // The refresh cookie must be first-party or Safari never stores it; see
+  // tests/auth-proxy.test.ts. Everything else still goes straight to the API.
+  const urlOf = (i: number) => String(fetchMock.mock.calls[i][0])
+
+  it('login, signup and logout use a same-origin path', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(ok({ user: { id: 'u1' } })))
+    await authApi.login('a@b.co', 'pw')
+    await authApi.signup('a@b.co', 'pw', 'Ada', 'Co')
+    await authApi.logout()
+    expect([urlOf(0), urlOf(1), urlOf(2)]).toEqual(['/api/auth/login', '/api/auth/signup', '/api/auth/logout'])
+  })
+
+  it('the refresh uses a same-origin path', async () => {
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(ok({ id: 'j1' }))
+    await apiFetch('/api/jobs')
+    expect(urlOf(1)).toBe('/api/auth/refresh')
+  })
+
+  it('/api/auth/me and every other call still go straight to the API', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(ok({})))
+    await authApi.me()
+    await apiFetch('/api/jobs')
+    await apiFetch('/api/auth/login-history')   // only the four exact paths are same-origin
+    for (const i of [0, 1, 2]) expect(urlOf(i), urlOf(i)).toMatch(/^http:\/\/localhost:8787\/api\//)
+  })
+})
+
+describe('a 401 from a sign-in call is an answer, not an expired session (SYN-064)', () => {
+  // apiFetch treated every 401 as "session expired": a wrong password fired a
+  // pointless refresh and showed "Session expired" on the login form. With the
+  // refresh now forwarded through the app, that extra call also lands in the
+  // rate-limit bucket all forwarded calls share.
+  it('surfaces the API\'s message for a wrong password and does not try to refresh', async () => {
+    setPathname('/login')
+    fetchMock.mockResolvedValueOnce(fail(401, 'Invalid email or password'))
+
+    await expect(authApi.login('a@b.co', 'wrong')).rejects.toMatchObject({ status: 401, message: 'Invalid email or password' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(refreshCalls()).toBe(0)
+    expect(redirectedTo).toBeNull()
+  })
+
+  it('does the same for signup and logout', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(fail(401, 'nope')))
+    await expect(authApi.signup('a@b.co', 'pw', 'Ada', 'Co')).rejects.toMatchObject({ status: 401, message: 'nope' })
+    await expect(authApi.logout()).rejects.toMatchObject({ status: 401 })
+    expect(refreshCalls()).toBe(0)
+  })
+
+  it('still refreshes on a 401 from /api/auth/me, which IS an expired session', async () => {
+    setToken('stale')
+    fetchMock
+      .mockResolvedValueOnce(fail(401))
+      .mockResolvedValueOnce(ok({ token: 'fresh' }))
+      .mockResolvedValueOnce(ok({ id: 'u1' }))
+    await expect(authApi.me()).resolves.toEqual({ id: 'u1' })
+    expect(refreshCalls()).toBe(1)
   })
 })
 

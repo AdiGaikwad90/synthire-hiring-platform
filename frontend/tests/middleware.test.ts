@@ -3,23 +3,24 @@ import { NextRequest } from 'next/server'
 import { middleware } from '@/middleware'
 
 /**
- * Route gating. This is a UX guard, not a security boundary — it reads the JWT
- * WITHOUT verifying it, so it must never be relied on for authorization. The
+ * Route gating. This is a UX guard, not a security boundary: it trusts a
+ * cookie anyone can edit, so it must never be relied on for authorization. The
  * backend's authMiddleware is the real gate. What is tested here is that the
  * routing decisions are right and that a hostile cookie cannot crash the edge.
+ *
+ * SYN-007: the gate reads `synthire_session` (the role, 30 days), not
+ * `synthire_token`, which is the backend's 15-minute access cookie's name.
  */
 
-const jwt = (payload: Record<string, unknown>) =>
-  `header.${Buffer.from(JSON.stringify(payload)).toString('base64')}.sig`
-
-const req = (path: string, token?: string) => {
+const req = (path: string, session?: string, extraCookies: Record<string, string> = {}) => {
   const r = new NextRequest(new URL(`https://app.test${path}`))
-  if (token) r.cookies.set('synthire_token', token)
+  if (session !== undefined) r.cookies.set('synthire_session', session)
+  for (const [name, value] of Object.entries(extraCookies)) r.cookies.set(name, value)
   return r
 }
 
-const recruiter = jwt({ role: 'recruiter' })
-const interviewer = jwt({ role: 'interviewer' })
+const recruiter = 'recruiter'
+const interviewer = 'interviewer'
 
 const location = (res: Response) => res.headers.get('location')
 
@@ -86,6 +87,27 @@ describe('role routing', () => {
     expect(location(middleware(req('/interviews', recruiter)))).toBeNull()
     expect(location(middleware(req('/interviews', interviewer)))).toBeNull()
   })
+
+  it('lets an admin reach recruiter and interviewer routes', () => {
+    expect(location(middleware(req('/dashboard', 'admin')))).toBeNull()
+    expect(location(middleware(req('/interviewer', 'admin')))).toBeNull()
+  })
+})
+
+describe('the gate cookie is independent of the access cookie (SYN-007 regression)', () => {
+  // Before the fix the gate read `synthire_token`. On localhost that name
+  // belonged to the backend's HttpOnly cookie, which expires with the 15-minute
+  // access token — so a signed-in user was sent to /login on the next click.
+  it('lets a signed-in user through after the access cookie has expired', () => {
+    const res = middleware(req('/dashboard', recruiter))  // no synthire_token at all
+    expect(res.status).toBe(200)
+    expect(location(res)).toBeNull()
+  })
+
+  it('does not treat the backend access cookie as a session', () => {
+    const res = middleware(req('/dashboard', undefined, { synthire_token: 'header.eyJyb2xlIjoicmVjcnVpdGVyIn0.sig' }))
+    expect(location(res)).toContain('/login')
+  })
 })
 
 // SYN-060: the middleware is the one place security headers are set, so every
@@ -96,7 +118,7 @@ describe('security headers on every response', () => {
     ['a protected page with a cookie', req('/dashboard', recruiter)],
     ['the redirect to /login', req('/jobs/abc')],
     ['the interviewer redirect away from recruiter pages', req('/dashboard', interviewer)],
-    ['a malformed cookie let through', req('/dashboard', 'garbage')],
+    ['the redirect for an unusable cookie', req('/dashboard', 'garbage')],
   ]
   for (const [label, request] of cases) {
     it(`sets the CSP and framing headers on ${label}`, () => {
@@ -110,38 +132,22 @@ describe('security headers on every response', () => {
 
 describe('malformed and hostile cookies', () => {
   /**
-   * The payload is attacker-controlled: this decodes base64 without verifying
-   * the signature. It must never throw — an exception here fails the request at
-   * the edge for every route.
+   * The cookie is attacker-controlled. It must never throw — an exception here
+   * fails the request at the edge for every route — and anything that is not a
+   * real role is "not signed in", never a guess.
    */
-  const hostile = [
-    'not-a-jwt',
-    'a.b',
-    'a..c',
-    'a.!!!not-base64!!!.c',
-    `header.${Buffer.from('not json').toString('base64')}.sig`,
-    `header.${Buffer.from('null').toString('base64')}.sig`,
-    `header.${Buffer.from('[]').toString('base64')}.sig`,
-    '...',
-    '',
-  ]
+  const hostile = ['superuser', 'RECRUITER', 'recruiter ', 'recruiter,admin', '1', 'true', '{"role":"recruiter"}', '../admin', '%00', 'a'.repeat(5000), '']
 
-  for (const token of hostile) {
-    it(`does not throw on ${JSON.stringify(token).slice(0, 32)}`, () => {
-      expect(() => middleware(req('/dashboard', token))).not.toThrow()
+  for (const value of hostile) {
+    it(`sends ${JSON.stringify(value).slice(0, 32)} to /login without throwing`, () => {
+      let res!: Response
+      expect(() => { res = middleware(req('/dashboard', value)) }).not.toThrow()
+      expect(location(res)).toContain('/login')
     })
   }
 
-  it('falls through to the backend rather than guessing when the payload is unreadable', () => {
-    // A malformed token is deliberately let through — the API rejects it. The
-    // point is that the edge does not 500.
-    const res = middleware(req('/dashboard', 'garbage'))
-    expect(res.status).toBe(200)
-  })
-
-  it('ignores a forged role claim for routing only — the API still enforces it', () => {
-    // Anyone can craft this; it changes which page renders, nothing more.
-    const forged = jwt({ role: 'recruiter' })
-    expect(location(middleware(req('/dashboard', forged)))).toBeNull()
+  it('lets a forged role change which page renders — the API still enforces it', () => {
+    // Anyone can write this cookie; it decides the page shell, nothing more.
+    expect(location(middleware(req('/dashboard', 'recruiter')))).toBeNull()
   })
 })

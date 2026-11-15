@@ -81,7 +81,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
 ├── context/AuthContext.tsx   # session only
 └── lib/
     ├── api.ts                # typed client — components never import this directly
-    ├── auth.ts               # token storage
+    ├── auth.ts               # token storage, the route-gate cookie (role only), postLoginPath() (tested)
     ├── types.ts              # domain types
     ├── utils.ts              # cn(), initials(), formatDate()
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
