@@ -49,7 +49,7 @@ artifact page, which is no longer updated.
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Done | Upload | Candidate lists stay stale after a resume upload |
-| SYN-006 | P1 | In progress | Candidates | Stage filter uses statuses that don't exist |
+| SYN-006 | P1 | Done | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Done | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
@@ -163,12 +163,13 @@ artifact page, which is no longer updated.
 - **Confirmed on production (2026-11-15, WebKit, real AI):** deploy run 43722446468 green. Uploading one resume to the test job, without reloading: the sidebar count went 2 → 3 when the file was accepted, the dialog row moved through parsing and scoring to "Score: 63%", and the job's tab then listed the new candidate under "2 candidates", matching the API; no further API calls in the 24 seconds after it settled. The early-close and failed-file paths were checked locally only, to avoid leaving failed records in production.
 
 ### SYN-006 · Stage filter uses statuses that don't exist
-**P1** · Candidates · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Candidates · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
 
 - **Problem:** The Candidates page filter offers "Applied" (`applied`) and "Interviewing" (`interviewing`), which the backend never stores. "Applied" showed 0 cards while 14 candidates were `new`.
 - **Where:** `frontend/components/(recruiter)/Candidates.tsx:27-33` vs the status enum in `backend/src/types/api.ts:130` (`new, shortlisted, scheduled, inprogress, feedback, hired, rejected`).
 - **Done when:** filter options come from the real status list and each one returns matching candidates.
-- **Fix (2026-11-15, [PR #9](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/9), not yet merged):** one list of stages for the frontend (`frontend/lib/stages.ts`) feeds the filter, the card badge and the stage pill; the filter now offers New, Shortlisted, Scheduled, In Progress, Feedback, Hired and Rejected. The card badge no longer checks for the non-existent `interviewing`, so Scheduled / In Progress / Feedback get their colour, and it shows the stage's name instead of the raw value. The API (`CANDIDATE_STAGES` in `backend/src/types/api.ts`) accepts only real stages on `GET /api/candidates?status=` and answers 422 otherwise — it used to accept any string and return an empty list, which is why this went unnoticed. Verified locally in Chrome: every stage shows the cards the API returns for it (each job section previews at most 6), "New" shows the candidates "Applied" hid, and `applied` / `interviewing` get 422.
+- **Fix (2026-11-15, [PR #9](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/9), merged 2026-11-15 as `a72718f`):** one list of stages for the frontend (`frontend/lib/stages.ts`) feeds the filter, the card badge and the stage pill; the filter now offers New, Shortlisted, Scheduled, In Progress, Feedback, Hired and Rejected. The card badge no longer checks for the non-existent `interviewing`, so Scheduled / In Progress / Feedback get their colour, and it shows the stage's name instead of the raw value. The API (`CANDIDATE_STAGES` in `backend/src/types/api.ts`) accepts only real stages on `GET /api/candidates?status=` and answers 422 otherwise — it used to accept any string and return an empty list, which is why this went unnoticed. Verified locally in Chrome: every stage shows the cards the API returns for it (each job section previews at most 6), "New" shows the candidates "Applied" hid, and `applied` / `interviewing` get 422.
+- **Confirmed on production (2026-11-15, WebKit):** deploy run 43734797691 green. The filter lists All Stages plus the seven real stages; "New" shows the same three candidates the API returns, the other six stages show none (the API agrees), and `?status=applied` / `?status=interviewing` answer 422 naming the allowed values.
 
 ### SYN-007 · Sessions end early: 15 min in dev, 24 h in production
 **P1** · Auth · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
