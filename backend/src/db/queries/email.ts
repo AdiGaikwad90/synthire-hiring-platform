@@ -39,51 +39,33 @@ export async function logEmail(
     recipientEmail: string
     emailType: string
     subject: string | null
+    /** The provider's message id, whichever provider it was (the column predates Brevo). */
     resendMessageId: string | null
-    status: 'queued' | 'sent' | 'delivered' | 'bounced' | 'failed'
+    status: 'queued' | 'sent' | 'delivered' | 'bounced' | 'failed' | 'skipped'
     errorMessage: string | null
     companyId?: string
+    /** 'brevo' | 'resend'; null when no provider was asked to send. */
+    provider?: string | null
   }
 ): Promise<string> {
   const id = nanoid()
-  const sentAt = opts.status === 'sent' ? "datetime('now')" : null
-
-  if (sentAt) {
-    await db
-      .prepare(
-        `INSERT INTO email_logs (id, company_id, recipient_email, email_type, resend_message_id, subject, status, error_message, sent_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
-      )
-      .bind(
-        id,
-        opts.companyId ?? null,
-        opts.recipientEmail,
-        opts.emailType,
-        opts.resendMessageId,
-        opts.subject,
-        opts.status,
-        opts.errorMessage
-      )
-      .run()
-  } else {
-    await db
-      .prepare(
-        `INSERT INTO email_logs (id, company_id, recipient_email, email_type, resend_message_id, subject, status, error_message, sent_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime('now'))`
-      )
-      .bind(
-        id,
-        opts.companyId ?? null,
-        opts.recipientEmail,
-        opts.emailType,
-        opts.resendMessageId,
-        opts.subject,
-        opts.status,
-        opts.errorMessage
-      )
-      .run()
-  }
-
+  await db
+    .prepare(
+      `INSERT INTO email_logs (id, company_id, recipient_email, email_type, resend_message_id, subject, status, error_message, provider, sent_at, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, CASE WHEN ?7 = 'sent' THEN datetime('now') END, datetime('now'))`
+    )
+    .bind(
+      id,
+      opts.companyId ?? null,
+      opts.recipientEmail,
+      opts.emailType,
+      opts.resendMessageId,
+      opts.subject,
+      opts.status,
+      opts.errorMessage,
+      opts.provider ?? null
+    )
+    .run()
   return id
 }
 

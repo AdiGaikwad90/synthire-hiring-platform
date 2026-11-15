@@ -25,7 +25,7 @@ CI (`.github/workflows/ci.yml`) gates on `typecheck` + `test`. `tsconfig.json` s
 
 | Tier | Where | Examples |
 |---|---|---|
-| **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional). Production currently holds only `JWT_SECRET` + `SENDGRID_API_KEY` — `RESEND_WEBHOOK_SECRET` is unset, so the Resend webhook would 401 if `EMAIL_PROVIDER` were switched to resend. |
+| **Secrets** | `.dev.vars` locally → `wrangler secret put` in prod | `JWT_SECRET`, `BREVO_API_KEY`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENTRY_DSN` (optional). Production has no `RESEND_API_KEY` or `RESEND_WEBHOOK_SECRET` — set both before making Resend a provider, or Resend sends fail over to the fallback and its webhook answers 401. |
 | **Runtime vars** | `wrangler.toml [vars]` | model names, thresholds, TTLs — safe to commit |
 | **CF bindings** | `wrangler.toml [[d1_databases]]` etc. | `env.DB`, `env.RESUME_BUCKET`, `env.KV_CACHE`, `env.VECTORIZE`, `env.AI`, `env.RESUME_QUEUE` |
 
@@ -48,9 +48,9 @@ All resource IDs are already committed in `wrangler.toml` for dev, staging, and 
 
 ## Database (D1)
 
-13 tables across migrations `0001`–`0010`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
+13 tables across migrations `0001`–`0011`: `companies`, `users`, `jobs`, `candidates`, `interview_types`, `interviews`, `interview_feedback`, `email_logs`, `email_preferences`, `email_queue`, `refresh_tokens`, `quota_usage`, `candidate_skill_matches`.
 
-Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`, `0010` added `interviews.timezone` (the IANA zone an interview was scheduled in; NULL for older rows).
+Notable migrations: `0003` rebuilt `interviews` to make `interviewer_id` nullable (via `interviews_new` + rename), `0006` added `status` + `claimed_at` to `email_queue` for atomic dequeue, `0007` added `refresh_tokens`, `0008` added `quota_usage` (daily D1/KV counters — kept in D1 rather than KV so counting a write does not itself spend the KV write budget), `0009` added `candidate_skill_matches` (per-skill verdicts, NOCASE-unique per candidate) and `candidates.score_attribution`, `0010` added `interviews.timezone` (the IANA zone an interview was scheduled in; NULL for older rows), `0011` added `email_logs.provider` (who handled each attempt) and `email_queue.limit_deferrals` (hour-long waits taken at a sending limit).
 
 ---
 
@@ -171,8 +171,27 @@ resource that has no local simulator.
 Queue-only. `queueEmail()` inserts into `email_queue` (`status = 'pending'`); the cron runs `processEmailQueue()` every minute:
 
 1. Atomic `UPDATE...RETURNING` claims up to 10 rows (`status → 'claimed'`) — this is what prevents double-sends across concurrent cron runs. Don't replace it with select-then-update.
-2. `renderTemplate()` → `sendEmail()`, routed by `EMAIL_PROVIDER` to SendGrid (dev + production) or Resend (staging).
-3. Log to `email_logs`; on failure back off exponentially until `EMAIL_MAX_RETRIES`.
+2. `renderTemplate()` → `sendEmail()` (`services/email/send.ts`), the only place an email leaves the app.
+3. Every attempt is logged to `email_logs` with its `provider`; on failure back off exponentially until `EMAIL_MAX_RETRIES`.
+
+**Providers.** Brevo (`brevo.ts`) and Resend (`resend.ts`), chosen by two vars — no code change to switch:
+
+| Var | Now (no domain) | With a domain verified in Resend |
+|---|---|---|
+| `EMAIL_PROVIDER` | `brevo` | `resend` |
+| `EMAIL_FALLBACK_PROVIDER` | `""` (none) | `brevo` |
+
+`resolveEmailProviders()` throws on an unknown value, a missing `EMAIL_PROVIDER`, or the same provider twice, and `processEmailQueue()` calls it **before claiming rows** — a typo stops the drain with emails still pending instead of burning their retries. Resend without a verified domain only delivers to the account owner (403 for anyone else), which is why it is not the provider today. **Brevo blocks API calls from IP addresses it has not seen** (401 "unrecognised IP address") — Workers have no fixed egress IPs, so blocking must be deactivated at app.brevo.com/security/authorised_ips or every production send fails. Brevo rewrites a free-mail From address, so `brevo.ts` sets Reply-To to `BREVO_FROM_EMAIL`.
+
+| Outcome | What `sendEmail()` / the queue does |
+|---|---|
+| Provider fails for **any** reason (5xx, limit, rejected key or sender, timeout) | Next provider is tried; both attempts logged |
+| Every provider failed, all on a limit (429, Brevo 402 `not_enough_credits`) | `EmailSendError` kind `limit` → row waits 1 h, `limit_deferrals + 1`, **no retry spent**; after 24 waits it uses ordinary retries |
+| Every provider failed otherwise | kind `other` → ordinary retries with backoff, then `failed`; `last_error` carries each provider's message |
+| Recipient is not a valid address | kind `recipient`, no provider called, row `failed` at once |
+| Recipient on a reserved test domain (`example.com/.net/.org`, `.test`, `.example`, `.invalid`, `localhost`) | Never sent; log + queue row `skipped` — sample resumes are full of these and a bounce costs sender reputation |
+
+Known edge: a provider that times out *after* accepting an email is followed by the fallback, so the recipient can get it twice — chosen over a missing interview invitation. `email_logs.resend_message_id` holds the message id of whichever provider sent (the column predates Brevo); the Resend delivery webhook only ever matches Resend's ids.
 
 **Interview times in emails** go through `formatInterviewTime(iso, timeZone)` (`src/utils/dates.ts`) with the interview's stored `timezone`, passed as `timeZone` in the template data — the Worker runs in UTC, so formatting without a zone showed candidates UTC times. Interviews with no stored zone render in UTC, labelled. Keep its options in step with `formatInZone()` in `frontend/lib/timezones.ts`, which renders the scheduling form's email preview. `POST /api/interviews` rejects (422) an unknown zone and a `scheduled_at` that is not in the future.
 
@@ -238,5 +257,5 @@ Paginated responses nest `{ items, pagination: { total, page, limit, pages, has_
 |---|---|
 | Raw D1 queries, no ORM | Drizzle adds ~50 KB to the bundle; 11 tables doesn't justify it |
 | Workers AI for embeddings | Built-in binding — no API round-trip, no external rate limit |
-| Native `fetch` for Resend/SendGrid | Their npm packages pull in Node.js deps |
+| Native `fetch` for Brevo/Resend | Their npm packages pull in Node.js deps |
 | Async email queue | Keeps API responses fast; cron absorbs provider latency |

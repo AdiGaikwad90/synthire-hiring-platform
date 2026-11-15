@@ -2,10 +2,18 @@ import type { Env } from '../../types/bindings'
 import type { EmailQueueRow } from '../../types/db'
 import type { EmailType, TemplateData } from '../../types/email'
 import { renderTemplate } from './templates'
-import { sendEmail } from './resend'
-import { sendEmailViaSendGrid } from './sendgrid'
+import { sendEmail, resolveEmailProviders } from './send'
+import { EmailSendError } from './http'
+
+/** An email held back by a sending limit waits this long, at most this many times (24 h), before using retries. */
+const LIMIT_WAIT_MS = 60 * 60 * 1000
+const MAX_LIMIT_DEFERRALS = 24
 
 export async function processEmailQueue(env: Env): Promise<void> {
+  // Before claiming anything: a mistyped provider must stop the drain loudly
+  // and leave every email pending, not burn each one's retries.
+  resolveEmailProviders(env)
+
   const now = new Date().toISOString()
   const batchSize = parseInt(env.EMAIL_QUEUE_BATCH_SIZE ?? '10', 10)
   const backoffSeconds = parseInt(env.EMAIL_RETRY_BACKOFF_SECONDS ?? '60', 10)
@@ -57,34 +65,37 @@ export async function processEmailQueue(env: Env): Promise<void> {
         continue
       }
       const { subject, html } = renderTemplate(item.email_type as EmailType, templateData as unknown as TemplateData)
-      const provider = (env.EMAIL_PROVIDER ?? 'resend').toLowerCase()
-      if (provider === 'sendgrid') {
-        await sendEmailViaSendGrid(env, {
-          to: item.recipient_email,
-          subject,
-          html,
-          emailType: item.email_type as EmailType,
-        })
-      } else {
-        await sendEmail(env, {
-          to: item.recipient_email,
-          subject,
-          html,
-          emailType: item.email_type as EmailType,
-        })
+      const sentBy = await sendEmail(env, {
+        to: item.recipient_email,
+        subject,
+        html,
+        emailType: item.email_type as EmailType,
+      })
+      if (sentBy === null) {
+        // Reserved test address: closed without a send, so it is neither "sent" nor a failure.
+        await env.DB.prepare("UPDATE email_queue SET last_error=?, status='skipped' WHERE id=?")
+          .bind('Reserved test address — not sent', item.id).run()
+        continue
       }
       await env.DB.prepare("UPDATE email_queue SET sent_at=?, last_error=NULL, status='sent' WHERE id=?")
         .bind(now, item.id).run()
     } catch (err) {
+      const reason = String(err instanceof Error ? err.message : err)
+      const kind = err instanceof EmailSendError ? err.kind : 'other'
       const retries = item.retry_count + 1
       const backoffMs = Math.pow(2, item.retry_count) * backoffSeconds * 1000
-      if (retries >= item.max_retries) {
+      if (kind === 'limit' && item.limit_deferrals < MAX_LIMIT_DEFERRALS) {
+        // Every provider is at its limit: wait it out without spending a retry.
+        await env.DB.prepare("UPDATE email_queue SET limit_deferrals=limit_deferrals+1, scheduled_for=?, last_error=?, status='pending' WHERE id=?")
+          .bind(new Date(Date.now() + LIMIT_WAIT_MS).toISOString(), reason, item.id).run()
+      } else if (kind === 'recipient' || retries >= item.max_retries) {
+        // A bad address fails the same way every time — retrying it is pointless.
         await env.DB.prepare("UPDATE email_queue SET failed_at=?, last_error=?, status='failed' WHERE id=?")
-          .bind(now, String(err instanceof Error ? err.message : err), item.id).run()
+          .bind(now, reason, item.id).run()
       } else {
         const retryAt = new Date(Date.now() + backoffMs).toISOString()
         await env.DB.prepare("UPDATE email_queue SET retry_count=?, scheduled_for=?, last_error=?, status='pending' WHERE id=?")
-          .bind(retries, retryAt, String(err instanceof Error ? err.message : err), item.id).run()
+          .bind(retries, retryAt, reason, item.id).run()
       }
     }
   }

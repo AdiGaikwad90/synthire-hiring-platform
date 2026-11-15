@@ -43,9 +43,9 @@ the history is readable.
 | ID | Pri | Status | Area | Title |
 |---|---|---|---|---|
 | SYN-001 | P0 | Done | Deploy | Ship the queue-backed resume pipeline to production |
-| SYN-002 | P1 | In progress | Scheduling | Interview timezone picker is ignored |
+| SYN-002 | P1 | Done | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
-| SYN-004 | P1 | Open | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
+| SYN-004 | P1 | In progress | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
 | SYN-006 | P1 | Open | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Open | Auth | Sessions end early: 15 min in dev, 24 h in production |
@@ -74,10 +74,11 @@ the history is readable.
 | SYN-047 | P2 | Open | Observability | Production errors are invisible |
 | SYN-059 | P2 | Open | AI | AI question generation fails silently |
 | SYN-064 | P2 | Open | Auth | A wrong password shows "Session expired" |
+| SYN-067 | P2 | Open | Email | Email failures are invisible: logs carry no company |
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
 | SYN-026 | P3 | Open | UX | Some dates bypass the shared date formatters |
-| SYN-027 | P3 | In progress | Scheduling | Scheduler allows dates in the past |
+| SYN-027 | P3 | Done | Scheduling | Scheduler allows dates in the past |
 | SYN-028 | P3 | Open | Scheduling | Empty "Which round?" gives no hint |
 | SYN-029 | P3 | Open | UX | Dangling separators and singular/plural mistakes |
 | SYN-030 | P3 | Open | Interviews | "Open Zoom" label for every meeting link |
@@ -124,12 +125,12 @@ the history is readable.
 ## P1
 
 ### SYN-002 · Interview timezone picker is ignored
-**P1** · Scheduling · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Scheduling · Bug · Status: **Done** · Found 2026-10-24
 
 - **Problem:** `scheduled_at` is built from the browser's local time; the timezone dropdown changes nothing. Picking 2 PM Pacific from an IST browser saved `2026-10-28T08:30Z` (2 PM IST), 12.5 h off. The dropdown always defaults to Pacific, and the invitation email shows a time with no timezone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:107` (`new Date(calYear, calMonth - 1, date, hour, minute)`), `:39` (default `America/Los_Angeles`), email text built at `:56-80`.
 - **Done when:** the saved instant equals the chosen wall time in the chosen zone, the default is the browser's zone, and emails name the zone.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — merged 2026-10-26 as `38698d2`; deploy run 40229899579 `success`, migration 0010 applied on production (`interviews.timezone` present), `/health` ok.
 
 ### SYN-003 · Interviewers cannot join a company
 **P1** · Interviewers · Gap · Status: **Open** · Found 2026-10-24
@@ -140,11 +141,13 @@ the history is readable.
 - **Source:** production-readiness B2.
 
 ### SYN-004 · Email delivery fails: SendGrid "Maximum credits exceeded"
-**P1** · Email · Bug · Status: **Open** · Found 2026-10-24
+**P1** · Email · Bug · Status: **In progress** · Found 2026-10-24
 
 - **Problem:** Every send in local dev fails with `Maximum credits exceeded`. The local `email_logs` show 6 failures on 2026-10-24 and the last success on 2026-05-24. The production key has not been checked; if it shares the account, no interview emails go out there either.
 - **Where:** `EMAIL_PROVIDER = "sendgrid"` (dev + production) in `backend/wrangler.toml`, the `SENDGRID_API_KEY` secret.
-- **Done when:** the provider sends successfully in production (credits/plan, or switch to Resend) and repeated failures show up somewhere a recruiter or operator will see.
+- **Done when:** an interview email reaches a real inbox from production. (Making failures visible to a recruiter or operator moved to SYN-067.)
+- **Diagnosis (2026-11-14):** SendGrid's API for the local key reports account type `free`, `total: 0`, `remain: 0`, `is_hard_limit: true`, `last_reset: 2026-07-01` — the free allowance has ended (credits stopped resetting in July), so no email can be sent on that account. Production last sent successfully on 2026-06-20 and has attempted nothing since; its `SENDGRID_API_KEY` is a Worker secret and can't be read, so whether it is the same account is unconfirmed (compare keys in SendGrid → Settings → API Keys). Fix needs an owner decision: upgrade SendGrid to a paid plan, or switch production to Resend (already supported — `EMAIL_PROVIDER`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, verified domain). The 11 production `email_queue` rows still marked `pending` are from 24–25 May and already have `sent_at`, so they will not be re-sent.
+- **Fix (2026-11-14, [PR #5](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5), not yet merged):** owner decision — SendGrid removed, **Brevo** added (free 300/day, single verified sender, no domain needed). One sending function (`backend/src/services/email/send.ts`) tries `EMAIL_PROVIDER`, then `EMAIL_FALLBACK_PROVIDER`; now `brevo` / none, and after a domain is verified in Resend the switch is config only (`resend` / `brevo`). An unknown provider value stops the queue with emails still pending. A sending limit makes an email wait an hour (up to 24 times) without spending a retry; an invalid address fails at once; reserved test addresses (`example.com`, `.test`, …) are never sent. Migration `0011` adds `email_logs.provider` and `email_queue.limit_deferrals`. Covered by 67 new tests with stand-in providers. **Live pass (2026-11-14, local, real Chrome, real Brevo account):** an interview scheduled in the UI delivered the interviewer invitation to the owner's Gmail through Brevo (Brevo reports `delivered`); the candidate's `@example.com` address was skipped, not sent; with `EMAIL_PROVIDER = "resend"` / fallback `"brevo"` Resend failed and Brevo delivered the same email, both attempts logged with their provider; one Brevo refusal was retried by the queue and then delivered. **Brevo account requirement:** its IP blocking must be deactivated (app.brevo.com/security/authorised_ips) — Workers have no fixed IPs. For some minutes after turning it off Brevo still refused about 1 call in 15 from the same address ("unrecognised IP address"); the queue's retry covers that, but check `email_logs` after the production deploy. **Still to do:** store `BREVO_API_KEY` as the production secret **before** merging, merge, confirm an email from production, delete the production `SENDGRID_API_KEY` secret.
 
 ### SYN-005 · Candidate lists stay stale after a resume upload
 **P1** · Upload · Bug · Status: **Open** · Found 2026-10-24
@@ -358,6 +361,14 @@ the history is readable.
 - **Where:** `frontend/lib/api.ts` — `authApi.login` (`:341`) goes through `apiFetch`/`authedFetch`, which treats every 401 as an expired session (`:159-176`); the login form shows that message (`frontend/components/(auth)/LoginForm.tsx:44-45`). The backend already returns "Invalid email or password" (`backend/src/routes/auth.ts:138`).
 - **Done when:** login and signup bypass the refresh-on-401 path, a wrong password shows "Invalid email or password", and no refresh call is made on a failed sign-in.
 
+### SYN-067 · Email failures are invisible: logs carry no company
+**P2** · Email · Gap · Status: **Open** · Found 2026-11-14
+
+- **Problem:** Every row the email queue writes to `email_logs` has `company_id = NULL`, because a queued email does not record which company it belongs to. `GET /api/email/logs` and `GET /api/analytics/email-stats` both filter by the caller's company, so they always come back empty, and no screen shows email logs at all. When email stopped in June (SYN-004) nothing told a recruiter or the owner for months.
+- **Where:** `backend/src/services/email/queue.ts` (calls `sendEmail()` without `companyId`; `email_queue` has no company column), `backend/src/db/queries/email.ts::listEmailLogs`, `backend/src/db/queries/analytics.ts::getEmailStats`; `useEmailLogs` / `useEmailStats` are used by no component.
+- **Done when:** queued emails carry their company through to `email_logs`, a recruiter can see failed and skipped emails (with the reason) somewhere in the app, and a run of failures is surfaced to the operator (ties in with the error tracker gap).
+- **Source:** split out of SYN-004's original "done when".
+
 ## P3
 
 ### SYN-024 · Buttons that do nothing
@@ -383,12 +394,12 @@ the history is readable.
 - **Done when:** all go through `@/lib/utils` formatters.
 
 ### SYN-027 · Scheduler allows dates in the past
-**P3** · Scheduling · Bug · Status: **In progress** · Found 2026-10-24
+**P3** · Scheduling · Bug · Status: **Done** · Found 2026-10-24
 
 - **Problem:** Every day of the month is selectable, including days already gone.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx:51` (`disabledDays` is always empty).
 - **Done when:** past days and past times today are disabled, and the backend rejects a past `scheduled_at`.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — live Chrome pass green 2026-10-26; awaiting merge.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/4 (SYN-002 + SYN-027) — merged 2026-10-26 as `38698d2`; deploy run 40229899579 `success`, migration 0010 applied on production (`interviews.timezone` present), `/health` ok.
 
 ### SYN-028 · Empty "Which round?" gives no hint
 **P3** · Scheduling · UX · Status: **Open** · Found 2026-10-24

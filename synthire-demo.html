@@ -720,7 +720,7 @@ footer {
       <div class="stat-card">
         <div class="stat-label">Email Delivered</div>
         <div class="stat-value"><span data-count="98.7" data-decimal="1">0</span>%</div>
-        <div class="stat-meta">via SendGrid</div>
+        <div class="stat-meta">via Brevo</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Uptime</div>
@@ -919,7 +919,7 @@ footer {
             <span class="tech-badge cf">Workers — POST /api/interviews</span>
             <span class="tech-badge cf">D1 — interviews + email_queue tables</span>
             <span class="tech-badge cf">Cron Trigger — processEmailQueue every 1 min</span>
-            <span class="tech-badge pink">SendGrid — transactional delivery</span>
+            <span class="tech-badge pink">Brevo — transactional delivery</span>
             <span class="tech-badge gray">3 emails queued per schedule action</span>
           </div>
         </div>
@@ -945,12 +945,12 @@ footer {
         <div class="tl-num">11</div>
         <div class="tl-body">
           <div class="tl-header"><h4>Feedback &amp; Analytics</h4></div>
-          <p>Interviewer submits structured scores (technical, communication, culture) + hire/no-hire recommendation. Written to <code>interview_feedback</code> (D1). Analytics queries aggregate across all candidates: funnel counts by stage, time-to-hire by month, activity feed (last 20 stage changes), and email delivery stats via SendGrid webhook.</p>
+          <p>Interviewer submits structured scores (technical, communication, culture) + hire/no-hire recommendation. Written to <code>interview_feedback</code> (D1). Analytics queries aggregate across all candidates: funnel counts by stage, time-to-hire by month, activity feed (last 20 stage changes), and email delivery stats via Brevo webhook.</p>
           <div class="tl-tech">
             <span class="tech-badge cf">Workers — POST /api/interviews/:id/feedback</span>
             <span class="tech-badge cf">D1 — interview_feedback table</span>
             <span class="tech-badge cf">D1 — analytics aggregation queries</span>
-            <span class="tech-badge pink">SendGrid webhook — delivery status (HMAC-SHA256)</span>
+            <span class="tech-badge pink">Resend webhook — delivery status (HMAC-SHA256)</span>
             <span class="tech-badge blue">Next.js — analytics dashboard</span>
           </div>
         </div>
@@ -1064,7 +1064,7 @@ footer {
 
         <g class="arch-node">
           <rect x="800" y="580" width="240" height="70" rx="10"/>
-          <text x="920" y="608" text-anchor="middle">SendGrid · Transactional</text>
+          <text x="920" y="608" text-anchor="middle">Brevo · Transactional</text>
           <text x="920" y="628" text-anchor="middle" class="sub">HMAC webhook callback</text>
           <text x="920" y="642" text-anchor="middle" class="sub">delivered · opened · bounced</text>
         </g>
@@ -1144,7 +1144,7 @@ footer {
       <div class="tech-section-title">AI &amp; External Services</div>
       <div class="tech-grid reveal-stagger">
         <div class="tech-card ai"><div class="tech-icon">AI</div><h4>Workers AI · LLM</h4><p>Nemotron-120B (primary) → Llama-3.1-8B-AWQ (fallback) — no external gateway</p></div>
-        <div class="tech-card ai"><div class="tech-icon">@</div><h4>SendGrid</h4><p>Transactional email with event webhook callbacks</p></div>
+        <div class="tech-card ai"><div class="tech-icon">@</div><h4>Brevo</h4><p>Transactional email, with Resend as a switchable second provider</p></div>
         <div class="tech-card ai"><div class="tech-icon">🔐</div><h4>jose</h4><p>JWT signing &amp; verification using HS256</p></div>
         <div class="tech-card ai"><div class="tech-icon">🔑</div><h4>bcryptjs</h4><p>Password hashing — pure JS, Workers-compatible</p></div>
       </div>
@@ -1225,7 +1225,7 @@ footer {
       <div class="table-card"><div class="table-name">interview_types</div><p>Configurable rounds — Phone Screen, Technical, Culture Fit — defined per company.</p></div>
       <div class="table-card"><div class="table-name">interviews</div><p>Scheduled sessions linking candidate × interviewer × type, with email tracking columns.</p></div>
       <div class="table-card"><div class="table-name">interview_feedback</div><p>Per-interviewer structured scores and hire recommendation. Aggregated for analytics.</p></div>
-      <div class="table-card"><div class="table-name">email_logs</div><p>SendGrid send log with delivery status updated via event webhook callbacks.</p></div>
+      <div class="table-card"><div class="table-name">email_logs</div><p>Send log: one row per attempt, with the provider that handled it.</p></div>
       <div class="table-card"><div class="table-name">email_queue</div><p>Async send queue with atomic <code>UPDATE…RETURNING</code> dequeue, retry, and exponential backoff. <code>status</code> + <code>claimed_at</code> prevent double-send on concurrent cron runs.</p></div>
       <div class="table-card"><div class="table-name">refresh_tokens</div><p>Long-lived (30-day) opaque tokens stored SHA-256 hashed. Rotated on use. Enables silent re-auth without re-login — access tokens expire in 15 minutes.</p></div>
     </div>
@@ -1246,7 +1246,7 @@ footer {
         <div class="email-step"><div class="num">STEP 02</div><h5>Insert email_queue</h5><p>Row written to D1 with type, payload, and recipient.</p></div>
         <div class="email-step"><div class="num">STEP 03</div><h5>Return 200</h5><p>Client gets an instant response — zero email latency in hot path.</p></div>
         <div class="email-step"><div class="num">STEP 04</div><h5>Cron every 1 min</h5><p>processEmailQueue() pulls queued rows in batches.</p></div>
-        <div class="email-step"><div class="num">STEP 05</div><h5>SendGrid API</h5><p>Templates rendered, mail sent, log row created.</p></div>
+        <div class="email-step"><div class="num">STEP 05</div><h5>Brevo API</h5><p>Templates rendered, mail sent, log row created.</p></div>
         <div class="email-step"><div class="num">STEP 06</div><h5>Webhook</h5><p>HMAC-verified status updates: delivered · opened · bounced.</p></div>
       </div>
     </div>

@@ -12,17 +12,22 @@
 #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=
 
-# Resend API key — for transactional email (interview notifications, reminders).
-# Sign up free at https://resend.com → API Keys → Create API Key
-# Free tier: 100 emails/day, 3000/month — sufficient for development.
+# Brevo API key — transactional email (interview notifications, reminders).
+# Sends to any address from a single verified sender; no domain needed.
+# Sign up free at https://www.brevo.com → Senders → verify the address in
+# BREVO_FROM_EMAIL (wrangler.toml), then SMTP & API → API Keys → Generate.
+# Free tier: 300 emails/day. Used when EMAIL_PROVIDER or EMAIL_FALLBACK_PROVIDER is "brevo".
+# Brevo refuses API calls from IP addresses it has not seen ("unrecognised IP
+# address", 401). Workers have no fixed IPs, so turn that off once:
+# https://app.brevo.com/security/authorised_ips → Deactivate blocking.
+# Format: xkeysib-...
+BREVO_API_KEY=
+
+# Resend API key — only needed when EMAIL_PROVIDER or EMAIL_FALLBACK_PROVIDER is "resend".
+# Without a domain verified at resend.com/domains, Resend delivers only to the
+# account owner's own address. Free tier: 100 emails/day.
 # Format: re_...
 RESEND_API_KEY=
-
-# SendGrid API key — optional alternative to Resend (sends to any email without domain verification).
-# Sign up free at https://sendgrid.com → Settings → API Keys → Create API Key (Mail Send permission).
-# Free tier: 100 emails/day. Set EMAIL_PROVIDER=sendgrid in wrangler.toml to activate.
-# Format: SG.xxxxx...
-SENDGRID_API_KEY=
 
 # Resend webhook secret — verifies that delivery status callbacks come from Resend.
 # In the Resend dashboard: Webhooks → Add Endpoint →
