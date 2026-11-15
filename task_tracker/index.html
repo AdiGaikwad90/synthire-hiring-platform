@@ -257,12 +257,12 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Upload",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-24",
    "updated": "2026-11-15",
    "problem": "After a batch upload completed, the job's Candidates tab still said \"0 candidates\" and the sidebar count stayed at 14 until a full reload. The modal never invalidates the candidate or job queries. It also calls `apiUpload`/`apiFetch` directly (against the hooks rule) and its 2 s poll timers are not cleared when the modal closes.",
-   "where": "`frontend/components/(recruiter)/ResumeBatchModal.tsx`, `frontend/hooks/queries/useCandidates.ts`, `frontend/lib/upload-status.ts`; branch `fix/syn-005-stale-lists` (not yet merged)",
-   "done_when": "lists and counts refresh as each file finishes, upload and polling live in `hooks/queries/`, and timers stop on unmount.",
+   "where": "`frontend/components/(recruiter)/ResumeBatchModal.tsx`, `frontend/hooks/queries/useCandidates.ts`, `frontend/lib/upload-status.ts`",
+   "done_when": "Done 2026-11-15: on production, lists, counts and the score updated without a reload after an upload; upload and polling live in `hooks/queries/`; polling stops when the dialog closes.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/8",
    "source": ""
   },
@@ -1292,6 +1292,13 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-15T14:12:00.000Z",
+   "text": "SYN-005 done: PR #8 merged and deployed. On production an uploaded resume updated the sidebar count, the job's candidate list and the score without a reload.",
+   "ids": [
+    "SYN-005"
+   ]
+  },
   {
    "at": "2026-11-15T14:05:00.000Z",
    "text": "SYN-005 in progress: lists, counts and scores now update without a reload after an upload, including when the dialog is closed early; a failed file shows its reason. Tested locally with real AI. Logged SYN-069 (job page never shows its candidate count).",
