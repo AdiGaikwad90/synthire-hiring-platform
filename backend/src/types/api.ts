@@ -127,13 +127,21 @@ export const listJobsSchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
 })
 
+/**
+ * Every stage a candidate can be in. The one list for both setting a stage and
+ * filtering by one — keep frontend/lib/stages.ts in step with it.
+ */
+export const CANDIDATE_STAGES = ['new', 'shortlisted', 'scheduled', 'inprogress', 'feedback', 'hired', 'rejected'] as const
+
 export const updateCandidateSchema = z.object({
-  status: z.enum(['new', 'shortlisted', 'scheduled', 'inprogress', 'feedback', 'hired', 'rejected']).optional(),
+  status: z.enum(CANDIDATE_STAGES).optional(),
 })
 
 export const listCandidatesSchema = z.object({
   job_id: z.string().optional(),
-  status: z.string().optional(),
+  // A real stage or nothing. It used to be any string, so a filter for a stage
+  // that does not exist ("applied") came back empty instead of failing (SYN-006).
+  status: z.enum(CANDIDATE_STAGES).optional(),
   min_score: z.coerce.number().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(200).default(20),

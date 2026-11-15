@@ -85,6 +85,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── types.ts              # domain types
     ├── utils.ts              # cn(), initials(), formatDate()
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
+    ├── stages.ts             # the candidate stages, their names, filter options and badge tone (pure, tested)
     ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     ├── security-headers.ts   # CSP + framing/HSTS headers, applied by middleware.ts (pure, tested)
     ├── timezones.ts          # wall time in a chosen zone ↔ instant, zone picker options (pure, tested)

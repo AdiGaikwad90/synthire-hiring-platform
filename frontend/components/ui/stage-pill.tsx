@@ -1,16 +1,12 @@
 "use client";
 import * as React from "react";
 import type { Stage } from "@/lib/types";
+import { STAGES, STAGE_LABELS } from "@/lib/stages";
 
-export const STAGE_META: Record<Stage, { label: string; color: string }> = {
-  new:         { label: "New",          color: "var(--stage-new)" },
-  shortlisted: { label: "Shortlisted",  color: "var(--stage-shortlisted)" },
-  scheduled:   { label: "Scheduled",    color: "var(--stage-scheduled)" },
-  inprogress:  { label: "In Progress",  color: "var(--stage-inprogress)" },
-  feedback:    { label: "Feedback",     color: "var(--stage-feedback)" },
-  hired:       { label: "Hired",        color: "var(--stage-hired)" },
-  rejected:    { label: "Rejected",     color: "var(--stage-rejected)" },
-};
+// Names come from lib/stages.ts, the one list of stages; only the colour is local.
+export const STAGE_META = Object.fromEntries(
+  STAGES.map((stage) => [stage, { label: STAGE_LABELS[stage], color: `var(--stage-${stage})` }]),
+) as Record<Stage, { label: string; color: string }>;
 
 export interface StagePillProps {
   stage: Stage;
