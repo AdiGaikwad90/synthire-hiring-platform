@@ -289,12 +289,12 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Auth",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-24",
    "updated": "2026-11-15",
    "problem": "People are signed out long before the 30-day session ends: after 15 minutes locally, after 24 hours in Chrome on production, and after 15 minutes in Safari on production (the session-renewal cookie belongs to another site, so Safari never stores it).",
-   "where": "`frontend/lib/auth.ts`, `frontend/middleware.ts`, `frontend/lib/api.ts`, new `frontend/app/api/auth/[...path]/route.ts`; branch `fix/syn-007-session-cookies` (not yet merged)",
-   "done_when": "The route gate lasts as long as the refresh token, the cookies have different names, a logged-in user hitting `/login` is sent on, and a Safari session on production survives past 15 minutes.",
+   "where": "`frontend/lib/auth.ts`, `frontend/middleware.ts`, `frontend/lib/api.ts`, `frontend/app/api/auth/[...path]/route.ts`",
+   "done_when": "Done 2026-11-15: on production in WebKit a session survived past the 15-minute token expiry and renewed itself; the route gate has its own 30-day cookie; a signed-in visit to `/login` is forwarded.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7",
    "source": ""
   },
@@ -689,11 +689,11 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P2",
    "area": "Auth",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-25",
    "updated": "2026-11-15",
    "problem": "Signing in with a wrong password shows \"Session expired\" instead of \"Invalid email or password\", and fires an unneeded `POST /api/auth/refresh` after each failed attempt. Reproduced on production 2026-10-25.",
-   "where": "`frontend/lib/api.ts`; fixed together with SYN-007 (not yet merged)",
+   "where": "`frontend/lib/api.ts`",
    "done_when": "login and signup bypass the refresh-on-401 path, a wrong password shows \"Invalid email or password\", and no refresh call is made on a failed sign-in.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7",
    "source": ""
@@ -1276,6 +1276,14 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-15T12:20:00.000Z",
+   "text": "SYN-007 and SYN-064 done: PR #7 merged and deployed. On production in WebKit a session survived past the 15-minute expiry and renewed itself; a wrong password now shows \"Invalid email or password\".",
+   "ids": [
+    "SYN-007",
+    "SYN-064"
+   ]
+  },
   {
    "at": "2026-11-15T13:00:00.000Z",
    "text": "SYN-007 in progress: sessions also end after 15 minutes in Safari on production (found and confirmed). Fix built and tested locally: separate route-gate cookie, auth calls forwarded through the app so the renewal cookie is first-party. Also fixes SYN-064. Logged SYN-068.",
