@@ -4,15 +4,16 @@ Every known bug, fake-content problem, gap and chore, with a priority and a
 status. Found issues land here first; fixed issues stay here marked **Done** so
 the history is readable.
 
-**Tracker page (high-level view):** https://claude.ai/artifact/26CtQULZgXxSJ5FKB3MZEg
-(private to the owner; share it from the page's Share menu)
+**Tracker page (high-level view):** `task_tracker/index.html` — open it in a
+browser. It is one self-contained file and replaces the earlier claude.ai
+artifact page, which is no longer updated.
 
 ## How this backlog works
 
 - **This file is the source of truth.** The tracker page mirrors each issue's
   ID, title, priority, area, status and one-line problem so progress can be
-  followed at a glance. It reads from the artifact's database; nothing on the
-  page is hand-edited.
+  followed at a glance. Its data is the JSON block near the end of
+  `task_tracker/index.html`; the rest of the page is not touched.
 - **Priorities**
   - **P0** — production is broken or data is lost.
   - **P1** — a core flow does the wrong thing or shows wrong data.
@@ -25,13 +26,14 @@ the history is readable.
 - **Fixing an issue:** follow the root `TESTING.md` (regression test that fails without
   the fix, then the Playwright pass with real LLM calls). Then set the status to
   `Done`, add the PR link and date to the section, and update the tracker in the
-  same session (its `issues/<ID>` document, plus one line in `changes`).
-- **Tracker data shape** (Claude writes it with the `ArtifactData` tool on the
-  URL above): collection `issues`, one document per ID with `id, num, title,
+  same session (the issue's object in `issues`, plus one new line at the top of
+  `changes`).
+- **Tracker data shape** (the `<script id="data">` block in
+  `task_tracker/index.html`): `issues`, one object per ID with `id, num, title,
   priority, area, type, status (open | in_progress | done | wont_fix), found,
-  updated, problem, where, done_when, pr, source`; collection `changes`, documents
-  `c-NNNN` with `at` (ISO time), `text`, `ids`. Only the owner and editors can
-  write; anyone the page is shared with can read.
+  updated, problem, where, done_when, pr, source`; `changes`, newest first, each
+  with `at` (ISO time), `text`, `ids`. A `</` inside a value must be written
+  `<\/`.
 - Evidence comes from the end-to-end Playwright pass of 2026-10-24 (local,
   `test@synthire.io`, real Workers AI) and the 2026-10-25 code check of the May
   audit (`docs/production-readiness.md`, folded in here and removed — see the
@@ -45,7 +47,7 @@ the history is readable.
 | SYN-001 | P0 | Done | Deploy | Ship the queue-backed resume pipeline to production |
 | SYN-002 | P1 | Done | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
-| SYN-004 | P1 | In progress | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
+| SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
 | SYN-006 | P1 | Open | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Open | Auth | Sessions end early: 15 min in dev, 24 h in production |
@@ -141,13 +143,13 @@ the history is readable.
 - **Source:** production-readiness B2.
 
 ### SYN-004 · Email delivery fails: SendGrid "Maximum credits exceeded"
-**P1** · Email · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Email · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
 
 - **Problem:** Every send in local dev fails with `Maximum credits exceeded`. The local `email_logs` show 6 failures on 2026-10-24 and the last success on 2026-05-24. The production key has not been checked; if it shares the account, no interview emails go out there either.
 - **Where:** `EMAIL_PROVIDER = "sendgrid"` (dev + production) in `backend/wrangler.toml`, the `SENDGRID_API_KEY` secret.
 - **Done when:** an interview email reaches a real inbox from production. (Making failures visible to a recruiter or operator moved to SYN-067.)
 - **Diagnosis (2026-11-14):** SendGrid's API for the local key reports account type `free`, `total: 0`, `remain: 0`, `is_hard_limit: true`, `last_reset: 2026-07-01` — the free allowance has ended (credits stopped resetting in July), so no email can be sent on that account. Production last sent successfully on 2026-06-20 and has attempted nothing since; its `SENDGRID_API_KEY` is a Worker secret and can't be read, so whether it is the same account is unconfirmed (compare keys in SendGrid → Settings → API Keys). Fix needs an owner decision: upgrade SendGrid to a paid plan, or switch production to Resend (already supported — `EMAIL_PROVIDER`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, verified domain). The 11 production `email_queue` rows still marked `pending` are from 24–25 May and already have `sent_at`, so they will not be re-sent.
-- **Fix (2026-11-14, [PR #5](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5), not yet merged):** owner decision — SendGrid removed, **Brevo** added (free 300/day, single verified sender, no domain needed). One sending function (`backend/src/services/email/send.ts`) tries `EMAIL_PROVIDER`, then `EMAIL_FALLBACK_PROVIDER`; now `brevo` / none, and after a domain is verified in Resend the switch is config only (`resend` / `brevo`). An unknown provider value stops the queue with emails still pending. A sending limit makes an email wait an hour (up to 24 times) without spending a retry; an invalid address fails at once; reserved test addresses (`example.com`, `.test`, …) are never sent. Migration `0011` adds `email_logs.provider` and `email_queue.limit_deferrals`. Covered by 67 new tests with stand-in providers. **Live pass (2026-11-14, local, real Chrome, real Brevo account):** an interview scheduled in the UI delivered the interviewer invitation to the owner's Gmail through Brevo (Brevo reports `delivered`); the candidate's `@example.com` address was skipped, not sent; with `EMAIL_PROVIDER = "resend"` / fallback `"brevo"` Resend failed and Brevo delivered the same email, both attempts logged with their provider; one Brevo refusal was retried by the queue and then delivered. **Brevo account requirement:** its IP blocking must be deactivated (app.brevo.com/security/authorised_ips) — Workers have no fixed IPs. For some minutes after turning it off Brevo still refused about 1 call in 15 from the same address ("unrecognised IP address"); the queue's retry covers that, but check `email_logs` after the production deploy. **Still to do:** store `BREVO_API_KEY` as the production secret **before** merging, merge, confirm an email from production, delete the production `SENDGRID_API_KEY` secret.
+- **Fix (2026-11-14, [PR #5](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5), merged and deployed 2026-11-15):** owner decision — SendGrid removed, **Brevo** added (free 300/day, single verified sender, no domain needed). One sending function (`backend/src/services/email/send.ts`) tries `EMAIL_PROVIDER`, then `EMAIL_FALLBACK_PROVIDER`; now `brevo` / none, and after a domain is verified in Resend the switch is config only (`resend` / `brevo`). An unknown provider value stops the queue with emails still pending. A sending limit makes an email wait an hour (up to 24 times) without spending a retry; an invalid address fails at once; reserved test addresses (`example.com`, `.test`, …) are never sent. Migration `0011` adds `email_logs.provider` and `email_queue.limit_deferrals`. Covered by 67 new tests with stand-in providers. **Live pass (2026-11-14, local, real Chrome, real Brevo account):** an interview scheduled in the UI delivered the interviewer invitation to the owner's Gmail through Brevo (Brevo reports `delivered`); the candidate's `@example.com` address was skipped, not sent; with `EMAIL_PROVIDER = "resend"` / fallback `"brevo"` Resend failed and Brevo delivered the same email, both attempts logged with their provider; one Brevo refusal was retried by the queue and then delivered. **Brevo account requirement:** its IP blocking must be deactivated (app.brevo.com/security/authorised_ips) — Workers have no fixed IPs. For some minutes after turning it off Brevo still refused about 1 call in 15 from the same address ("unrecognised IP address"); the queue's retry covers that, but check `email_logs` after the production deploy. **Production (2026-11-15):** `BREVO_API_KEY` stored as a Worker secret, PR #5 merged, deploy run green (backend + frontend `success`, staging skipped), migration `0011` applied, live settings show `EMAIL_PROVIDER = brevo`, `/health` ok, and the every-minute email job runs without errors. **Confirmed on production (2026-11-15):** an interview scheduled in the production app sent the interviewer invitation through Brevo — `email_logs` shows `sent` / provider `brevo`, and Brevo reports it `delivered`; the candidate's `@example.com` address was skipped. The unused `SENDGRID_API_KEY` production secret was deleted by the owner on 2026-11-15 (production now holds only `JWT_SECRET` and `BREVO_API_KEY`). Local test accounts were moved from `@synthire.io` to the reserved `@synthire.test` domain so local testing cannot email a domain the owner does not control.
 
 ### SYN-005 · Candidate lists stay stale after a resume upload
 **P1** · Upload · Bug · Status: **Open** · Found 2026-10-24

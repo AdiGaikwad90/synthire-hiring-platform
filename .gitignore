@@ -82,3 +82,6 @@ development_referrences/
 # like code. The rest of docs/ is tracked.
 docs/superpowers/*
 !docs/superpowers/specs/
+
+# Local login credentials for manual and Playwright testing — never commit.
+login_creds/
