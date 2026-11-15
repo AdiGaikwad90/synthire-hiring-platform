@@ -14,15 +14,19 @@ Every fix, new feature, or modification must be tested with Playwright before ha
 ```
 Backend:  http://localhost:8787
 Frontend: http://localhost:3000
-Email:    test@synthire.io
+Email:    test@synthire.test
 Password: password123
 ```
+
+Test accounts use the reserved `.test` domain on purpose: the app never sends
+email to reserved test addresses, so local testing cannot mail a real domain.
+Do not create local accounts on a domain you do not own.
 
 Create account if missing:
 ```bash
 curl -X POST http://localhost:8787/api/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@synthire.io","password":"password123","name":"Test User","company_name":"Test Corp"}'
+  -d '{"email":"test@synthire.test","password":"password123","name":"Test User","company_name":"Test Corp"}'
 ```
 
 ## What to Check on Every Page

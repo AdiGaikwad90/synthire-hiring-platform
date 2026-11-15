@@ -246,7 +246,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "updated": "2026-11-15",
    "problem": "Every send in local dev fails with `Maximum credits exceeded`. The local `email_logs` show 6 failures on 2026-10-24 and the last success on 2026-05-24. The production key has not been checked; if it shares the account, no interview emails go out there either.",
    "where": "`EMAIL_PROVIDER = \"sendgrid\"` (dev + production) in `backend/wrangler.toml`, the `SENDGRID_API_KEY` secret.",
-   "done_when": "an interview email reaches a real inbox from production. (Making failures visible to a recruiter or operator moved to SYN-067.)",
+   "done_when": "Done 2026-11-15: an interview scheduled in the production app sent the invitation through Brevo and Brevo reports it delivered. The old SendGrid production secret has been deleted.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5",
    "source": ""
   },
@@ -1260,6 +1260,13 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-15T12:00:00.000Z",
+   "text": "SYN-004 clean-up: the old SendGrid production secret is deleted, and local test accounts moved to the reserved `@synthire.test` domain so local testing cannot email a real domain.",
+   "ids": [
+    "SYN-004"
+   ]
+  },
   {
    "at": "2026-11-15T08:15:00.000Z",
    "text": "SYN-004 done: a real interview email was sent from production through Brevo and reported delivered. The fake candidate address was skipped as designed.",
