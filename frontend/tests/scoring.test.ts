@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows, skillsUnavailableReason, candidatePollInterval, CANDIDATE_POLL_MS,
+  VERDICT_META, VERDICT_ORDER, sortSkillMatches, verdictCounts, evaluationCoverage, parseAttribution, attributionRows, skillsUnavailableReason, candidatePollInterval, CANDIDATE_POLL_MS, candidateListPollInterval, CANDIDATE_LIST_POLL_MS,
 } from '@/lib/scoring'
 import type { ApiSkillMatch, ApiScoreAttribution } from '@/lib/api'
 
@@ -155,5 +155,45 @@ describe('candidatePollInterval', () => {
 
   it('does not poll before the candidate has loaded', () => {
     expect(candidatePollInterval(undefined)).toBe(false)
+  })
+})
+
+describe('candidateListPollInterval (SYN-005)', () => {
+  /**
+   * Candidate lists were fetched once and never again, so a resume still being
+   * processed stayed "Processing…" — and counts stayed wrong — until a full
+   * reload. A list now re-checks while anything on it is unfinished, which
+   * also covers closing the upload dialog early and uploads from another tab.
+   */
+  const c = (processing_status: string | null | undefined) => ({ processing_status })
+
+  it('re-checks while any listed candidate is still being processed', () => {
+    expect(candidateListPollInterval([c('complete'), c('scoring'), c('complete')])).toBe(CANDIDATE_LIST_POLL_MS)
+  })
+
+  it.each(['queued', 'pending', 'parsing', 'scoring'])('treats %s as unfinished', (status) => {
+    expect(candidateListPollInterval([c(status)])).toBe(CANDIDATE_LIST_POLL_MS)
+  })
+
+  it('stops once every candidate is finished or failed', () => {
+    expect(candidateListPollInterval([c('complete'), c('error')])).toBe(false)
+  })
+
+  it('does not poll an empty list, or before the list has loaded', () => {
+    expect(candidateListPollInterval([])).toBe(false)
+    expect(candidateListPollInterval(undefined)).toBe(false)
+    expect(candidateListPollInterval(null)).toBe(false)
+  })
+
+  // Rows from before processing_status existed have none; they must not make a list poll for ever.
+  it('does not poll for candidates with no status at all', () => {
+    expect(candidateListPollInterval([c(null), c(undefined), c('')])).toBe(false)
+  })
+
+  it('does not throw on a malformed list', () => {
+    for (const items of [[null], [undefined], ['x'], [{}]] as unknown[][]) {
+      expect(() => candidateListPollInterval(items as never), JSON.stringify(items)).not.toThrow()
+      expect(candidateListPollInterval(items as never)).toBe(false)
+    }
   })
 })

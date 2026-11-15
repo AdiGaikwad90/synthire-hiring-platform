@@ -51,6 +51,8 @@ export interface ApiCandidate {
   semantic_score: number | null; skills_score: number | null; experience_score: number | null
   education_score: number | null; achievements_score: number | null; ai_analysis: string | null
   status: string; processing_status: string; created_at: string; updated_at: string
+  /** Why processing failed, when processing_status is 'error'. */
+  processing_error?: string | null
   /** skill_matches is detail-endpoint only; score_attribution is on every candidate (list and detail). [] = scored before skill matching shipped. */
   skill_matches?: ApiSkillMatch[]
   score_attribution?: ApiScoreAttribution | null
@@ -399,6 +401,13 @@ export const candidatesApi = {
   list: (params?: Record<string, string>) =>
     apiFetch<PaginatedData<ApiCandidate>>(`/api/candidates?${new URLSearchParams(params ?? {})}`),
   get: (id: string) => apiFetch<ApiCandidate>(`/api/candidates/${id}`),
+  /** Answers 202 at once; processing runs on a queue — follow it with useUploadProgress(). */
+  upload: (file: File, jobId: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('jobId', jobId)
+    return apiUpload<{ candidateId: string }>('/api/candidates/upload', form)
+  },
   update: (id: string, data: { status?: string }) =>
     apiFetch<ApiCandidate>(`/api/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch<{ deleted: boolean }>(`/api/candidates/${id}`, { method: 'DELETE' }),

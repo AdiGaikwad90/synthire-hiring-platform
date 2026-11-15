@@ -48,9 +48,9 @@ artifact page, which is no longer updated.
 | SYN-002 | P1 | Done | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
-| SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
+| SYN-005 | P1 | In progress | Upload | Candidate lists stay stale after a resume upload |
 | SYN-006 | P1 | Open | Candidates | Stage filter uses statuses that don't exist |
-| SYN-007 | P1 | In progress | Auth | Sessions end early: 15 min in dev, 24 h in production |
+| SYN-007 | P1 | Done | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
@@ -75,7 +75,7 @@ artifact page, which is no longer updated.
 | SYN-046 | P2 | Open | AI | All companies share one daily AI budget |
 | SYN-047 | P2 | Open | Observability | Production errors are invisible |
 | SYN-059 | P2 | Open | AI | AI question generation fails silently |
-| SYN-064 | P2 | In progress | Auth | A wrong password shows "Session expired" |
+| SYN-064 | P2 | Done | Auth | A wrong password shows "Session expired" |
 | SYN-067 | P2 | Open | Email | Email failures are invisible: logs carry no company |
 | SYN-024 | P3 | Open | UX | Buttons that do nothing |
 | SYN-025 | P3 | Open | UX | Raw enum values shown to users |
@@ -112,6 +112,7 @@ artifact page, which is no longer updated.
 | SYN-065 | P3 | Open | Interviews | Interviewer "Today" tab uses the UTC date |
 | SYN-066 | P3 | Open | Email | An interview less than 24 h away gets its "reminder" immediately |
 | SYN-068 | P3 | Open | Auth | The API still accepts its access cookie as a login |
+| SYN-069 | P3 | Open | Jobs | The job page never shows its candidate count |
 
 ---
 
@@ -153,11 +154,12 @@ artifact page, which is no longer updated.
 - **Fix (2026-11-14, [PR #5](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5), merged and deployed 2026-11-15):** owner decision — SendGrid removed, **Brevo** added (free 300/day, single verified sender, no domain needed). One sending function (`backend/src/services/email/send.ts`) tries `EMAIL_PROVIDER`, then `EMAIL_FALLBACK_PROVIDER`; now `brevo` / none, and after a domain is verified in Resend the switch is config only (`resend` / `brevo`). An unknown provider value stops the queue with emails still pending. A sending limit makes an email wait an hour (up to 24 times) without spending a retry; an invalid address fails at once; reserved test addresses (`example.com`, `.test`, …) are never sent. Migration `0011` adds `email_logs.provider` and `email_queue.limit_deferrals`. Covered by 67 new tests with stand-in providers. **Live pass (2026-11-14, local, real Chrome, real Brevo account):** an interview scheduled in the UI delivered the interviewer invitation to the owner's Gmail through Brevo (Brevo reports `delivered`); the candidate's `@example.com` address was skipped, not sent; with `EMAIL_PROVIDER = "resend"` / fallback `"brevo"` Resend failed and Brevo delivered the same email, both attempts logged with their provider; one Brevo refusal was retried by the queue and then delivered. **Brevo account requirement:** its IP blocking must be deactivated (app.brevo.com/security/authorised_ips) — Workers have no fixed IPs. For some minutes after turning it off Brevo still refused about 1 call in 15 from the same address ("unrecognised IP address"); the queue's retry covers that, but check `email_logs` after the production deploy. **Production (2026-11-15):** `BREVO_API_KEY` stored as a Worker secret, PR #5 merged, deploy run green (backend + frontend `success`, staging skipped), migration `0011` applied, live settings show `EMAIL_PROVIDER = brevo`, `/health` ok, and the every-minute email job runs without errors. **Confirmed on production (2026-11-15):** an interview scheduled in the production app sent the interviewer invitation through Brevo — `email_logs` shows `sent` / provider `brevo`, and Brevo reports it `delivered`; the candidate's `@example.com` address was skipped. The unused `SENDGRID_API_KEY` production secret was deleted by the owner on 2026-11-15 (production now holds only `JWT_SECRET` and `BREVO_API_KEY`). Local test accounts were moved from `@synthire.io` to the reserved `@synthire.test` domain so local testing cannot email a domain the owner does not control.
 
 ### SYN-005 · Candidate lists stay stale after a resume upload
-**P1** · Upload · Bug · Status: **Open** · Found 2026-10-24
+**P1** · Upload · Bug · Status: **In progress** · Found 2026-10-24
 
 - **Problem:** After a batch upload completed, the job's Candidates tab still said "0 candidates" and the sidebar count stayed at 14 until a full reload. The modal never invalidates the candidate or job queries. It also calls `apiUpload`/`apiFetch` directly (against the hooks rule) and its 2 s poll timers are not cleared when the modal closes.
 - **Where:** `frontend/components/(recruiter)/ResumeBatchModal.tsx:34-85`.
 - **Done when:** lists and counts refresh as each file finishes, upload and polling live in `hooks/queries/`, and timers stop on unmount.
+- **Fix (2026-11-15, [PR #8](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/8), not yet merged):** upload and progress checks moved into `hooks/queries/useCandidates.ts` (`useUploadResume()`, `useUploadProgress()`), so the dialog owns no timers; candidate lists, job counts and dashboard numbers are refreshed when a file is accepted and each time one settles; `useCandidates()` re-checks every 10 s while any listed candidate is still being processed, which covers closing the dialog early, another tab and a teammate's upload. The dialog's rows are derived by `uploadRow()` (`lib/upload-status.ts`) and a failed row now shows its reason (the dialog part of SYN-008). Verified locally in Chrome with real AI: on a job with no candidates, without reloading, the sidebar count went 18 → 20, the tab showed "2 candidates", the score and the failure reason appeared; after closing the dialog early the list picked up the result on its own and stopped polling once everything settled; a file dropped with no job chosen is refused with a plain message and no request. **Known limit:** a candidate waiting in the queue keeps its lists re-checking (6 requests a minute per list) until it is processed or the backend marks it stale.
 
 ### SYN-006 · Stage filter uses statuses that don't exist
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-24
@@ -167,13 +169,13 @@ artifact page, which is no longer updated.
 - **Done when:** filter options come from the real status list and each one returns matching candidates.
 
 ### SYN-007 · Sessions end early: 15 min in dev, 24 h in production
-**P1** · Auth · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Auth · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
 
 - **Problem:** Locally, any navigation 15 minutes after login redirects to `/login`. The backend sets an HttpOnly `synthire_token` cookie with a 15-minute lifetime; cookies ignore the port, so on `localhost` it shadows the frontend's readable 24-hour cookie of the same name (script can't overwrite an HttpOnly cookie). When it expires, `middleware.ts` finds no cookie and redirects, even though a 30-day refresh token exists. The login page then refreshes the token silently but stays on the form. In production (different domains) the frontend cookie expires after 24 h, forcing a login despite the 30-day refresh token.
 - **Where:** `backend/src/middleware/auth.ts:93-95`, `frontend/lib/auth.ts:22`, `frontend/middleware.ts`.
 - **Done when:** the route gate lasts as long as the refresh token, the two cookies have different names, and a logged-in user hitting `/login` is sent on.
 - **Found while fixing (2026-11-15):** production is worse in Safari than recorded: the session ends after **15 minutes**, not 24 h. The app (`pages.dev`) and the API (`workers.dev`) are different sites, so the API's refresh cookie is a third-party cookie, which Safari does not store. Confirmed in WebKit on production: three hours after login the app was back on `/login` and `POST /api/auth/refresh` answered `401 No refresh token`. Also, `apiFetch` and `apiUpload` replayed the request after a refresh with the **old** token; it only worked because the API preferred its own access cookie over the header.
-- **Fix (2026-11-15, [PR #7](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7), not yet merged):** the route gate has its own cookie, `synthire_session` (the role only, 30 days, renewed on every refresh); login, signup, refresh and logout go through the frontend's own `/api/auth/*` forwarder (`frontend/app/api/auth/[...path]/route.ts`), so the refresh cookie is first-party; the forwarder relays only that cookie and drops the API's access cookie; replays carry the new token; `/login` and `/signup` forward a signed-in visitor, and a `?from=` that leaves the site is refused. Also fixes SYN-064. Verified locally in Chrome (renewal after a 20-second token expired, logout, tampered gate cookie, hostile `?from=`) and against the Cloudflare Pages build. **Still to do:** merge, then confirm in WebKit on production that a session survives past 15 minutes. Everyone signs in once more after the deploy (old refresh cookies sit on the API's site and are no longer used).
+- **Fix (2026-11-15, [PR #7](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7), merged 2026-11-15 as `96a50fc`):** the route gate has its own cookie, `synthire_session` (the role only, 30 days, renewed on every refresh); login, signup, refresh and logout go through the frontend's own `/api/auth/*` forwarder (`frontend/app/api/auth/[...path]/route.ts`), so the refresh cookie is first-party; the forwarder relays only that cookie and drops the API's access cookie; replays carry the new token; `/login` and `/signup` forward a signed-in visitor, and a `?from=` that leaves the site is refused. Also fixes SYN-064. Verified locally in Chrome (renewal after a 20-second token expired, logout, tampered gate cookie, hostile `?from=`) and against the Cloudflare Pages build. **Confirmed on production (2026-11-15, WebKit):** deploy run 43711463967 green (backend + frontend `success`). After login the only readable cookie was `synthire_session=recruiter`; a renewal through the app's own address answered 200 (it was `401 No refresh token` the same morning); 17 minutes after login, past the access token's expiry, the browser was still on `/dashboard` with a token the app had renewed by itself, `/jobs` loaded its data, and a visit to `/login` was forwarded to `/dashboard`. Playwright's WebKit is Safari's engine, not the Safari app; the cookie is now first-party, which Safari's tracking prevention allows. Everyone signs in once more after this deploy.
 
 ### SYN-008 · Failed uploads show as "Processing... · 0%" and hide the reason
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-24
@@ -182,6 +184,7 @@ artifact page, which is no longer updated.
 - **Where:** card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.
 - **Done when:** failed rows read as "Upload failed" with the reason and no score everywhere they appear.
 - **Source:** production-readiness C8.
+- **Partly done (2026-11-15, with SYN-005):** the upload dialog's row now shows the failure reason. Cards, the pipeline, the dashboard and job counts still show "Processing..." with 0%.
 
 ### SYN-009 · Edits to the invitation email are thrown away
 **P1** · Scheduling · Bug · Status: **Open** · Found 2026-10-24
@@ -360,12 +363,12 @@ artifact page, which is no longer updated.
 - **Done when:** a failed generation shows what happened and offers a retry on every screen that generates questions, and the 503 path is covered by a test.
 
 ### SYN-064 · A wrong password shows "Session expired"
-**P2** · Auth · Bug · Status: **In progress** · Found 2026-10-25
+**P2** · Auth · Bug · Status: **Done** (2026-11-15) · Found 2026-10-25
 
 - **Problem:** Signing in with a wrong password shows "Session expired" instead of "Invalid email or password", and fires an unneeded `POST /api/auth/refresh` after each failed attempt. Reproduced on production 2026-10-25.
 - **Where:** `frontend/lib/api.ts` — `authApi.login` (`:341`) goes through `apiFetch`/`authedFetch`, which treats every 401 as an expired session (`:159-176`); the login form shows that message (`frontend/components/(auth)/LoginForm.tsx:44-45`). The backend already returns "Invalid email or password" (`backend/src/routes/auth.ts:138`).
 - **Done when:** login and signup bypass the refresh-on-401 path, a wrong password shows "Invalid email or password", and no refresh call is made on a failed sign-in.
-- **Fix (2026-11-15, with SYN-007 in [PR #7](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7), not yet merged):** a 401 from login, signup or logout is treated as that call's own answer and never triggers a refresh; the login form now shows "Invalid email or password". Verified locally in Chrome.
+- **Fix (2026-11-15, with SYN-007 in [PR #7](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7), merged 2026-11-15):** a 401 from login, signup or logout is treated as that call's own answer and never triggers a refresh; the login form now shows "Invalid email or password". Verified locally in Chrome. On production the sign-in call answers a wrong password with 401 "Invalid email or password".
 
 ### SYN-067 · Email failures are invisible: logs carry no company
 **P2** · Email · Gap · Status: **Open** · Found 2026-11-14
@@ -636,6 +639,14 @@ artifact page, which is no longer updated.
 - **Where:** `backend/src/middleware/auth.ts` (cookie-first lookup, `buildAccessCookie`), `backend/src/routes/auth.ts` (three `Set-Cookie` calls for the access cookie).
 - **Done when:** the API authenticates with the `Authorization` header only, the access cookie is no longer issued, and the integration tests that log in by cookie are updated.
 - **Source:** found while fixing SYN-007.
+
+### SYN-069 · The job page never shows its candidate count
+**P3** · Jobs · Bug · Status: **Open** · Found 2026-11-15
+
+- **Problem:** On a job's own page the Candidates tab never shows its count badge, however many candidates the job has. The page reads `candidate_count` from `GET /api/jobs/:id`, which does not return it; only the jobs list does.
+- **Where:** `backend/src/db/queries/jobs.ts` (the list query counts candidates, the single-job query does not), `frontend/components/(recruiter)/Jobs.tsx:245`.
+- **Done when:** the job page shows the same candidate count as the jobs list, and it updates after an upload.
+- **Source:** found while testing SYN-005.
 
 ---
 
