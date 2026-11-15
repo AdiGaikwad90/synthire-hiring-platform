@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { securityHeaders } from '@/lib/security-headers'
+import { SESSION_COOKIE, isSessionRole } from '@/lib/auth'
 
 const RECRUITER_ROUTES = ['/dashboard', '/jobs', '/candidates', '/pipeline', '/analytics', '/settings']
 const INTERVIEWER_ROUTES = ['/interviewer']
@@ -28,30 +29,25 @@ function route(request: NextRequest): NextResponse {
   )
   if (!isProtected) return NextResponse.next()
 
-  const token = request.cookies.get('synthire_token')?.value
-  if (!token) {
+  // The gate cookie holds the role only (lib/auth.ts). It is a UX guard, not a
+  // security boundary: anyone can edit it, and the API enforces the real rules.
+  // Anything that is not a real role counts as signed out.
+  const role = request.cookies.get(SESSION_COOKIE)?.value
+  if (!isSessionRole(role)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('from', pathname)
     return NextResponse.redirect(url)
   }
 
-  // Decode JWT payload (no verification needed — just read claims for routing)
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    const role = payload.role as string
+  const isRecruiterRoute = RECRUITER_ROUTES.some(p => pathname === p || pathname.startsWith(p + '/'))
+  const isInterviewerRoute = INTERVIEWER_ROUTES.some(p => pathname === p || pathname.startsWith(p + '/'))
 
-    const isRecruiterRoute = RECRUITER_ROUTES.some(p => pathname === p || pathname.startsWith(p + '/'))
-    const isInterviewerRoute = INTERVIEWER_ROUTES.some(p => pathname === p || pathname.startsWith(p + '/'))
-
-    if (isRecruiterRoute && role === 'interviewer') {
-      return NextResponse.redirect(new URL('/interviewer', request.url))
-    }
-    if (isInterviewerRoute && role === 'recruiter') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-  } catch {
-    // If token is malformed, let it through — auth middleware will catch it
+  if (isRecruiterRoute && role === 'interviewer') {
+    return NextResponse.redirect(new URL('/interviewer', request.url))
+  }
+  if (isInterviewerRoute && role === 'recruiter') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   return NextResponse.next()

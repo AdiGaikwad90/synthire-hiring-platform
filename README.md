@@ -516,10 +516,10 @@ frontend/
 ├── hooks/queries/              # React Query hooks (6 files)
 ├── lib/
 │   ├── api.ts                  # Typed API client
-│   ├── auth.ts                 # Token storage helpers (localStorage + cookie)
+│   ├── auth.ts                 # Token storage + the route-gate cookie (role only)
 │   ├── types.ts                # Domain types
 │   └── utils.ts                # cn(), initials(), formatDate()
-├── middleware.ts               # Route protection (reads synthire_token cookie)
+├── middleware.ts               # Route protection (reads the synthire_session cookie)
 └── wrangler.toml               # Cloudflare Pages config
 ```
 
@@ -533,7 +533,7 @@ frontend/
 | `bcryptjs` not `bcrypt` | `bcrypt` uses native bindings that crash in Workers |
 | Workers AI for embeddings | Built-in binding, no API round-trip, no rate limits |
 | Async email queue | Keeps API responses fast; emails process in background cron |
-| JWT in localStorage + cookie | localStorage for API calls; cookie for Next.js middleware |
+| JWT in localStorage + a role-only gate cookie | localStorage for API calls; `synthire_session` (role, no token) for Next.js middleware; the refresh cookie is kept first-party by forwarding auth calls through the frontend |
 | SSE for resume upload | Streams real-time parse/score progress to the UI |
 | All config in wrangler.toml | Model names, thresholds, TTLs — tunable without code changes |
 | KV-backed rate limiting | Works on free tier; self-cleaning keys via TTL |

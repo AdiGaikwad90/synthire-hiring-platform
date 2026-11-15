@@ -3,7 +3,8 @@ import * as React from "react";
 import { Icon } from "@/lib/icons";
 import { Button, Input, Checkbox, Avatar, useToast } from "@/components/ui";
 import { Logo } from "@/components/shared/Logo";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useForwardSignedIn } from "@/context/AuthContext";
+import { postLoginPath } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -14,6 +15,7 @@ function Login() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
+  useForwardSignedIn(searchParams.get('from'));
   const toast = useToast();
   const [email, setEmail] = useS_lg("");
   const [password, setPassword] = useS_lg("");
@@ -39,8 +41,7 @@ function Login() {
     setApiError(null);
     try {
       await login(email, password);
-      const from = searchParams.get('from');
-      window.location.href = (from && from.startsWith('/')) ? from : '/dashboard';
+      window.location.href = postLoginPath(searchParams.get('from'));
     } catch (err) {
       setApiError(err instanceof ApiError ? err.message : 'Login failed');
     } finally {

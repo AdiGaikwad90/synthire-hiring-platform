@@ -46,7 +46,7 @@ PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
   if (isError)   return <ErrorState />
   ```
 - Imports use the `@/` alias; UI primitives come from the `@/components/ui` barrel.
-- Every file in `components/` is `'use client'`; pages under `app/` are server components and export `runtime = "edge"` (19 of them — required by next-on-pages).
+- Every file in `components/` is `'use client'`; pages under `app/` are server components and export `runtime = "edge"` (19 of them — required by next-on-pages). The one route handler, `app/api/auth/[...path]/route.ts`, is edge too.
 - `strict: false` — don't fight `any` in existing components, but type new code properly.
 - Styling: prefer existing `ts*` class names, inline `style={{}}` for one-offs, new classes go in `app/globals.css`.
 - **No thin re-export stubs.** The five that existed are deleted — import components from the file that defines them.
@@ -57,10 +57,13 @@ PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
 
 ## Auth
 
-- **Primary**: JWT in `localStorage` under `synthire_token`, sent as `Authorization: Bearer`.
-- **Secondary**: a non-HttpOnly cookie of the same name, written by `setToken()`. It exists solely so `middleware.ts` can gate routes server-side; it only works same-domain.
-- `lib/api.ts` injects the Bearer header, and on a 401 attempts `POST /api/auth/refresh` **once** (coalesced across concurrent requests) before redirecting to `/login`.
-- `middleware.ts` redirects to `/login?from=<path>` when the cookie is absent; matcher excludes `_next/*`, `favicon.ico`, and `api`. It also sets the security headers (CSP, framing, HSTS, nosniff) from `lib/security-headers.ts` on every page response, redirects included — `next.config.mjs` `headers()` is ignored by the Cloudflare Pages build, so headers must not live there (`UI_CONVENTIONS.md` §4b).
+- **Primary**: JWT in `localStorage` under `synthire_token`, sent as `Authorization: Bearer`. It is the only credential the browser presents to the API.
+- **Route gate**: the `synthire_session` cookie — the **role only**, never a token — written by `setToken()` / `markSession()` in `lib/auth.ts`, 30 days (as long as the refresh token), renewed on every refresh and whenever `/api/auth/me` confirms the session. `middleware.ts` reads it; anything but `recruiter` / `interviewer` / `admin` counts as signed out. It is a UX guard, not a security boundary.
+- **Never name a frontend cookie `synthire_token` or `synthire_refresh`** — those are the API's. The gate used to be called `synthire_token`; on localhost (cookies ignore the port) the API's HttpOnly 15-minute cookie of that name shadowed it and users were bounced to `/login` after 15 minutes (SYN-007).
+- **Login, signup, refresh and logout go to the app's own origin**: `lib/api.ts` sends those four paths to `/api/auth/*`, where `app/api/auth/[...path]/route.ts` forwards them to the API. The app and the API are different sites, so a cookie the API sets directly is third-party; Safari never stores it, and sessions died when the 15-minute access token did. The forwarder passes only those four calls and only the refresh cookie (rewritten to `SameSite=Lax`), and drops the API's access cookie. Everything else — including `/api/auth/me` — goes straight to the API with the Bearer header. Forwarded calls share one rate-limit bucket at the API (they all arrive from Cloudflare's address), so do not route more calls through it.
+- `lib/api.ts` injects the Bearer header, and on a 401 attempts `POST /api/auth/refresh` **once** (coalesced across concurrent requests) before redirecting to `/login`. The replay rebuilds its headers so it carries the **new** token. A 401 from login/signup/logout is that call's own answer (wrong password) and never triggers a refresh.
+- `/login` and `/signup` forward an already signed-in visitor (`useForwardSignedIn()` in `context/AuthContext.tsx`) to `postLoginPath(from)` — a path on this site, else `/dashboard`; `//host` style values are refused.
+- `middleware.ts` redirects to `/login?from=<path>` when the gate cookie is absent; matcher excludes `_next/*`, `favicon.ico`, and `api`. It also sets the security headers (CSP, framing, HSTS, nosniff) from `lib/security-headers.ts` on every page response, redirects included — `next.config.mjs` `headers()` is ignored by the Cloudflare Pages build, so headers must not live there (`UI_CONVENTIONS.md` §4b).
 - `AuthContext` verifies the session on mount via `GET /api/auth/me`.
 
 ---

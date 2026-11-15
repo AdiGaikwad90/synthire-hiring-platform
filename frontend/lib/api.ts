@@ -104,6 +104,17 @@ export interface ApiEmailPreferences {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
 
+/**
+ * The four calls that set or use the refresh cookie go to the app's OWN origin
+ * (app/api/auth/[...path]/route.ts forwards them to the API). The app and the
+ * API are different sites, so a cookie set by the API directly is a
+ * third-party cookie — Safari never stores it, the session could not be
+ * renewed, and users were signed out after 15 minutes (SYN-007). Everything
+ * else authenticates with the Bearer header and goes straight to the API.
+ */
+const SAME_ORIGIN_AUTH = new Set(['/api/auth/login', '/api/auth/signup', '/api/auth/refresh', '/api/auth/logout'])
+const urlFor = (path: string): string => (SAME_ORIGIN_AUTH.has(path) ? path : `${API_URL}${path}`)
+
 export class ApiError extends Error {
   constructor(public message: string, public status: number, public data?: unknown) {
     super(message)
@@ -130,7 +141,7 @@ let _isRefreshing = false
 let _refreshQueue: Array<{ resolve: () => void; reject: (e: unknown) => void }> = []
 
 async function attemptRefresh(): Promise<void> {
-  const res = await fetch(`${API_URL}/api/auth/refresh`, {
+  const res = await fetch(urlFor('/api/auth/refresh'), {
     method: 'POST',
     credentials: 'include',
   })
@@ -178,7 +189,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
     throw new ApiError('Session expired', 401)
   }
 
-  const first = await fetch(`${API_URL}${path}`, build())
+  const first = await fetch(urlFor(path), build())
   if (first.status !== 401) return first
 
   try {
@@ -187,7 +198,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
     return expire()
   }
 
-  const retry = await fetch(`${API_URL}${path}`, build())
+  const retry = await fetch(urlFor(path), build())
   if (retry.status === 401) return expire()
   return retry
 }
@@ -241,20 +252,26 @@ export async function apiFetch<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const { getToken, removeToken } = await import('./auth')
-  const token = getToken()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...((options.headers as Record<string, string>) ?? {}),
+  // Built per attempt: the replay after a refresh must carry the NEW token.
+  const buildHeaders = (): Record<string, string> => {
+    const token = getToken()
+    return {
+      'Content-Type': 'application/json',
+      ...((options.headers as Record<string, string>) ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
   }
-  if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(urlFor(path), {
     ...options,
-    headers,
+    headers: buildHeaders(),
     credentials: 'include',
   })
 
-  if (res.status === 401) {
+  // A 401 from a sign-in call is its answer (wrong password), not an expired
+  // session: refreshing would be pointless and showed "Session expired" on the
+  // login form (SYN-064).
+  if (res.status === 401 && !SAME_ORIGIN_AUTH.has(path)) {
     // Two distinct stages. Which one failed decides whether the session is
     // dead — the HTTP status alone does not, and inferring it from the status
     // produced two opposite bugs: a 403/422/500 on the replay logged the user
@@ -281,9 +298,9 @@ export async function apiFetch<T>(
 
     // Stage 2 — replay. The session is valid now, so anything other than
     // another 401 is an ordinary API error and must NOT clear the session.
-    const retryRes = await fetch(`${API_URL}${path}`, {
+    const retryRes = await fetch(urlFor(path), {
       ...options,
-      headers,
+      headers: buildHeaders(),
       credentials: 'include',
     })
     if (retryRes.status === 401) return sessionExpired()
@@ -310,24 +327,26 @@ export async function apiFetch<T>(
 
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   const { getToken, removeToken } = await import('./auth')
-  const token = getToken()
-  const uploadHeaders: Record<string, string> = {}
-  if (token) uploadHeaders['Authorization'] = `Bearer ${token}`
+  // Built per attempt: the replay after a refresh must carry the NEW token.
+  const uploadHeaders = (): Record<string, string> => {
+    const token = getToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(urlFor(path), {
     method: 'POST',
     body: formData,
-    headers: uploadHeaders,
+    headers: uploadHeaders(),
     credentials: 'include',
   })
 
   if (res.status === 401) {
     try {
       await doRefreshOnce()
-      const retryRes = await fetch(`${API_URL}${path}`, {
+      const retryRes = await fetch(urlFor(path), {
         method: 'POST',
         body: formData,
-        headers: uploadHeaders,
+        headers: uploadHeaders(),
         credentials: 'include',
       })
       if (retryRes.status === 401) {

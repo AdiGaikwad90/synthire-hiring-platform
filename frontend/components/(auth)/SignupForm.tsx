@@ -3,7 +3,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/lib/icons";
 import { Button, Input, Checkbox } from "@/components/ui";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, useForwardSignedIn } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { removeToken } from "@/lib/auth";
@@ -14,6 +14,9 @@ import { removeToken } from "@/lib/auth";
 export function SignupForm() {
   const router = useRouter();
   const { signup } = useAuth();
+  // Someone already signed in has no use for this form. (A fresh signup is not
+  // forwarded: submit() clears the token before the next render.)
+  useForwardSignedIn(null);
   const toast = useToast();
   const [email, setEmail] = React.useState("");
   const [name, setName] = React.useState("");
