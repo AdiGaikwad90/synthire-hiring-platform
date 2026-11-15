@@ -48,7 +48,7 @@ artifact page, which is no longer updated.
 | SYN-002 | P1 | Done | Scheduling | Interview timezone picker is ignored |
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
-| SYN-005 | P1 | Open | Upload | Candidate lists stay stale after a resume upload |
+| SYN-005 | P1 | In progress | Upload | Candidate lists stay stale after a resume upload |
 | SYN-006 | P1 | Open | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Done | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
@@ -112,6 +112,7 @@ artifact page, which is no longer updated.
 | SYN-065 | P3 | Open | Interviews | Interviewer "Today" tab uses the UTC date |
 | SYN-066 | P3 | Open | Email | An interview less than 24 h away gets its "reminder" immediately |
 | SYN-068 | P3 | Open | Auth | The API still accepts its access cookie as a login |
+| SYN-069 | P3 | Open | Jobs | The job page never shows its candidate count |
 
 ---
 
@@ -153,11 +154,12 @@ artifact page, which is no longer updated.
 - **Fix (2026-11-14, [PR #5](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/5), merged and deployed 2026-11-15):** owner decision — SendGrid removed, **Brevo** added (free 300/day, single verified sender, no domain needed). One sending function (`backend/src/services/email/send.ts`) tries `EMAIL_PROVIDER`, then `EMAIL_FALLBACK_PROVIDER`; now `brevo` / none, and after a domain is verified in Resend the switch is config only (`resend` / `brevo`). An unknown provider value stops the queue with emails still pending. A sending limit makes an email wait an hour (up to 24 times) without spending a retry; an invalid address fails at once; reserved test addresses (`example.com`, `.test`, …) are never sent. Migration `0011` adds `email_logs.provider` and `email_queue.limit_deferrals`. Covered by 67 new tests with stand-in providers. **Live pass (2026-11-14, local, real Chrome, real Brevo account):** an interview scheduled in the UI delivered the interviewer invitation to the owner's Gmail through Brevo (Brevo reports `delivered`); the candidate's `@example.com` address was skipped, not sent; with `EMAIL_PROVIDER = "resend"` / fallback `"brevo"` Resend failed and Brevo delivered the same email, both attempts logged with their provider; one Brevo refusal was retried by the queue and then delivered. **Brevo account requirement:** its IP blocking must be deactivated (app.brevo.com/security/authorised_ips) — Workers have no fixed IPs. For some minutes after turning it off Brevo still refused about 1 call in 15 from the same address ("unrecognised IP address"); the queue's retry covers that, but check `email_logs` after the production deploy. **Production (2026-11-15):** `BREVO_API_KEY` stored as a Worker secret, PR #5 merged, deploy run green (backend + frontend `success`, staging skipped), migration `0011` applied, live settings show `EMAIL_PROVIDER = brevo`, `/health` ok, and the every-minute email job runs without errors. **Confirmed on production (2026-11-15):** an interview scheduled in the production app sent the interviewer invitation through Brevo — `email_logs` shows `sent` / provider `brevo`, and Brevo reports it `delivered`; the candidate's `@example.com` address was skipped. The unused `SENDGRID_API_KEY` production secret was deleted by the owner on 2026-11-15 (production now holds only `JWT_SECRET` and `BREVO_API_KEY`). Local test accounts were moved from `@synthire.io` to the reserved `@synthire.test` domain so local testing cannot email a domain the owner does not control.
 
 ### SYN-005 · Candidate lists stay stale after a resume upload
-**P1** · Upload · Bug · Status: **Open** · Found 2026-10-24
+**P1** · Upload · Bug · Status: **In progress** · Found 2026-10-24
 
 - **Problem:** After a batch upload completed, the job's Candidates tab still said "0 candidates" and the sidebar count stayed at 14 until a full reload. The modal never invalidates the candidate or job queries. It also calls `apiUpload`/`apiFetch` directly (against the hooks rule) and its 2 s poll timers are not cleared when the modal closes.
 - **Where:** `frontend/components/(recruiter)/ResumeBatchModal.tsx:34-85`.
 - **Done when:** lists and counts refresh as each file finishes, upload and polling live in `hooks/queries/`, and timers stop on unmount.
+- **Fix (2026-11-15, branch `fix/syn-005-stale-lists`, not yet merged):** upload and progress checks moved into `hooks/queries/useCandidates.ts` (`useUploadResume()`, `useUploadProgress()`), so the dialog owns no timers; candidate lists, job counts and dashboard numbers are refreshed when a file is accepted and each time one settles; `useCandidates()` re-checks every 10 s while any listed candidate is still being processed, which covers closing the dialog early, another tab and a teammate's upload. The dialog's rows are derived by `uploadRow()` (`lib/upload-status.ts`) and a failed row now shows its reason (the dialog part of SYN-008). Verified locally in Chrome with real AI: on a job with no candidates, without reloading, the sidebar count went 18 → 20, the tab showed "2 candidates", the score and the failure reason appeared; after closing the dialog early the list picked up the result on its own and stopped polling once everything settled; a file dropped with no job chosen is refused with a plain message and no request. **Known limit:** a candidate waiting in the queue keeps its lists re-checking (6 requests a minute per list) until it is processed or the backend marks it stale.
 
 ### SYN-006 · Stage filter uses statuses that don't exist
 **P1** · Candidates · Bug · Status: **Open** · Found 2026-10-24
@@ -182,6 +184,7 @@ artifact page, which is no longer updated.
 - **Where:** card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.
 - **Done when:** failed rows read as "Upload failed" with the reason and no score everywhere they appear.
 - **Source:** production-readiness C8.
+- **Partly done (2026-11-15, with SYN-005):** the upload dialog's row now shows the failure reason. Cards, the pipeline, the dashboard and job counts still show "Processing..." with 0%.
 
 ### SYN-009 · Edits to the invitation email are thrown away
 **P1** · Scheduling · Bug · Status: **Open** · Found 2026-10-24
@@ -636,6 +639,14 @@ artifact page, which is no longer updated.
 - **Where:** `backend/src/middleware/auth.ts` (cookie-first lookup, `buildAccessCookie`), `backend/src/routes/auth.ts` (three `Set-Cookie` calls for the access cookie).
 - **Done when:** the API authenticates with the `Authorization` header only, the access cookie is no longer issued, and the integration tests that log in by cookie are updated.
 - **Source:** found while fixing SYN-007.
+
+### SYN-069 · The job page never shows its candidate count
+**P3** · Jobs · Bug · Status: **Open** · Found 2026-11-15
+
+- **Problem:** On a job's own page the Candidates tab never shows its count badge, however many candidates the job has. The page reads `candidate_count` from `GET /api/jobs/:id`, which does not return it; only the jobs list does.
+- **Where:** `backend/src/db/queries/jobs.ts` (the list query counts candidates, the single-job query does not), `frontend/components/(recruiter)/Jobs.tsx:245`.
+- **Done when:** the job page shows the same candidate count as the jobs list, and it updates after an upload.
+- **Source:** found while testing SYN-005.
 
 ---
 

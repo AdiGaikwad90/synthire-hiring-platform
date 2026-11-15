@@ -257,11 +257,11 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Upload",
    "type": "Bug",
-   "status": "open",
+   "status": "in_progress",
    "found": "2026-10-24",
-   "updated": "2026-10-24",
+   "updated": "2026-11-15",
    "problem": "After a batch upload completed, the job's Candidates tab still said \"0 candidates\" and the sidebar count stayed at 14 until a full reload. The modal never invalidates the candidate or job queries. It also calls `apiUpload`/`apiFetch` directly (against the hooks rule) and its 2 s poll timers are not cleared when the modal closes.",
-   "where": "`frontend/components/(recruiter)/ResumeBatchModal.tsx:34-85`.",
+   "where": "`frontend/components/(recruiter)/ResumeBatchModal.tsx`, `frontend/hooks/queries/useCandidates.ts`, `frontend/lib/upload-status.ts`; branch `fix/syn-005-stale-lists` (not yet merged)",
    "done_when": "lists and counts refresh as each file finishes, upload and polling live in `hooks/queries/`, and timers stop on unmount.",
    "pr": "",
    "source": ""
@@ -307,7 +307,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "type": "Bug",
    "status": "open",
    "found": "2026-10-24",
-   "updated": "2026-10-24",
+   "updated": "2026-11-15",
    "problem": "A resume that failed processing keeps the placeholder name \"Processing...\" and shows a 0% score with 0% bars on cards, the pipeline \"New\" column (5 such cards), the dashboard and the job counts. The API has the reason (for example \"No readable text found in the resume — scanned or image-only files are not supported\") but no screen shows it; the upload modal row only says \"error / Failed\". No frontend code reads the `processing_error` field at all.",
    "where": "card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.",
    "done_when": "failed rows read as \"Upload failed\" with the reason and no score everywhere they appear.",
@@ -1273,9 +1273,34 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "done_when": "The API authenticates with the `Authorization` header only, the access cookie is no longer issued, and the tests that log in by cookie are updated.",
    "pr": "",
    "source": "Found while fixing SYN-007"
+  },
+  {
+   "id": "SYN-069",
+   "num": 69,
+   "title": "The job page never shows its candidate count",
+   "priority": "P3",
+   "area": "Jobs",
+   "type": "Bug",
+   "status": "open",
+   "found": "2026-11-15",
+   "updated": "2026-11-15",
+   "problem": "On a job's own page the Candidates tab never shows its count badge. The page reads `candidate_count` from `GET /api/jobs/:id`, which does not return it; only the jobs list does.",
+   "where": "`backend/src/db/queries/jobs.ts`, `frontend/components/(recruiter)/Jobs.tsx:245`",
+   "done_when": "The job page shows the same candidate count as the jobs list, and it updates after an upload.",
+   "pr": "",
+   "source": "Found while testing SYN-005"
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-15T14:05:00.000Z",
+   "text": "SYN-005 in progress: lists, counts and scores now update without a reload after an upload, including when the dialog is closed early; a failed file shows its reason. Tested locally with real AI. Logged SYN-069 (job page never shows its candidate count).",
+   "ids": [
+    "SYN-005",
+    "SYN-008",
+    "SYN-069"
+   ]
+  },
   {
    "at": "2026-11-15T12:20:00.000Z",
    "text": "SYN-007 and SYN-064 done: PR #7 merged and deployed. On production in WebKit a session survived past the 15-minute expiry and renewed itself; a wrong password now shows \"Invalid email or password\".",

@@ -72,6 +72,21 @@ export function candidatePollInterval(processingStatus: string | null | undefine
   return CANDIDATE_POLL_MS
 }
 
+export const CANDIDATE_LIST_POLL_MS = 10_000
+
+/**
+ * A candidate LIST re-checks while anything on it is still being processed,
+ * and stops once everything has finished or failed. Lists used to load once,
+ * so an uploaded resume read "Processing…" and counts stayed wrong until a
+ * full reload (SYN-005). Slower than the detail page on purpose: a list is on
+ * screen far more often, and the API allows 300 requests a minute.
+ */
+export function candidateListPollInterval(
+  items: readonly ({ processing_status?: string | null } | null | undefined)[] | null | undefined,
+): number | false {
+  return items?.some((c) => candidatePollInterval(c?.processing_status) !== false) ? CANDIDATE_LIST_POLL_MS : false
+}
+
 export function skillsUnavailableReason(
   processingStatus: string | null | undefined,
   hasAttribution: boolean,

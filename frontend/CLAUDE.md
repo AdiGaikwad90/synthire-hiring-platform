@@ -75,13 +75,13 @@ React Query v5. Cache keys, stale times, and invalidation live inside the hooks 
 | Hook file | Exports |
 |---|---|
 | `useJobs.ts` | `useJobs`, `useJob`, `useCreateJob`, `useUpdateJob` |
-| `useCandidates.ts` | `useCandidates`, `useCandidate`, `useUpdateCandidateStage`, `useGenerateQuestions`, `useInterviewQuestions` |
+| `useCandidates.ts` | `useCandidates`, `useCandidate`, `useUploadResume`, `useUploadProgress`, `useUpdateCandidateStage`, `useGenerateQuestions`, `useInterviewQuestions` |
 | `useInterviews.ts` | `useInterviews`, `useInterview`, `useScheduleInterview`, `useSubmitFeedback`, `useInterviewFeedback` |
 | `useAnalytics.ts` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary`, `useActivity`, `useEmailStats` |
 | `useSettings.ts` | `useInterviewTypes` + create/update/delete |
 | `useEmail.ts` | `useEmailLogs`, `useEmailPreferences`, `useUpdateEmailPreferences` |
 
-`useActivity()` refetches every 30s. `useUpdateCandidateStage()` does an optimistic update with rollback on error — copy that pattern for any mutation needing instant feedback.
+`useActivity()` refetches every 30s. **`useCandidates()` re-checks every 10 s while any listed candidate is still being processed** and stops when all are finished or failed (`candidateListPollInterval()` in `lib/scoring.ts`) — so a list never needs a reload to show an upload's result, whoever uploaded it. A mutation that adds or changes candidates must also invalidate the job counts and `['analytics']`; `useUploadResume()` shows how. `useUpdateCandidateStage()` does an optimistic update with rollback on error — copy that pattern for any mutation needing instant feedback.
 
 ---
 
@@ -89,7 +89,7 @@ React Query v5. Cache keys, stale times, and invalidation live inside the hooks 
 
 Both long-running backend calls return a job id at 202 and are polled from the client — neither uses SSE:
 
-- **Resume upload** — `ResumeBatchModal` posts to `POST /api/candidates/upload`, gets `{ candidateId }`, then polls every 2 s for up to 2 min; states `queued` → `parsing` → `scoring` → `done` / `error`; after the window a still-running file shows "Still processing" (`background`) — processing runs on a queue and can take longer.
+- **Resume upload** — `ResumeBatchModal` uploads through `useUploadResume()` (`POST /api/candidates/upload` → `{ candidateId }`) and follows each file with `useUploadProgress()`, which polls every 2 s for up to 2 min. The dialog owns no timers and no row state: each row is derived by `uploadRow()` in `lib/upload-status.ts` — `uploading` → `queued` → `parsing` → `scoring` → `done` / `error` (with the reason); after the window a still-running file shows "Still processing" (`background`) — processing runs on a queue and can take longer. Lists, job counts and dashboard numbers are refreshed when a file is accepted and again each time one settles (SYN-005).
 - **JD parsing** — `JDUploadModal` posts to `POST /api/jobs/parse-jd`, gets `{ parseId }`, then polls `GET /api/jobs/parse-jd/:parseId` until it stops returning `{ status: 'processing' }`.
 
 ---

@@ -77,9 +77,15 @@ export function FileRow({ name, size, status, score, sub }: FileRowProps) {
           {name}
         </div>
         <div className="small" style={{ color: "var(--muted)" }}>
-          {size} · {sub || status}
+          {size} · {sub || (status === "error" ? "Failed" : status)}
         </div>
       </div>
+      {status === "uploading" && (
+        <div className="tsFileRow-status">
+          <span className="tsFileRow-spin" />
+          <span className="small">Uploading</span>
+        </div>
+      )}
       {status === "queued" && (
         <div className="tsFileRow-status">
           <span className="tsFileRow-spin" />

@@ -1,15 +1,77 @@
-import { candidatePollInterval } from '@/lib/scoring'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import * as React from 'react'
+import { candidatePollInterval, candidateListPollInterval } from '@/lib/scoring'
+import { uploadPollInterval } from '@/lib/upload-status'
+import { useQuery, useQueries, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { candidatesApi } from '@/lib/api'
+import { jobKeys } from './useJobs'
 
 export const candidateKeys = {
   all: ['candidates'] as const,
+  lists: ['candidates', 'list'] as const,
   list: (params?: Record<string, string>) => ['candidates', 'list', params] as const,
   detail: (id: string) => ['candidates', id] as const,
 }
 
+/**
+ * Everything a new or newly processed candidate changes: candidate lists (and
+ * the sidebar count read from them), the per-job candidate counts, and the
+ * dashboard numbers. Overlapping calls are merged by React Query.
+ */
+function invalidateCandidateViews(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: candidateKeys.lists })
+  qc.invalidateQueries({ queryKey: jobKeys.all })
+  qc.invalidateQueries({ queryKey: ['analytics'] })
+}
+
 export function useCandidates(params?: Record<string, string>) {
-  return useQuery({ queryKey: candidateKeys.list(params), queryFn: () => candidatesApi.list(params) })
+  return useQuery({
+    queryKey: candidateKeys.list(params),
+    queryFn: () => candidatesApi.list(params),
+    // Stays live while anything listed is still being processed (SYN-005).
+    refetchInterval: (query) => candidateListPollInterval(query.state.data?.items),
+  })
+}
+
+/** Uploads one resume. The new candidate shows up in lists straight away, as "processing". */
+export function useUploadResume() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ file, jobId }: { file: File; jobId: string }) => candidatesApi.upload(file, jobId),
+    onSuccess: () => invalidateCandidateViews(qc),
+  })
+}
+
+/**
+ * Follows uploaded candidates until each is processed, has failed, or the
+ * polling window passes — and refreshes lists and counts every time one
+ * settles. Polling is React Query's, so it stops when the caller unmounts.
+ * Returns, per id, the candidate as last fetched and the checks made so far.
+ */
+export function useUploadProgress(candidateIds: string[]) {
+  const qc = useQueryClient()
+  const results = useQueries({
+    queries: candidateIds.map((id) => ({
+      queryKey: candidateKeys.detail(id),
+      queryFn: () => candidatesApi.get(id),
+      refetchInterval: (query: { state: { data?: { processing_status?: string | null }; dataUpdateCount: number } }) =>
+        uploadPollInterval(query.state.data?.processing_status, query.state.dataUpdateCount),
+    })),
+  })
+
+  const settled = results.filter((r) => r.data && candidatePollInterval(r.data.processing_status) === false).length
+  React.useEffect(() => {
+    if (settled > 0) invalidateCandidateViews(qc)
+  }, [settled, qc])
+
+  return new Map(candidateIds.map((id, i) => {
+    // Reading dataUpdatedAt subscribes this component to every completed check,
+    // even one that returned identical data — the check count must still move.
+    void results[i].dataUpdatedAt
+    return [id, {
+      candidate: results[i].data ?? null,
+      ticks: qc.getQueryState(candidateKeys.detail(id))?.dataUpdateCount ?? 0,
+    }] as const
+  }))
 }
 
 export function useCandidate(id: string) {
