@@ -4,20 +4,16 @@ Every known bug, fake-content problem, gap and chore, with a priority and a
 status. Found issues land here first; fixed issues stay here marked **Done** so
 the history is readable.
 
-**Tracker page (high-level view):** https://claude.ai/artifact/26CtQULZgXxSJ5FKB3MZEg
-(private to the owner; share it from the page's Share menu)
-
-**Same view inside the repository:** open `task_tracker/index.html` in a browser.
-It is generated from this file — run `python3 task_tracker/build.py` after every
-edit here, and add one line to `task_tracker/changes.json` for the "Recent
-changes" list (the same line that goes into the tracker page's `changes`).
+**Tracker page (high-level view):** `task_tracker/index.html` — open it in a
+browser. It is one self-contained file and replaces the earlier claude.ai
+artifact page, which is no longer updated.
 
 ## How this backlog works
 
 - **This file is the source of truth.** The tracker page mirrors each issue's
   ID, title, priority, area, status and one-line problem so progress can be
-  followed at a glance. It reads from the artifact's database; nothing on the
-  page is hand-edited.
+  followed at a glance. Its data is the JSON block near the end of
+  `task_tracker/index.html`; the rest of the page is not touched.
 - **Priorities**
   - **P0** — production is broken or data is lost.
   - **P1** — a core flow does the wrong thing or shows wrong data.
@@ -30,13 +26,14 @@ changes" list (the same line that goes into the tracker page's `changes`).
 - **Fixing an issue:** follow the root `TESTING.md` (regression test that fails without
   the fix, then the Playwright pass with real LLM calls). Then set the status to
   `Done`, add the PR link and date to the section, and update the tracker in the
-  same session (its `issues/<ID>` document, plus one line in `changes`).
-- **Tracker data shape** (Claude writes it with the `ArtifactData` tool on the
-  URL above): collection `issues`, one document per ID with `id, num, title,
+  same session (the issue's object in `issues`, plus one new line at the top of
+  `changes`).
+- **Tracker data shape** (the `<script id="data">` block in
+  `task_tracker/index.html`): `issues`, one object per ID with `id, num, title,
   priority, area, type, status (open | in_progress | done | wont_fix), found,
-  updated, problem, where, done_when, pr, source`; collection `changes`, documents
-  `c-NNNN` with `at` (ISO time), `text`, `ids`. Only the owner and editors can
-  write; anyone the page is shared with can read.
+  updated, problem, where, done_when, pr, source`; `changes`, newest first, each
+  with `at` (ISO time), `text`, `ids`. A `</` inside a value must be written
+  `<\/`.
 - Evidence comes from the end-to-end Playwright pass of 2026-10-24 (local,
   `test@synthire.io`, real Workers AI) and the 2026-10-25 code check of the May
   audit (`docs/production-readiness.md`, folded in here and removed — see the
