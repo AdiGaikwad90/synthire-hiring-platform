@@ -305,7 +305,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Candidates",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-24",
    "updated": "2026-11-16",
    "problem": "A resume that failed processing keeps the placeholder name \"Processing...\" and shows a 0% score with 0% bars on cards, the pipeline \"New\" column (5 such cards), the dashboard and the job counts. The API has the reason (for example \"No readable text found in the resume — scanned or image-only files are not supported\") but no screen shows it; the upload modal row only says \"error / Failed\". No frontend code reads the `processing_error` field at all.",
@@ -1308,6 +1308,13 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-16T08:25:00.000Z",
+   "text": "SYN-008 done: PR #10 merged and deployed. On production a failed upload shows in its own strip with the reason, is not counted as a candidate, cannot change stage or get an interview, and can be removed.",
+   "ids": [
+    "SYN-008"
+   ]
+  },
   {
    "at": "2026-11-16T07:35:00.000Z",
    "text": "SYN-008 in progress: failed uploads are no longer shown or counted as candidates. They appear in their own strip with the reason, the file and a Remove button; a resume still processing shows no score. Tested locally. New: SYN-070, lists show only the first 20 candidates.",
