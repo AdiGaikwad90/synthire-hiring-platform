@@ -72,10 +72,18 @@ export function ScoreBar({ label, value, color, display }: ScoreBarProps) {
 }
 
 export interface ScorePillProps {
-  score: number;
+  /** null = not scored (yet). Shown as a dash, never as 0. */
+  score: number | null;
 }
 
 export function ScorePill({ score }: ScorePillProps) {
+  if (score == null) {
+    return (
+      <span className="tsScorePill" style={{ color: "var(--muted)" }} title="Not scored yet" aria-label="Not scored yet">
+        <span className="mono">—</span>
+      </span>
+    );
+  }
   const tone = score >= 80 ? "success" : score >= 60 ? "warning" : "danger";
   return (
     <span className={`tsScorePill tsScorePill-${tone}`}>

@@ -7,11 +7,32 @@ import { useCandidates, useUpdateCandidateStage } from "@/hooks/queries/useCandi
 import { useJob, useJobs } from "@/hooks/queries/useJobs";
 import { useParams } from "next/navigation";
 import { ResumeBatchModal } from "./ResumeBatchModal";
-import type { ApiJob } from "@/lib/api";
+import type { ApiJob, ApiCandidate } from "@/lib/api";
+import { candidateDisplay } from "@/lib/candidate-display";
+import { FailedUploads } from "./FailedUploads";
 import { formatDate } from "@/lib/utils";
 import { STAGE_FILTER_OPTIONS, stageLabel, stageTone } from "@/lib/stages";
 
 const { useState: useS_c } = React;
+
+/** API candidate → what the card, the list row and the quick view render. */
+function toCard(c: ApiCandidate) {
+  return {
+    ...c,
+    ...candidateDisplay(c), // state, name, score (null until scored)
+    skillsScore: c.skills_score ?? 0,
+    expScore: c.experience_score ?? 0,
+    eduScore: c.education_score ?? 0,
+    achScore: c.achievements_score ?? 0,
+    skills: c.technical_skills ?? [],
+    stage: c.status,
+    strengths: [],
+    concerns: [],
+    avatar: "",
+    title: "",
+    years: 0,
+  };
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -118,7 +139,7 @@ function JobCandidateSection({ job, search, stageFilter, onUpload, onViewJob }: 
   const updateStage = useUpdateCandidateStage();
   const candidates = data?.items ?? [];
   const filtered = search
-    ? candidates.filter(c => c.name.toLowerCase().includes(search.toLowerCase()))
+    ? candidates.filter(c => candidateDisplay(c).name.toLowerCase().includes(search.toLowerCase()))
     : candidates;
 
   return (
@@ -144,6 +165,8 @@ function JobCandidateSection({ job, search, stageFilter, onUpload, onViewJob }: 
           Upload resumes
         </Button>
       </div>
+
+      {!search && <FailedUploads uploads={data?.failed_uploads}/>}
 
       {/* Cards or empty state */}
       {isLoading ? (
@@ -178,22 +201,7 @@ function JobCandidateSection({ job, search, stageFilter, onUpload, onViewJob }: 
       ) : (
         <div className="tsCands-grid">
           {filtered.slice(0, 6).map((c, i) => {
-            const mapped = {
-              ...c,
-              score: c.overall_score ?? 0,
-              skillsScore: c.skills_score ?? 0,
-              expScore: c.experience_score ?? 0,
-              eduScore: c.education_score ?? 0,
-              achScore: c.achievements_score ?? 0,
-              name: c.name && c.name !== 'Not Provided' ? c.name : 'Unknown Candidate',
-              skills: c.technical_skills ?? [],
-              stage: c.status,
-              strengths: [],
-              concerns: [],
-              avatar: "",
-              title: "",
-              years: 0,
-            };
+            const mapped = toCard(c);
             return (
               <CandidateCard
                 key={c.id}
@@ -391,6 +399,8 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
 
             {candidatesLoading && <div style={{ padding: 32, color: "var(--muted)" }}>Loading candidates...</div>}
 
+            <FailedUploads uploads={candidateData?.failed_uploads}/>
+
             {!candidatesLoading && candidates.length === 0 && (
               <div style={{ padding: "48px 0", textAlign: "center", color: "var(--muted)" }}>
                 <Icon.Users size={32} style={{ marginBottom: 12 }}/>
@@ -406,29 +416,15 @@ function CandidatesScoped({ jobId, hideUpload }: { jobId: string; hideUpload?: b
 
             <div className={view === "grid" ? "tsCands-grid" : "tsCands-listView"}>
               {candidates.map((c, i) => {
-                const mapped = {
-                  ...c,
-                  score: c.overall_score ?? 0,
-                  skillsScore: c.skills_score ?? 0,
-                  expScore: c.experience_score ?? 0,
-                  eduScore: c.education_score ?? 0,
-                  achScore: c.achievements_score ?? 0,
-                  skills: c.technical_skills ?? [],
-                  stage: c.status,
-                  strengths: [],
-                  concerns: [],
-                  avatar: "",
-                  title: "",
-                  years: 0,
-                };
+                const mapped = toCard(c);
                 return view === "grid"
                   ? <CandidateCard key={c.id} c={mapped} idx={i} onView={() => setDetailCand(mapped)} onProfile={() => router.push(`/candidates/${c.id}`)}
                       onShortlist={() => updateStage.mutate({ id: c.id, status: "shortlisted" }, {
-                        onSuccess: () => toast({ message: `${c.name} shortlisted.` }),
+                        onSuccess: () => toast({ message: `${mapped.name} shortlisted.` }),
                         onError: () => toast({ message: "Failed to update.", variant: "error" }),
                       })}
                       onReject={() => updateStage.mutate({ id: c.id, status: "rejected" }, {
-                        onSuccess: () => toast({ message: `${c.name} rejected.` }),
+                        onSuccess: () => toast({ message: `${mapped.name} rejected.` }),
                         onError: () => toast({ message: "Failed to update.", variant: "error" }),
                       })}
                     />
@@ -541,7 +537,9 @@ const FilterSlider = ({ label, value, onChange, color, max = 100, unit = "%" }: 
 
 // ===== Candidate Card =====
 function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any) {
-  const tone = c.score >= 80 ? "success" : c.score >= 60 ? "warning" : "danger";
+  // Not scored yet: no score, no bars, and nothing to shortlist or reject (the API refuses it).
+  const scored = c.score != null;
+  const tone = !scored ? "pending" : c.score >= 80 ? "success" : c.score >= 60 ? "warning" : "danger";
   return (
     <div className="tsCandCard" style={{ animationDelay: `${idx * 30}ms` }}>
       <div className="tsCandCard-head">
@@ -549,7 +547,7 @@ function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <div style={{ fontWeight: 500, fontSize: 14 }}>{c.name}</div>
-            {c.stage && (
+            {c.stage && scored && (
               <Badge variant={stageTone(c.stage)} style={{ fontSize: 10, padding: "1px 6px" }}>
                 {stageLabel(c.stage)}
               </Badge>
@@ -557,18 +555,32 @@ function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any
           </div>
           <div className="small" style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || "—"}</div>
         </div>
-        <div className={`tsCandCard-score tsCandCard-score-${tone}`}>
-          <span className="mono">{c.score}</span>
-          <span style={{ fontSize: 10, opacity: 0.7 }}>%</span>
-        </div>
+        {scored ? (
+          <div className={`tsCandCard-score tsCandCard-score-${tone}`}>
+            <span className="mono">{c.score}</span>
+            <span style={{ fontSize: 10, opacity: 0.7 }}>%</span>
+          </div>
+        ) : (
+          <div className="tsCandCard-score" style={{ color: "var(--muted)" }} title="Not scored yet">
+            <span className="mono">—</span>
+          </div>
+        )}
       </div>
 
-      <div className="tsCandCard-bars">
-        <ScoreBar label="Skills" value={c.skillsScore}/>
-        <ScoreBar label="Experience" value={c.expScore}/>
-        <ScoreBar label="Education" value={c.eduScore}/>
-        <ScoreBar label="Achievements" value={c.achScore}/>
-      </div>
+      {scored ? (
+        <div className="tsCandCard-bars">
+          <ScoreBar label="Skills" value={c.skillsScore}/>
+          <ScoreBar label="Experience" value={c.expScore}/>
+          <ScoreBar label="Education" value={c.eduScore}/>
+          <ScoreBar label="Achievements" value={c.achScore}/>
+        </div>
+      ) : (
+        <div className="small" style={{ color: "var(--muted)" }}>
+          {c.state === "processing"
+            ? "The resume is being read and scored. This card updates on its own."
+            : "No score was recorded for this candidate."}
+        </div>
+      )}
 
       {c.skills.length > 0 && (
         <div className="tsCandCard-chips">
@@ -600,10 +612,14 @@ function CandidateCard({ c, idx, onView, onProfile, onShortlist, onReject }: any
       )}
 
       <div className="tsCandCard-foot">
-        <button className="tsBtn tsBtn-ghost tsBtn-sm" onClick={onView}>View details</button>
+        {c.state === "processing" ? <span/> : <button className="tsBtn tsBtn-ghost tsBtn-sm" onClick={onView}>View details</button>}
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="tsIconBtn" title="Shortlist" style={{ color: "var(--success)" }} onClick={onShortlist}><Icon.Check size={15} stroke={2.5}/></button>
-          <button className="tsIconBtn" title="Reject" style={{ color: "var(--danger)" }} onClick={onReject}><Icon.X size={15} stroke={2.5}/></button>
+          {c.state !== "processing" && (
+            <>
+              <button className="tsIconBtn" title="Shortlist" aria-label="Shortlist" style={{ color: "var(--success)" }} onClick={onShortlist}><Icon.Check size={15} stroke={2.5}/></button>
+              <button className="tsIconBtn" title="Reject" aria-label="Reject" style={{ color: "var(--danger)" }} onClick={onReject}><Icon.X size={15} stroke={2.5}/></button>
+            </>
+          )}
           <button className="tsBtn tsBtn-primary tsBtn-sm" onClick={onProfile}>Open <Icon.ArrowRight size={11}/></button>
         </div>
       </div>
@@ -623,10 +639,10 @@ function CandidateListRow({ c, onClick }: any) {
         {c.skills.slice(0, 3).map((s: string) => <span key={s} className="tsChip" style={{ fontSize: 10 }}>{s}</span>)}
       </div>
       <div style={{ width: 140 }}>
-        <ScoreBar label="" value={c.score}/>
+        {c.score != null && <ScoreBar label="" value={c.score}/>}
       </div>
       <ScorePill score={c.score}/>
-      <StagePill stage={c.stage}/>
+      {c.state === "processing" ? <Badge variant="neutral">Processing</Badge> : <StagePill stage={c.stage}/>}
     </div>
   );
 }
@@ -653,7 +669,7 @@ function CandidateQuickModal({ c, onClose, onProfile }: any) {
       }
     >
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
-        <ScoreRing score={c.score} size={120} label="Overall"/>
+        <ScoreRing score={c.score ?? 0} size={120} label="Overall"/>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <ScoreBar label="Technical skills" value={c.skillsScore}/>
           <ScoreBar label="Experience relevance" value={c.expScore}/>

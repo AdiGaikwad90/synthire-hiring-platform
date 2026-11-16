@@ -50,7 +50,7 @@ here rather than in a screen file.
 | `Tabs` | In-page section switching | hand-rolled button rows |
 | `Badge` | Small status/label chip | a styled `<span>` |
 | `StagePill` + `STAGE` | Candidate pipeline stage | your own stage colour map |
-| `ScoreRing`, `ScoreBar` (optional `display` overrides the `%` readout), `ScorePill` | Any score display | a hand-rolled percentage bar |
+| `ScoreRing`, `ScoreBar` (optional `display` overrides the `%` readout), `ScorePill` (`score: number \| null` — null renders a dash, never 0) | Any score display | a hand-rolled percentage bar |
 | `AIPill` | Marking AI-generated surfaces | a plain label |
 | `Avatar` | Person representation | your own initials logic |
 | `SearchInput` | Search fields | `Input` with a magnifier bolted on |
@@ -86,6 +86,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── utils.ts              # cn(), initials(), formatDate()
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
     ├── stages.ts             # the candidate stages, their names, filter options and badge tone (pure, tested)
+    ├── candidate-display.ts  # a candidate row's state, display name and score — null until scored (pure, tested)
     ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     ├── security-headers.ts   # CSP + framing/HSTS headers, applied by middleware.ts (pure, tested)
     ├── timezones.ts          # wall time in a chosen zone ↔ instant, zone picker options (pure, tested)
@@ -182,6 +183,15 @@ an instant with `new Date(y, m, d, h, mi)` — that reads the numbers in the
 2 PM IST (SYN-002). Use `zonedTimeToUtc(wallTime, zone)`, and compare zones with
 `sameZone()` (browsers report aliases: Chrome says `Asia/Calcutta` for
 `Asia/Kolkata`).
+
+**A candidate's name and score go through `candidateDisplay()`** from
+`@/lib/candidate-display`. Never print `c.name` or `c.overall_score ?? 0` from
+a list: an upload's row exists before the resume is read, under a placeholder
+name and with no score, and screens that printed it showed a candidate called
+"Processing..." who scored 0% (SYN-008). It returns `state` (`processing` /
+`failed` / `ready`), the `name` to show and a `score` that is `null` until there
+is one. Failed uploads are not in candidate lists at all — they arrive as
+`failed_uploads` on the same response and are rendered by `FailedUploads`.
 
 **Show API validation messages with `apiErrorMessage(err, fallback)`** from
 `@/lib/api` — it surfaces the first field-level 422 message (e.g. "scheduled_at

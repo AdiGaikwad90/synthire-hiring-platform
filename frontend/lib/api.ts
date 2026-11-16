@@ -58,6 +58,22 @@ export interface ApiCandidate {
   score_attribution?: ApiScoreAttribution | null
 }
 
+/** A resume whose processing failed. Listed apart from candidates — it is not one (SYN-008). */
+export interface ApiFailedUpload {
+  id: string; job_id: string
+  /** The name read from the resume; null when it failed before being read. */
+  name: string | null
+  reason: string
+  /** False when the file itself was never stored. */
+  has_file: boolean
+  created_at: string
+}
+
+export interface CandidateList extends PaginatedData<ApiCandidate> {
+  /** `items` holds at most 50; `total` is the full count. */
+  failed_uploads: { items: ApiFailedUpload[]; total: number }
+}
+
 export interface ApiInterview {
   id: string; candidate_id: string; job_id: string; company_id: string
   interviewer_id: string; interview_type_id: string | null; scheduled_at: string
@@ -399,7 +415,7 @@ export const jobsApi = {
 // Group: Candidates
 export const candidatesApi = {
   list: (params?: Record<string, string>) =>
-    apiFetch<PaginatedData<ApiCandidate>>(`/api/candidates?${new URLSearchParams(params ?? {})}`),
+    apiFetch<CandidateList>(`/api/candidates?${new URLSearchParams(params ?? {})}`),
   get: (id: string) => apiFetch<ApiCandidate>(`/api/candidates/${id}`),
   /** Answers 202 at once; processing runs on a queue — follow it with useUploadProgress(). */
   upload: (file: File, jobId: string) => {

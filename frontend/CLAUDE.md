@@ -52,6 +52,7 @@ PR** — see "Keeping these docs current" in the root `CLAUDE.md`.
 - **No thin re-export stubs.** The five that existed are deleted — import components from the file that defines them.
 - **Dates go through `formatDate` / `formatDateLong` / `formatTime` / `formatDateTime`** in `@/lib/utils`. Never call `toLocaleDateString()` in a component — a bare call follows the viewer's browser locale.
 - **Candidate stages come from `@/lib/stages`** (`STAGES`, `STAGE_LABELS`, `STAGE_FILTER_OPTIONS`, `stageLabel()`, `stageTone()`). Never hand-write a list of stages or capitalise a raw value: the Candidates filter once offered "Applied" and "Interviewing", which are not stages, and matched nothing (SYN-006). The list mirrors `CANDIDATE_STAGES` in `backend/src/types/api.ts`; the API answers 422 to anything else.
+- **A candidate's name and score come from `candidateDisplay()`** (`@/lib/candidate-display`): `state` (`processing` / `failed` / `ready`), the name to show, and a score that is `null` until there is one. Never print `c.name` or `overall_score ?? 0` — an unprocessed upload is stored under the name "Processing..." with no score, and every list showed it as a 0% candidate (SYN-008). **Failed uploads are not candidates**: `GET /api/candidates` returns them apart as `failed_uploads` (max 50 plus a `total`), and `FailedUploads` shows them with the reason, "View file" and "Remove".
 - **Icon-only buttons use `IconButton`**, which requires a `label` and applies it as `aria-label`.
 
 ---
@@ -76,7 +77,7 @@ React Query v5. Cache keys, stale times, and invalidation live inside the hooks 
 | Hook file | Exports |
 |---|---|
 | `useJobs.ts` | `useJobs`, `useJob`, `useCreateJob`, `useUpdateJob` |
-| `useCandidates.ts` | `useCandidates`, `useCandidate`, `useUploadResume`, `useUploadProgress`, `useUpdateCandidateStage`, `useGenerateQuestions`, `useInterviewQuestions` |
+| `useCandidates.ts` | `useCandidates`, `useCandidate`, `useUploadResume`, `useUploadProgress`, `useUpdateCandidateStage`, `useDeleteCandidate`, `useGenerateQuestions`, `useInterviewQuestions` |
 | `useInterviews.ts` | `useInterviews`, `useInterview`, `useScheduleInterview`, `useSubmitFeedback`, `useInterviewFeedback` |
 | `useAnalytics.ts` | `useFunnel`, `useTimeToHire`, `useAnalyticsSummary`, `useActivity`, `useEmailStats` |
 | `useSettings.ts` | `useInterviewTypes` + create/update/delete |

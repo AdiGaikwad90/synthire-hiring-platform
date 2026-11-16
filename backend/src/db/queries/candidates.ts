@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { nanoid } from 'nanoid'
 import type { CandidateRow } from '../../types/db'
+import { AppError } from '../../types/api'
 import type { ParsedResume } from '../../services/ai/prompts/parse-resume'
 import type { ScoringResult } from '../../services/scoring/pipeline'
 import type { ScoreAttribution } from '../../services/scoring/attribution'
@@ -288,21 +289,62 @@ export async function getCandidate(
 
 // ── List candidates ───────────────────────────────────────────────────────────
 
+/**
+ * A resume whose processing failed is a failed upload, not a candidate: it has
+ * no score, usually no name, and nothing to act on (SYN-008). Every candidate
+ * list and count uses this condition so the two can never disagree.
+ */
+export const NOT_A_FAILED_UPLOAD = "processing_status != 'error'"
+
+/**
+ * Refuses (409) to act on a resume that has not been processed. Until then the
+ * row has a placeholder name and no data, so moving it through the pipeline or
+ * scheduling an interview would act on, and email, "Processing..." (SYN-008).
+ */
+export function requireProcessed(candidate: { processing_status: string }): void {
+  if (candidate.processing_status === 'complete') return
+  throw new AppError(
+    candidate.processing_status === 'error'
+      ? 'This resume could not be processed — upload it again'
+      : 'This resume is still being processed — try again when it has finished',
+    409,
+  )
+}
+
+/** Most failed uploads returned with one list; the total is reported beside them. */
+export const FAILED_UPLOADS_MAX = 50
+
+export interface FailedUpload {
+  id: string
+  job_id: string
+  /** The name read from the resume, or null when processing failed before it was read. */
+  name: string | null
+  reason: string
+  /** False when the file itself could not be stored, so there is nothing to open. */
+  has_file: boolean
+  created_at: string
+}
+
 export async function listCandidates(
   db: D1Database,
   companyId: string,
   opts: { job_id?: string; status?: string; min_score?: number; page: number; limit: number }
-): Promise<{ items: ReturnType<typeof toCandidate>[]; total: number }> {
+): Promise<{ items: ReturnType<typeof toCandidate>[]; total: number; failed_uploads: { items: FailedUpload[]; total: number } }> {
   const { job_id, status, min_score, page, limit } = opts
   const offset = (page - 1) * limit
 
-  const conditions: string[] = ['company_id = ?']
-  const params: unknown[] = [companyId]
+  // Company and job scope both lists; stage and score only narrow candidates —
+  // a failure has neither, and filtering must not hide it.
+  const scope: string[] = ['company_id = ?']
+  const scopeParams: unknown[] = [companyId]
 
   if (job_id) {
-    conditions.push('job_id = ?')
-    params.push(job_id)
+    scope.push('job_id = ?')
+    scopeParams.push(job_id)
   }
+
+  const conditions = [...scope, NOT_A_FAILED_UPLOAD]
+  const params = [...scopeParams]
 
   if (status) {
     conditions.push('status = ?')
@@ -332,7 +374,34 @@ export async function listCandidates(
 
   const items = (rows.results ?? []).map(toCandidate)
 
-  return { items, total }
+  // The name column holds a placeholder until the resume has been read.
+  const failed = await db
+    .prepare(
+      `SELECT id, job_id, CASE WHEN parsed_resume IS NOT NULL THEN name END AS name,
+              processing_error, resume_url IS NOT NULL AS has_file, created_at, COUNT(*) OVER () AS total
+         FROM candidates
+        WHERE ${scope.join(' AND ')} AND processing_status = 'error'
+        ORDER BY created_at DESC, id DESC LIMIT ?`
+    )
+    .bind(...scopeParams, FAILED_UPLOADS_MAX)
+    .all<{ id: string; job_id: string; name: string | null; processing_error: string | null; has_file: number; created_at: string; total: number }>()
+  const failedRows = failed.results ?? []
+
+  return {
+    items,
+    total,
+    failed_uploads: {
+      total: failedRows[0]?.total ?? 0,
+      items: failedRows.map((r) => ({
+        id: r.id,
+        job_id: r.job_id,
+        name: r.name,
+        reason: r.processing_error?.trim() || 'Processing failed',
+        has_file: Boolean(r.has_file),
+        created_at: r.created_at,
+      })),
+    },
+  }
 }
 
 // ── Update candidate status ───────────────────────────────────────────────────

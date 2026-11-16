@@ -5,6 +5,7 @@ import { Icon } from "@/lib/icons";
 import { Avatar, Button, IconButton, ScorePill, SearchInput, Select } from "@/components/ui";
 import { useCandidates, useUpdateCandidateStage } from "@/hooks/queries/useCandidates";
 import { useJobs } from "@/hooks/queries/useJobs";
+import { candidateDisplay } from "@/lib/candidate-display";
 
 const SORT_OPTIONS = [
   { value: "score_desc", label: "Score: High → Low" },
@@ -50,7 +51,7 @@ function Pipeline() {
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(c =>
-        c.name?.toLowerCase().includes(q) ||
+        candidateDisplay(c).name.toLowerCase().includes(q) ||
         c.location?.toLowerCase().includes(q) ||
         (c.technical_skills ?? []).some((s: string) => s.toLowerCase().includes(q))
       );
@@ -181,20 +182,23 @@ function Pipeline() {
               <IconButton icon={<Icon.MoreH size={13}/>} label="Column options" />
             </div>
             <div className="tsKanban-list">
-              {(board[col.id] ?? []).map(c => (
+              {(board[col.id] ?? []).map(c => {
+                // A resume still being processed cannot change stage — the API refuses it.
+                const shown = candidateDisplay(c);
+                return (
                 <div key={c.id}
                   className={`tsKanban-card ${dragId === c.id ? "dragging" : ""}`}
-                  draggable
+                  draggable={shown.state === "ready"}
                   onDragStart={() => setDragId(c.id)}
                   onDragEnd={() => { setDragId(null); setDropTarget(null); }}
                   onClick={() => router.push(`/candidates/${c.id}`)}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <Avatar name={c.name} size={26}/>
+                    <Avatar name={shown.name} size={26}/>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shown.name}</div>
                       <div className="small" style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>{c.location ?? ''}</div>
                     </div>
-                    <ScorePill score={c.overall_score ?? 0}/>
+                    <ScorePill score={shown.score}/>
                   </div>
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
                     {(c.technical_skills ?? []).slice(0, 3).map((s: string) => <span key={s} className="tsChip" style={{ fontSize: 10, padding: "1px 6px" }}>{s}</span>)}
@@ -210,7 +214,8 @@ function Pipeline() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {dropTarget === col.id && dragId && <div className="tsKanban-dropZone"/>}
               {(board[col.id] ?? []).length === 0 && dropTarget !== col.id && (
                 <div className="tsKanban-empty">Drop here</div>

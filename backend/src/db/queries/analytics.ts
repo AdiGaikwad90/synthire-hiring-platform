@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types'
+import { NOT_A_FAILED_UPLOAD } from './candidates'
 
 // Funnel: candidate counts per status for a company
 export async function getFunnelData(
@@ -7,7 +8,7 @@ export async function getFunnelData(
 ): Promise<{ status: string; count: number }[]> {
   const result = await db
     .prepare(
-      'SELECT status, COUNT(*) as count FROM candidates WHERE company_id=? GROUP BY status ORDER BY count DESC'
+      `SELECT status, COUNT(*) as count FROM candidates WHERE company_id=? AND ${NOT_A_FAILED_UPLOAD} GROUP BY status ORDER BY count DESC`
     )
     .bind(companyId)
     .all<{ status: string; count: number }>()
@@ -57,10 +58,10 @@ export async function getAnalyticsSummary(
     avgTimeToHireResult,
     activeJobsResult,
   ] = await db.batch([
-    db.prepare('SELECT COUNT(*) as count FROM candidates WHERE company_id=?').bind(companyId),
+    db.prepare(`SELECT COUNT(*) as count FROM candidates WHERE company_id=? AND ${NOT_A_FAILED_UPLOAD}`).bind(companyId),
     db.prepare('SELECT COUNT(*) as count FROM interviews WHERE company_id=?').bind(companyId),
     db
-      .prepare("SELECT COUNT(*) as count FROM candidates WHERE company_id=? AND status='hired'")
+      .prepare(`SELECT COUNT(*) as count FROM candidates WHERE company_id=? AND status='hired' AND ${NOT_A_FAILED_UPLOAD}`)
       .bind(companyId),
     db
       .prepare(
@@ -96,7 +97,8 @@ export async function getAnalyticsSummary(
   }
 }
 
-// Recent activity: last 20 candidate stage changes (most recent first)
+// Recent activity: last 20 candidate stage changes (most recent first).
+// Processed candidates only — until then the name column holds a placeholder.
 export async function getRecentActivity(
   db: D1Database,
   companyId: string
@@ -114,7 +116,7 @@ export async function getRecentActivity(
       `SELECT c.id as candidateId, c.name as candidateName, c.status, j.title as jobTitle, c.updated_at as updatedAt
        FROM candidates c
        JOIN jobs j ON c.job_id = j.id
-       WHERE c.company_id=?
+       WHERE c.company_id=? AND c.processing_status = 'complete'
        ORDER BY c.updated_at DESC
        LIMIT 20`
     )
