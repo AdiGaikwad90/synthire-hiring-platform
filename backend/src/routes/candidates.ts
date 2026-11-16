@@ -17,6 +17,7 @@ import {
   createCandidate,
   updateCandidateError,
   getCandidate,
+  requireProcessed,
   listCandidates,
   updateCandidateStatus,
   deleteCandidate,
@@ -136,7 +137,7 @@ router.get('/', recruiterOnly, zv('query', listCandidatesSchema), async (c) => {
   const payload = c.get('user')
   const { job_id, status, min_score, page, limit } = c.req.valid('query')
 
-  const { items, total } = await listCandidates(c.env.DB, payload.company_id, {
+  const { items, total, failed_uploads } = await listCandidates(c.env.DB, payload.company_id, {
     job_id,
     status,
     min_score,
@@ -144,7 +145,8 @@ router.get('/', recruiterOnly, zv('query', listCandidatesSchema), async (c) => {
     limit,
   })
 
-  return c.json(paginatedResponse(items, total, page, limit))
+  const page_ = paginatedResponse(items, total, page, limit)
+  return c.json({ ...page_, data: { ...page_.data, failed_uploads } })
 })
 
 // ── GET /:id — get candidate ──────────────────────────────────────────────────
@@ -173,6 +175,12 @@ router.patch('/:id', recruiterOnly, zValidator('json', updateCandidateSchema), a
   if (!status) {
     return c.json({ success: false, error: 'No fields to update' }, 400)
   }
+
+  const current = await getCandidate(c.env.DB, id, payload.company_id)
+  if (!current) {
+    return c.json({ success: false, error: 'Candidate not found' }, 404)
+  }
+  requireProcessed(current)
 
   const candidate = await updateCandidateStatus(c.env.DB, id, payload.company_id, status)
   if (!candidate) {

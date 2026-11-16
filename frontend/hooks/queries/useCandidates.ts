@@ -74,6 +74,16 @@ export function useUploadProgress(candidateIds: string[]) {
   }))
 }
 
+/** Removes a candidate or a failed upload, with its stored file. Lists and counts follow. */
+export function useDeleteCandidate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => candidatesApi.delete(id),
+    // Also on failure: "already removed" must leave the screen showing what is really there.
+    onSettled: () => invalidateCandidateViews(qc),
+  })
+}
+
 export function useCandidate(id: string) {
   return useQuery({
     queryKey: candidateKeys.detail(id),

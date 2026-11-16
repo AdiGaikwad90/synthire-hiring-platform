@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui";
 import { NAV_ITEMS } from "./Sidebar";
 import { useJobs } from "@/hooks/queries/useJobs";
 import { useCandidates } from "@/hooks/queries/useCandidates";
+import { candidateDisplay } from "@/lib/candidate-display";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -51,10 +52,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     },
     ...(candidatesData?.items ?? []).slice(0, 5).map((c) => ({
       id: c.id,
-      label: c.name,
+      label: candidateDisplay(c).name,
       type: "Candidate",
       subtitle: c.status,
-      icon: <Avatar name={c.name} color="#6366F1" size={20} />,
+      icon: <Avatar name={candidateDisplay(c).name} color="#6366F1" size={20} />,
       action: () => {
         router.push(`/candidates/${c.id}`);
         onClose();

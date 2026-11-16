@@ -6,6 +6,7 @@ import { Card, Button, Badge, Avatar, AIPill, ScorePill } from "@/components/ui"
 import { useFunnel, useTimeToHire, useAnalyticsSummary, useActivity } from "@/hooks/queries/useAnalytics";
 import { useInterviews } from "@/hooks/queries/useInterviews";
 import { useCandidates } from "@/hooks/queries/useCandidates";
+import { candidateDisplay } from "@/lib/candidate-display";
 import { ResumeBatchModal } from "./ResumeBatchModal";
 import { formatDateLong, formatTime } from "@/lib/utils";
 
@@ -129,14 +130,15 @@ function Dashboard() {
               <button className="tsBtn tsBtn-ghost tsBtn-sm" onClick={() => router.push("/candidates")}>See all <Icon.ArrowRight size={13}/></button>
             </div>
             <div style={{ padding: "0 24px 20px", display: "flex", flexDirection: "column", gap: 4 }}>
-              {(candidatesData?.items ?? []).slice(0, 5).map(c => (
+              {/* "Top" means scored: a resume still in the queue has nothing to rank. */}
+              {(candidatesData?.items ?? []).map(c => ({ ...c, shown: candidateDisplay(c) })).filter(c => c.shown.score != null).slice(0, 5).map(c => (
                 <div key={c.id} className="tsCandRow" onClick={() => router.push(`/candidates/${c.id}`)}>
-                  <Avatar name={c.name} size={28}/>
+                  <Avatar name={c.shown.name} size={28}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 13.5 }}>{c.name}</div>
+                    <div style={{ fontWeight: 500, fontSize: 13.5 }}>{c.shown.name}</div>
                     <div className="small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.status}</div>
                   </div>
-                  <ScorePill score={c.overall_score ?? 0}/>
+                  <ScorePill score={c.shown.score}/>
                 </div>
               ))}
             </div>

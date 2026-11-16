@@ -132,6 +132,10 @@ loudly in one place instead of in ten test files. `makeJobData()` exists because
 `D1_TYPE_ERROR` rather than anything readable.
 
 - Never share a mutable fixture between tests. Seed per test in `beforeEach`.
+- `insertCandidate()` inserts a **processed** candidate (`processing_status =
+  'complete'`). The schema default, `pending`, means "not processed yet", and
+  the API refuses stage changes and interviews for such a row (SYN-008) — set
+  the status explicitly when a test needs an upload in progress or failed.
 - Use `insertRawJob()` when you deliberately need a malformed row — that is the
   only sanctioned way to bypass the query helpers.
 - IDs come from `testId()`: deterministic within a run, unique across calls. No

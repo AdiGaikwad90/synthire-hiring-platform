@@ -49,13 +49,14 @@ artifact page, which is no longer updated.
 | SYN-003 | P1 | Open | Interviewers | Interviewers cannot join a company |
 | SYN-004 | P1 | Done | Email | Email delivery fails: SendGrid "Maximum credits exceeded" |
 | SYN-005 | P1 | Done | Upload | Candidate lists stay stale after a resume upload |
-| SYN-006 | P1 | In progress | Candidates | Stage filter uses statuses that don't exist |
+| SYN-006 | P1 | Done | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Done | Auth | Sessions end early: 15 min in dev, 24 h in production |
-| SYN-008 | P1 | Open | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
+| SYN-008 | P1 | In progress | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
 | SYN-009 | P1 | Open | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
 | SYN-058 | P1 | Done | Candidates | Resume and JD previews are blank in Safari |
 | SYN-060 | P1 | Done | Security | Production serves no security headers |
+| SYN-070 | P1 | Open | Candidates | Lists show only the first 20 candidates |
 | SYN-010 | P2 | Open | Dashboard | Dashboard header and stat cards are hardcoded |
 | SYN-011 | P2 | Open | Dashboard | Dashboard AI Insights card is fake |
 | SYN-012 | P2 | Open | Dashboard | Dashboard funnel, time-to-hire and today's interviews carry fake labels |
@@ -163,12 +164,13 @@ artifact page, which is no longer updated.
 - **Confirmed on production (2026-11-15, WebKit, real AI):** deploy run 43722446468 green. Uploading one resume to the test job, without reloading: the sidebar count went 2 → 3 when the file was accepted, the dialog row moved through parsing and scoring to "Score: 63%", and the job's tab then listed the new candidate under "2 candidates", matching the API; no further API calls in the 24 seconds after it settled. The early-close and failed-file paths were checked locally only, to avoid leaving failed records in production.
 
 ### SYN-006 · Stage filter uses statuses that don't exist
-**P1** · Candidates · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Candidates · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
 
 - **Problem:** The Candidates page filter offers "Applied" (`applied`) and "Interviewing" (`interviewing`), which the backend never stores. "Applied" showed 0 cards while 14 candidates were `new`.
 - **Where:** `frontend/components/(recruiter)/Candidates.tsx:27-33` vs the status enum in `backend/src/types/api.ts:130` (`new, shortlisted, scheduled, inprogress, feedback, hired, rejected`).
 - **Done when:** filter options come from the real status list and each one returns matching candidates.
-- **Fix (2026-11-15, [PR #9](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/9), not yet merged):** one list of stages for the frontend (`frontend/lib/stages.ts`) feeds the filter, the card badge and the stage pill; the filter now offers New, Shortlisted, Scheduled, In Progress, Feedback, Hired and Rejected. The card badge no longer checks for the non-existent `interviewing`, so Scheduled / In Progress / Feedback get their colour, and it shows the stage's name instead of the raw value. The API (`CANDIDATE_STAGES` in `backend/src/types/api.ts`) accepts only real stages on `GET /api/candidates?status=` and answers 422 otherwise — it used to accept any string and return an empty list, which is why this went unnoticed. Verified locally in Chrome: every stage shows the cards the API returns for it (each job section previews at most 6), "New" shows the candidates "Applied" hid, and `applied` / `interviewing` get 422.
+- **Fix (2026-11-15, [PR #9](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/9), merged 2026-11-15 as `a72718f`):** one list of stages for the frontend (`frontend/lib/stages.ts`) feeds the filter, the card badge and the stage pill; the filter now offers New, Shortlisted, Scheduled, In Progress, Feedback, Hired and Rejected. The card badge no longer checks for the non-existent `interviewing`, so Scheduled / In Progress / Feedback get their colour, and it shows the stage's name instead of the raw value. The API (`CANDIDATE_STAGES` in `backend/src/types/api.ts`) accepts only real stages on `GET /api/candidates?status=` and answers 422 otherwise — it used to accept any string and return an empty list, which is why this went unnoticed. Verified locally in Chrome: every stage shows the cards the API returns for it (each job section previews at most 6), "New" shows the candidates "Applied" hid, and `applied` / `interviewing` get 422.
+- **Confirmed on production (2026-11-15, WebKit):** deploy run 43734797691 green. The filter lists All Stages plus the seven real stages; "New" shows the same three candidates the API returns, the other six stages show none (the API agrees), and `?status=applied` / `?status=interviewing` answer 422 naming the allowed values.
 
 ### SYN-007 · Sessions end early: 15 min in dev, 24 h in production
 **P1** · Auth · Bug · Status: **Done** (2026-11-15) · Found 2026-10-24
@@ -180,13 +182,14 @@ artifact page, which is no longer updated.
 - **Fix (2026-11-15, [PR #7](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/7), merged 2026-11-15 as `96a50fc`):** the route gate has its own cookie, `synthire_session` (the role only, 30 days, renewed on every refresh); login, signup, refresh and logout go through the frontend's own `/api/auth/*` forwarder (`frontend/app/api/auth/[...path]/route.ts`), so the refresh cookie is first-party; the forwarder relays only that cookie and drops the API's access cookie; replays carry the new token; `/login` and `/signup` forward a signed-in visitor, and a `?from=` that leaves the site is refused. Also fixes SYN-064. Verified locally in Chrome (renewal after a 20-second token expired, logout, tampered gate cookie, hostile `?from=`) and against the Cloudflare Pages build. **Confirmed on production (2026-11-15, WebKit):** deploy run 43711463967 green (backend + frontend `success`). After login the only readable cookie was `synthire_session=recruiter`; a renewal through the app's own address answered 200 (it was `401 No refresh token` the same morning); 17 minutes after login, past the access token's expiry, the browser was still on `/dashboard` with a token the app had renewed by itself, `/jobs` loaded its data, and a visit to `/login` was forwarded to `/dashboard`. Playwright's WebKit is Safari's engine, not the Safari app; the cookie is now first-party, which Safari's tracking prevention allows. Everyone signs in once more after this deploy.
 
 ### SYN-008 · Failed uploads show as "Processing... · 0%" and hide the reason
-**P1** · Candidates · Bug · Status: **Open** · Found 2026-10-24
+**P1** · Candidates · Bug · Status: **In progress** · Found 2026-10-24
 
 - **Problem:** A resume that failed processing keeps the placeholder name "Processing..." and shows a 0% score with 0% bars on cards, the pipeline "New" column (5 such cards), the dashboard and the job counts. The API has the reason (for example "No readable text found in the resume — scanned or image-only files are not supported") but no screen shows it; the upload modal row only says "error / Failed". No frontend code reads the `processing_error` field at all.
 - **Where:** card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.
 - **Done when:** failed rows read as "Upload failed" with the reason and no score everywhere they appear.
 - **Source:** production-readiness C8.
 - **Partly done (2026-11-15, with SYN-005):** the upload dialog's row now shows the failure reason. Cards, the pipeline, the dashboard and job counts still show "Processing..." with 0%.
+- **Fix (2026-11-16, [PR #10](https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/10), not merged yet):** a failed upload is no longer treated as a candidate. **Root cause:** an upload's row is created at once under the placeholder name "Processing..."; when processing failed only `processing_status` changed, and no list, count or action looked at it, while every list mapped the missing score to 0. **Backend:** `GET /api/candidates` leaves failed uploads out of `items` and `total` and returns them apart as `failed_uploads` (newest first, at most 50 plus a total, company and job scoped); the job list's `candidate_count`, the dashboard total, hires, the funnel and the activity feed stop counting them (one shared condition, `NOT_A_FAILED_UPLOAD`); changing stage or scheduling an interview answers 409 unless the resume has been processed (`requireProcessed()`), so "Processing..." can no longer be moved to Hired or emailed an invitation. No migration. **Frontend:** `lib/candidate-display.ts` decides the state, name and score of a row for cards, list rows, the pipeline, the dashboard, search and the detail page — a resume in progress reads "Processing resume…" with a dash for the score, no bars, no shortlist/reject and no dragging; a "Failed uploads" strip on the job's candidates page and the all-candidates page shows the reason and upload time with "View file" and "Remove" (confirm first); the detail page of a failed upload says "Upload failed" with the reason and offers no stage or scheduling actions. **Verified locally (Chrome, real AI, 2026-11-16):** the 6 old failed rows left every list and count (21 → 15 candidates, matching the API on the candidates page, sidebar, job counts, pipeline and dashboard); uploading a good and a blank resume with the dialog closed showed two "Processing resume…" cards, then the name while scoring, then the score (72%) and the blank file in the strip with its reason, without a reload; "View file" opened the stored file; "Remove" asked first, removed the row and updated the counts; a removal the API refused left the row in place with the reason in a toast; the API refused a stage change and an interview for the failed row (409). **Not included:** a "try again" button (re-upload covers it) and the original file name (not stored; "View file" identifies it). Removing a failed row that already has an interview also deletes that interview (existing delete behaviour; no new interview can be scheduled on such a row).
 
 ### SYN-009 · Edits to the invitation email are thrown away
 **P1** · Scheduling · Bug · Status: **Open** · Found 2026-10-24
@@ -219,6 +222,14 @@ artifact page, which is no longer updated.
 - **Where:** `frontend/next.config.mjs:7-64`, `frontend/middleware.ts`, `npm run build:cf` / `deploy` in `frontend/package.json`.
 - **Done when:** production page responses carry the full header set from one source shared with local dev, verified with `curl` against production after the deploy.
 - **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3 (fixed with SYN-058) — merged 2026-10-25 as `e09a5e9`. Production `/login` and the `/dashboard` redirect now carry CSP (`frame-ancestors 'self'`, `connect-src` = production API), `X-Frame-Options: SAMEORIGIN`, HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; the production login page in Safari shows no CSP violations and its API calls go through.
+
+### SYN-070 · Lists show only the first 20 candidates
+**P1** · Candidates · Bug · Status: **Open** · Found 2026-11-16
+
+- **Problem:** Every candidate list asks the API for one page and never asks for more. `GET /api/candidates` returns 20 rows unless told otherwise (`limit` default 20, max 200), no screen sends `limit` or `page`, and there is no paging control. A job's 21st candidate (by score) is therefore not on the job's candidates page, the all-candidates page or the pipeline board, and the job page's "N candidates" reads 20. The sidebar count is right, because it uses the API's total. Found by reading the code; local data has no job with more than 20 candidates, so it has not been seen on screen.
+- **Where:** `frontend/hooks/queries/useCandidates.ts` (`useCandidates` passes its params through, none set `limit`), `frontend/components/(recruiter)/Candidates.tsx` (both lists, `totalCands = candidates.length`), `PipelineKanban.tsx`, `backend/src/types/api.ts` (`listCandidatesSchema`).
+- **Done when:** every candidate of a job can be reached from its list and from the pipeline (paging, "load more" or a full fetch), and the counts shown match the API's total.
+- **Source:** found while fixing SYN-008.
 
 ## P2
 

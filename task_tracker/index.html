@@ -273,12 +273,12 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Candidates",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-24",
    "updated": "2026-11-15",
    "problem": "The Candidates page filter offers \"Applied\" (`applied`) and \"Interviewing\" (`interviewing`), which the backend never stores. \"Applied\" showed 0 cards while 14 candidates were `new`.",
-   "where": "`frontend/lib/stages.ts`, `frontend/components/(recruiter)/Candidates.tsx`, `backend/src/types/api.ts`; branch `fix/syn-006-stage-filter` (not yet merged)",
-   "done_when": "filter options come from the real status list and each one returns matching candidates.",
+   "where": "`frontend/lib/stages.ts`, `frontend/components/(recruiter)/Candidates.tsx`, `backend/src/types/api.ts`",
+   "done_when": "Done 2026-11-15: the filter offers the seven real stages, each returns the matching candidates on production, and the API refuses a stage that does not exist.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/9",
    "source": ""
   },
@@ -305,13 +305,13 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Candidates",
    "type": "Bug",
-   "status": "open",
+   "status": "in_progress",
    "found": "2026-10-24",
-   "updated": "2026-11-15",
+   "updated": "2026-11-16",
    "problem": "A resume that failed processing keeps the placeholder name \"Processing...\" and shows a 0% score with 0% bars on cards, the pipeline \"New\" column (5 such cards), the dashboard and the job counts. The API has the reason (for example \"No readable text found in the resume — scanned or image-only files are not supported\") but no screen shows it; the upload modal row only says \"error / Failed\". No frontend code reads the `processing_error` field at all.",
    "where": "card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.",
    "done_when": "failed rows read as \"Upload failed\" with the reason and no score everywhere they appear.",
-   "pr": "",
+   "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/10",
    "source": "production-readiness C8."
   },
   {
@@ -377,6 +377,22 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "done_when": "production page responses carry the full header set from one source shared with local dev, verified with `curl` against production after the deploy.",
    "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/3",
    "source": ""
+  },
+  {
+   "id": "SYN-070",
+   "num": 70,
+   "title": "Lists show only the first 20 candidates",
+   "priority": "P1",
+   "area": "Candidates",
+   "type": "Bug",
+   "status": "open",
+   "found": "2026-11-16",
+   "updated": "2026-11-16",
+   "problem": "Every candidate list asks the API for one page of 20 and never asks for more, and there is no paging control. A job's 21st candidate is not on its candidates page, the all-candidates page or the pipeline board, and the job page's count reads 20. Found in the code; not yet seen on screen.",
+   "where": "`frontend/hooks/queries/useCandidates.ts`, `frontend/components/(recruiter)/Candidates.tsx`, `PipelineKanban.tsx`, `backend/src/types/api.ts` (`listCandidatesSchema`)",
+   "done_when": "Every candidate of a job can be reached from its list and the pipeline, and the counts shown match the API's total.",
+   "pr": "",
+   "source": "Found while fixing SYN-008"
   },
   {
    "id": "SYN-010",
@@ -1292,6 +1308,21 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-16T07:35:00.000Z",
+   "text": "SYN-008 in progress: failed uploads are no longer shown or counted as candidates. They appear in their own strip with the reason, the file and a Remove button; a resume still processing shows no score. Tested locally. New: SYN-070, lists show only the first 20 candidates.",
+   "ids": [
+    "SYN-008",
+    "SYN-070"
+   ]
+  },
+  {
+   "at": "2026-11-15T16:25:00.000Z",
+   "text": "SYN-006 done: PR #9 merged and deployed. On production the stage filter lists the real stages and matches the API; unknown stages are refused.",
+   "ids": [
+    "SYN-006"
+   ]
+  },
   {
    "at": "2026-11-15T14:25:00.000Z",
    "text": "SYN-006 in progress: the stage filter now offers the seven real stages, the card badge uses them too, and the API refuses a stage that does not exist instead of returning nothing. Tested locally.",

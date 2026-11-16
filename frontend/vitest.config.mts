@@ -33,6 +33,7 @@ export default defineConfig({
         'lib/scoring.ts': { statements: 100, branches: 86, functions: 100, lines: 100 },
         'lib/upload-status.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'lib/stages.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'lib/candidate-display.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

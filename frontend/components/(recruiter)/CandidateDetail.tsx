@@ -12,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { apiFetchBlob } from "@/lib/api";
+import { candidateDisplay } from "@/lib/candidate-display";
 import type { ApiJob } from "@/lib/api";
 import { VERDICT_META, VERDICT_ORDER, attributionRows, evaluationCoverage, parseAttribution, skillsUnavailableReason, sortSkillMatches, verdictCounts } from "@/lib/scoring";
 
@@ -75,9 +76,13 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
   if (isLoading) return <div style={{padding:32,color:'var(--muted)'}}>Loading candidate...</div>;
   if (!apiCandidate) return <div style={{padding:32,color:'var(--danger)'}}>Candidate not found</div>;
 
+  // 'processing' and 'failed' rows have no real name, score or stage to act on (SYN-008).
+  const shown = candidateDisplay(apiCandidate);
+
   // Map API fields to the shape the UI expects
   const c = {
     ...apiCandidate,
+    name: shown.name,
     score: apiCandidate.overall_score ?? 0,
     skillsScore: apiCandidate.skills_score ?? 0,
     expScore: apiCandidate.experience_score ?? 0,
@@ -118,12 +123,19 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
           <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div className="h2" style={{ fontSize: 20 }}>{c.name}</div>
-              <StagePill stage={c.stage}/>
-              <Badge variant="ai"><Icon.Sparkles size={10}/>AI-screened</Badge>
+              {shown.state === "ready" && <><StagePill stage={c.stage}/><Badge variant="ai"><Icon.Sparkles size={10}/>AI-screened</Badge></>}
+              {shown.state === "processing" && <Badge variant="neutral">Processing</Badge>}
+              {shown.state === "failed" && <Badge variant="danger">Upload failed</Badge>}
             </div>
-            <div className="small" style={{ color: "var(--muted)" }}>
-              {c.title} · {c.location} · <span className="mono">{c.email}</span>
-            </div>
+            {shown.state === "failed" ? (
+              <div className="small" role="alert" style={{ color: "var(--danger)", overflowWrap: "anywhere" }}>
+                {apiCandidate.processing_error?.trim() || "Processing failed"} — remove it from the job&apos;s candidates page and upload the resume again.
+              </div>
+            ) : (
+              <div className="small" style={{ color: "var(--muted)" }}>
+                {[c.title, c.location].filter(Boolean).join(" · ")}{c.email && <> · <span className="mono">{c.email}</span></>}
+              </div>
+            )}
             {appliedJob && (
               <div className="small" style={{ color: "var(--muted)", marginTop: 2 }}>
                 Applied for: <span style={{ color: "var(--text-2)", fontWeight: 500 }}>{appliedJob.title}</span>
@@ -138,7 +150,7 @@ function CandidateDetail({ candidateId }: { candidateId?: string }) {
             <div className="tiny">Overall</div>
           </div>
           <div className="tsCD-divider"/>
-          {user?.role === 'recruiter' && (
+          {user?.role === 'recruiter' && shown.state === 'ready' && (
             <>
               <Button variant="ghost" icon={<Icon.X size={14}/>} onClick={() => updateStage({ id: actualId, status: 'rejected' }, {
                 onSuccess: () => toast({ message: 'Candidate rejected', variant: 'info' }),

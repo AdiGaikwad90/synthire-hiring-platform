@@ -19,7 +19,7 @@ import {
   createFeedback,
   getFeedback,
 } from '../db/queries/interviews'
-import { getCandidate } from '../db/queries/candidates'
+import { getCandidate, requireProcessed } from '../db/queries/candidates'
 import { getJob } from '../db/queries/jobs'
 import { findUserById, findUserByEmailInCompany } from '../db/queries/users'
 import { queueEmail } from '../db/queries/email'
@@ -86,6 +86,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
   if (!candidate) {
     throw new AppError('Candidate not found', 404)
   }
+  requireProcessed(candidate)
 
   const interview = await createInterview(db, {
     candidate_id: body.candidate_id,

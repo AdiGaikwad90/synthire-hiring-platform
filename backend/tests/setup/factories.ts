@@ -162,7 +162,7 @@ export async function signTestToken(
 
 export const authHeader = (token: string) => ({ Authorization: `Bearer ${token}` })
 
-/** Minimal candidate row — only the NOT NULL columns; everything else defaults. */
+/** Minimal candidate row, already processed (the schema default, 'pending', means "not processed yet"). */
 export async function insertCandidate(
   db: D1Database,
   companyId: string,
@@ -170,7 +170,7 @@ export async function insertCandidate(
   name?: string,
 ): Promise<string> {
   const id = testId('cand')
-  await db.prepare('INSERT INTO candidates (id, job_id, company_id, name) VALUES (?, ?, ?, ?)')
+  await db.prepare("INSERT INTO candidates (id, job_id, company_id, name, processing_status) VALUES (?, ?, ?, ?, 'complete')")
     .bind(id, jobId, companyId, name ?? `Candidate ${id}`)
     .run()
   return id

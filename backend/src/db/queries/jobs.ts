@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid'
 import type { D1Database } from '@cloudflare/workers-types'
 import type { JobRow } from '../../types/db'
 import { AppError } from '../../types/api'
+import { NOT_A_FAILED_UPLOAD } from './candidates'
 import {
   normalizeScoringDimensions,
   DEFAULT_SCORING_DIMENSIONS,
@@ -81,7 +82,7 @@ export async function listJobs(
     .prepare(
       `SELECT j.*, COUNT(c.id) as candidate_count
        FROM jobs j
-       LEFT JOIN candidates c ON c.job_id = j.id
+       LEFT JOIN candidates c ON c.job_id = j.id AND c.${NOT_A_FAILED_UPLOAD}
        WHERE ${where}
        GROUP BY j.id
        ORDER BY j.created_at DESC LIMIT ? OFFSET ?`
