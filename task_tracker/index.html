@@ -311,7 +311,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "problem": "A resume that failed processing keeps the placeholder name \"Processing...\" and shows a 0% score with 0% bars on cards, the pipeline \"New\" column (5 such cards), the dashboard and the job counts. The API has the reason (for example \"No readable text found in the resume — scanned or image-only files are not supported\") but no screen shows it; the upload modal row only says \"error / Failed\". No frontend code reads the `processing_error` field at all.",
    "where": "card mapping in `frontend/components/(recruiter)/Candidates.tsx:186-200` and `:416-428`, `PipelineKanban.tsx`, `Dashboard.tsx`, `ResumeBatchModal.tsx`.",
    "done_when": "failed rows read as \"Upload failed\" with the reason and no score everywhere they appear.",
-   "pr": "",
+   "pr": "https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/10",
    "source": "production-readiness C8."
   },
   {
