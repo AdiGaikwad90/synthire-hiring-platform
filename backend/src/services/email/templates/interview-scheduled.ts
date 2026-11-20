@@ -2,8 +2,28 @@ import type { InterviewScheduledTemplateData } from '../../../types/email'
 import { escapeHtml, safeHref } from '../../../utils/html'
 import { formatInterviewTime } from '../../../utils/dates'
 
+/** What the name column holds when the resume gave no name. */
+const NO_NAME = new Set(['', 'processing...', 'not provided', 'unknown candidate'])
+
+/** Sent when the recruiter wrote no message of their own. The schedule form
+ *  opens on the same wording (`frontend/lib/invitation.ts`). */
+export function standardInvitationMessage(candidateName: string): string {
+  const name = String(candidateName ?? '').trim()
+  const firstName = NO_NAME.has(name.toLowerCase()) ? 'there' : name.split(/\s+/)[0]
+  return `Hi ${firstName},
+
+We look forward to meeting you! The details of your interview are below.
+
+Please join a few minutes early so we can start on time. If you have any questions or need to reschedule, feel free to reach out.`
+}
+
 export function renderInterviewScheduled(data: InterviewScheduledTemplateData): { subject: string; html: string } {
-  const subject = `Interview Confirmed — ${data.companyName}`
+  // The job, as the schedule form's preview shows it; the company is in the body.
+  const subject = `Interview Confirmed — ${data.jobTitle}`
+  // SYN-009: the recruiter's wording is plain text — escaped, line breaks kept.
+  // The facts below it stay server-rendered so they cannot be edited wrong.
+  const message = data.candidateMessage?.trim() || standardInvitationMessage(data.candidateName)
+  const messageHtml = escapeHtml(message).replace(/\r?\n/g, '<br>')
   const unsubscribeUrl = `${safeHref(data.frontendUrl)}/unsubscribe`
 
   const calendarSubject = encodeURIComponent(`Interview with ${data.companyName} — ${data.jobTitle}`)
@@ -24,7 +44,7 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
   </div>
   <div style="padding: 32px;">
     <h2 style="color: #111827; font-size: 22px; margin: 0 0 8px;">Your Interview is Confirmed</h2>
-    <p style="color: #6B7280; font-size: 14px; margin: 0 0 24px;">Hi ${escapeHtml(data.candidateName)}, we look forward to meeting you! Here are the details for your upcoming interview.</p>
+    <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0 0 24px;">${messageHtml}</p>
 
     <div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; margin: 16px 0;">
       <p style="color: #374151; margin: 8px 0;"><strong>Company:</strong> ${escapeHtml(data.companyName)}</p>
@@ -34,13 +54,7 @@ export function renderInterviewScheduled(data: InterviewScheduledTemplateData): 
       ${videoSection}
     </div>
 
-    <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 16px 0;">
-      Please make sure to join a few minutes early so we can get started on time. If you have any questions or need to reschedule, feel free to reach out.
-    </p>
-
     <a href="${calendarHref}" style="display: inline-block; background: #6366F1; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; margin: 16px 0;">Add to Calendar</a>
-
-    <p style="color: #374151; font-size: 14px; margin: 16px 0;">We look forward to speaking with you!</p>
   </div>
   <div style="padding: 16px 32px; background: #F9FAFB; border-radius: 0 0 8px 8px; text-align: center;">
     <p style="color: #6B7280; font-size: 12px; margin: 0;">

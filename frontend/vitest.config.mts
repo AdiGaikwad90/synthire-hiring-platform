@@ -34,6 +34,7 @@ export default defineConfig({
         'lib/upload-status.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'lib/stages.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'lib/candidate-display.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+        'lib/invitation.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
       },
     },
   },

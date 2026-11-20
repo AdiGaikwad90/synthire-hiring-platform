@@ -7,6 +7,8 @@ import { useScheduleInterview } from "@/hooks/queries/useInterviews";
 import { useJob } from "@/hooks/queries/useJobs";
 import { apiErrorMessage } from "@/lib/api";
 import { browserTimeZone, formatInZone, preferredZone, sameZone, timeZoneOptions, wallTimeIn, zonedTimeToUtc } from "@/lib/timezones";
+import { candidateDisplay, UNKNOWN_CANDIDATE } from "@/lib/candidate-display";
+import { INVITATION_MESSAGE_MAX, standardInvitationMessage } from "@/lib/invitation";
 
 interface ScheduleModalProps {
   c?: { name: string; email: string | null; id?: string; job_id?: string };
@@ -25,10 +27,9 @@ export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalP
   const { data: job } = useJob(actualJobId);
   const jobTitle = job?.title ?? '';
 
-  // Resolve display name — skip placeholder values set when LLM can't extract name
-  const displayName = (c?.name && c.name !== 'Unknown Candidate' && c.name !== 'Not Provided')
-    ? c.name
-    : 'the candidate';
+  // A resume that gave no name is stored under a placeholder — never print it.
+  const knownName = candidateDisplay(c).name;
+  const displayName = knownName === UNKNOWN_CANDIDATE ? 'the candidate' : knownName;
 
   // Default to the viewer's own zone — it used to be hard-coded to Pacific.
   // preferredZone: Chrome reports India as "Asia/Calcutta"; match the listed "Asia/Kolkata".
@@ -53,7 +54,9 @@ export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalP
   const [notes, setNotes] = React.useState("");
   const [showPreview, setShowPreview] = React.useState(false);
   const [candidateEmail, setCandidateEmail] = React.useState(c?.email ?? '');
-  const [emailBody, setEmailBody] = React.useState('');
+  // SYN-009: wording only, and what this box holds is what is sent. It used to
+  // be a whole email rebuilt on every field change (wiping edits) and never sent.
+  const [message, setMessage] = React.useState(() => standardInvitationMessage(c?.name));
   const [previewTab, setPreviewTab] = React.useState<'candidate' | 'interviewer'>('candidate');
 
   const selRound = interviewTypes.find(r => r.id === round);
@@ -78,38 +81,6 @@ export function ScheduleModal({ c, candidateId, jobId, onClose }: ScheduleModalP
   );
   const isPast = !instant || instant.getTime() <= Date.now();
   const zoneOptions = React.useMemo(() => timeZoneOptions(viewerZone), [viewerZone]);
-
-  const firstName = displayName === 'the candidate' ? 'there' : displayName.split(' ')[0];
-
-  React.useEffect(() => {
-    // Same format and zone as the email the backend sends (formatInterviewTime).
-    const dateStr = instant ? formatInZone(instant, tz) : '—';
-    const duration = selRound?.duration_minutes ?? 60;
-    const roundName = selRound?.name ?? 'next round';
-    const formatLine = `Video call${link ? ' — ' + link : ''}`;
-    const notesSection = notes ? `Notes:\n${notes}\n\n` : '';
-
-    setEmailBody(
-`Hi ${firstName},
-
-We're excited to invite you to interview for the ${jobTitle || roundName} position.`
-+ (jobTitle && roundName !== 'next round' ? `\nInterview round: ${roundName}` : '') +
-`
-
-Interview Details:
-• Date & Time: ${dateStr}
-• Duration: ${duration} minutes
-• Format: ${formatLine}
-
-${notesSection}Please join a few minutes early to ensure everything is set up. If you have any questions or need to reschedule, reply to this email.
-
-We look forward to speaking with you!
-
-Best regards,
-The Hiring Team`
-    );
-  }, [instant, tz, selRound, link, notes, firstName, jobTitle]);
-
 
   return (
     <Modal
@@ -143,7 +114,8 @@ The Hiring Team`
                 duration_minutes: selRound?.duration_minutes ?? 60,
                 video_link: link || undefined,
                 meeting_notes: notes || undefined,
-                candidate_email_override: candidateEmail || undefined,
+                candidate_email_override: candidateEmail.trim() || undefined,
+                candidate_message: message.trim() || undefined,
               }, {
                 onSuccess: () => {
                   toast({ message: `Interview scheduled with ${displayName}.` });
@@ -335,16 +307,48 @@ The Hiring Team`
                     value={candidateEmail}
                     onChange={(e) => setCandidateEmail(e.target.value)}
                     placeholder="candidate@email.com"
+                    aria-label="Candidate email"
                   />
                 </div>
+                {/* An empty box does not mean "no email": the API falls back to the address on file. */}
+                {!candidateEmail.trim() && (
+                  <div className="small" role="status" style={{ color: "var(--warning)", marginBottom: 8 }}>
+                    {c?.email
+                      ? `Left empty — the invitation goes to ${c.email}, the address from the resume.`
+                      : 'No email address — the candidate will not be emailed.'}
+                  </div>
+                )}
                 <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>
-                  <b style={{ color: "var(--text)" }}>Subject:</b> Interview Confirmed{jobTitle ? ` — ${jobTitle}` : ''}
+                  <b style={{ color: "var(--text)" }}>Subject:</b> Interview Confirmed — {jobTitle || '…'}
                 </div>
                 <Textarea
-                  value={emailBody}
-                  onChange={(e) => setEmailBody(e.target.value)}
-                  rows={10}
+                  label="Message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={8}
+                  maxLength={INVITATION_MESSAGE_MAX}
+                  hint="Leave empty to send the standard message."
                 />
+                <div className="small" style={{ color: "var(--muted)", margin: "12px 0 6px" }}>
+                  Added below your message:
+                </div>
+                <dl className="small" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", margin: 0, color: "var(--text-2)" }}>
+                  <dt style={{ color: "var(--muted)" }}>Role</dt>
+                  <dd style={{ margin: 0 }}>{jobTitle || '—'}</dd>
+                  <dt style={{ color: "var(--muted)" }}>Date &amp; time</dt>
+                  <dd style={{ margin: 0 }}>{instant ? formatInZone(instant, tz) : '—'}</dd>
+                  <dt style={{ color: "var(--muted)" }}>Duration</dt>
+                  <dd style={{ margin: 0 }}>{selRound?.duration_minutes ?? 60} minutes</dd>
+                  {link.trim() && (
+                    <>
+                      <dt style={{ color: "var(--muted)" }}>Video link</dt>
+                      <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{link.trim()}</dd>
+                    </>
+                  )}
+                </dl>
+                <div className="small" style={{ color: "var(--muted)", marginTop: 12 }}>
+                  Your company name is added too. The reminder sent a day before uses standard wording.
+                </div>
               </>
             )}
 
@@ -357,7 +361,7 @@ The Hiring Team`
                   </span>
                 </div>
                 <div className="small" style={{ color: "var(--muted)", marginBottom: 12 }}>
-                  <b style={{ color: "var(--text)" }}>Subject:</b> Interview Assignment{jobTitle ? ` — ${jobTitle}` : ''}
+                  <b style={{ color: "var(--text)" }}>Subject:</b> Interview Scheduled: {displayName} for {jobTitle || '…'}
                 </div>
                 <div className="small" style={{ color: "var(--muted)", lineHeight: 1.6 }}>
                   They will receive a magic link to access the candidate’s profile and submit feedback after the interview.

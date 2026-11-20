@@ -172,6 +172,7 @@ router.post('/', recruiterOnly, zv('json', createInterviewSchema), async (c) => 
             videoLink: videoLink ?? undefined,
             interviewId: interview.id,
             frontendUrl,
+            candidateMessage: body.candidate_message,
           },
         })
       }
