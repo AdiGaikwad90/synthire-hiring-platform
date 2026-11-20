@@ -201,6 +201,7 @@ artifact page, which is no longer updated.
 - **Done when:** the edited body is what the candidate receives, or the preview is read-only.
 - **Fix (2026-11-20):** the recruiter edits the message only (up to 2000 characters), sent as `candidate_message` and stored with the queued email; the server prints it escaped, line breaks kept, above the details it always renders itself (company, role, time, duration, link), which the preview shows read-only. Blank or absent gives the standard message. The subject is now `Interview Confirmed — <job title>`, as the preview shows. Interviewer notes are no longer in the candidate preview and are pinned out of candidate emails by a test.
 - **Tested:** 11 new integration tests in `interview-scheduling.test.ts` (9 failed before the fix) and 6 unit tests for `lib/invitation.ts`; local Chrome pass with a real send through Brevo — the edited message, changed time and link in the queued email matched the preview; 2001 characters and an invalid address were refused with nothing written.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/11 — open, not merged yet.
 - **Limits:** links in the message are plain text; the sent message is not kept on the interview; "Save template" still does nothing (SYN-024); the reminder is not editable.
 
 ### SYN-043 · Interviewers can change recruiter data
