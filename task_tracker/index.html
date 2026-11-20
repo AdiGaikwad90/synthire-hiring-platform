@@ -321,7 +321,7 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Scheduling",
    "type": "Bug",
-   "status": "in_progress",
+   "status": "done",
    "found": "2026-10-24",
    "updated": "2026-11-20",
    "problem": "The schedule form's email preview is editable, but the edited text is never sent; the backend renders its own template. The preview also showed a different subject and the interviewer's notes, and lost edits when a field changed.",
@@ -1324,6 +1324,13 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-20T06:50:00.000Z",
+   "text": "SYN-009 done: PR #11 merged and deployed. On production the recruiter edits the invitation message and the candidate receives exactly that text; role, time and link are added by the server.",
+   "ids": [
+    "SYN-009"
+   ]
+  },
   {
    "at": "2026-11-20T06:40:00.000Z",
    "text": "SYN-009 in progress: the recruiter now edits the invitation message only and that text is what the candidate receives; time, role and link are added by the server and shown read-only. Tested locally with a real send. New: SYN-071, notes for the interviewer are saved but never shown.",

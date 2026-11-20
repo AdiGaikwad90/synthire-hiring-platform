@@ -52,7 +52,7 @@ artifact page, which is no longer updated.
 | SYN-006 | P1 | Done | Candidates | Stage filter uses statuses that don't exist |
 | SYN-007 | P1 | Done | Auth | Sessions end early: 15 min in dev, 24 h in production |
 | SYN-008 | P1 | Done | Candidates | Failed uploads show as "Processing... · 0%" and hide the reason |
-| SYN-009 | P1 | In progress | Scheduling | Edits to the invitation email are thrown away |
+| SYN-009 | P1 | Done | Scheduling | Edits to the invitation email are thrown away |
 | SYN-043 | P1 | Done | Security | Interviewers can change recruiter data |
 | SYN-058 | P1 | Done | Candidates | Resume and JD previews are blank in Safari |
 | SYN-060 | P1 | Done | Security | Production serves no security headers |
@@ -194,14 +194,14 @@ artifact page, which is no longer updated.
 - **Confirmed on production (2026-11-16, WebKit):** deploy run green (backend + frontend `success`). The candidates page, sidebar, job counts, dashboard numbers, funnel, activity feed and pipeline all matched the API (3 candidates, no failures). A blank PDF uploaded to the test job failed at once and appeared in the "Failed uploads" strip with its reason while every count stayed the same; "View file" opened it on a detail page reading "Upload failed"; the API answered 409 to a stage change and to an interview for it; "Remove" asked first and removed it (the row then answered 404). Production data is as it was before the check. The in-progress card ("Processing resume…") was exercised locally only, not on production.
 
 ### SYN-009 · Edits to the invitation email are thrown away
-**P1** · Scheduling · Bug · Status: **In progress** · Found 2026-10-24
+**P1** · Scheduling · Bug · Status: **Done** · Found 2026-10-24
 
 - **Problem:** The schedule modal's email preview is editable, but the edited text is never sent; the backend renders its own template. The preview was also wrong in three more ways: its subject named the job while the real one named the company, it showed the notes for the interviewer inside the candidate's email, and changing any field rebuilt the text and wiped the recruiter's edits.
 - **Where:** `frontend/components/(recruiter)/ScheduleModal.tsx` (`emailBody`, never in the request), `backend/src/services/email/templates/interview-scheduled.ts`.
 - **Done when:** the edited body is what the candidate receives, or the preview is read-only.
 - **Fix (2026-11-20):** the recruiter edits the message only (up to 2000 characters), sent as `candidate_message` and stored with the queued email; the server prints it escaped, line breaks kept, above the details it always renders itself (company, role, time, duration, link), which the preview shows read-only. Blank or absent gives the standard message. The subject is now `Interview Confirmed — <job title>`, as the preview shows. Interviewer notes are no longer in the candidate preview and are pinned out of candidate emails by a test.
 - **Tested:** 11 new integration tests in `interview-scheduling.test.ts` (9 failed before the fix) and 6 unit tests for `lib/invitation.ts`; local Chrome pass with a real send through Brevo — the edited message, changed time and link in the queued email matched the preview; 2001 characters and an invalid address were refused with nothing written.
-- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/11 — open, not merged yet.
+- **PR:** https://github.com/AdiGaikwad90/synthire-hiring-platform/pull/11 — merged 2026-11-20 as `4d63e6f`, deployed. On production (WebKit) the dialog shows the editable message with the read-only details; an edited message, with the date changed afterwards, was sent through Brevo exactly as shown, under the subject `Interview Confirmed — <job title>`; the reminder kept its standard wording; a 2001-character message was refused (422) and no interview was created.
 - **Limits:** links in the message are plain text; the sent message is not kept on the interview; "Save template" still does nothing (SYN-024); the reminder is not editable.
 
 ### SYN-043 · Interviewers can change recruiter data
