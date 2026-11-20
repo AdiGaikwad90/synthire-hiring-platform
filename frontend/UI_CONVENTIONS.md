@@ -87,6 +87,7 @@ screen readers**. If you are typing `tsIconBtn`, you want `IconButton`.
     ├── scoring.ts            # skill-verdict + score-breakdown view models (pure, tested)
     ├── stages.ts             # the candidate stages, their names, filter options and badge tone (pure, tested)
     ├── candidate-display.ts  # a candidate row's state, display name and score — null until scored (pure, tested)
+    ├── invitation.ts         # the schedule form's default message to the candidate + its length limit (pure, tested)
     ├── upload-status.ts      # resume upload-row state transitions (pure, tested)
     ├── security-headers.ts   # CSP + framing/HSTS headers, applied by middleware.ts (pure, tested)
     ├── timezones.ts          # wall time in a chosen zone ↔ instant, zone picker options (pure, tested)
@@ -183,6 +184,15 @@ an instant with `new Date(y, m, d, h, mi)` — that reads the numbers in the
 2 PM IST (SYN-002). Use `zonedTimeToUtc(wallTime, zone)`, and compare zones with
 `sameZone()` (browsers report aliases: Chrome says `Asia/Calcutta` for
 `Asia/Kolkata`).
+
+**A preview of an email shows only what will be sent.** In the schedule form the
+recruiter edits one thing, the message (`standardInvitationMessage()` and
+`INVITATION_MESSAGE_MAX` from `@/lib/invitation`), and it is sent as
+`candidate_message`. Role, time, duration and link are shown read-only because
+the server adds them. The form used to build a whole email locally — with a
+different subject and with the interviewer's notes in it — that was never sent,
+and rebuilt it on every field change, wiping the recruiter's edits (SYN-009).
+Do not re-create server-rendered text in a component; show its inputs.
 
 **A candidate's name and score go through `candidateDisplay()`** from
 `@/lib/candidate-display`. Never print `c.name` or `c.overall_score ?? 0` from

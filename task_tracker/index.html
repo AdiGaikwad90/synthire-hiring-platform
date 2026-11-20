@@ -321,11 +321,11 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "priority": "P1",
    "area": "Scheduling",
    "type": "Bug",
-   "status": "open",
+   "status": "in_progress",
    "found": "2026-10-24",
-   "updated": "2026-10-24",
-   "problem": "The schedule modal's email preview is editable, but the edited text is never sent; the backend renders its own template.",
-   "where": "`frontend/components/(recruiter)/ScheduleModal.tsx:44` and `:305` (`emailBody`), payload at `:102-112`.",
+   "updated": "2026-11-20",
+   "problem": "The schedule form's email preview is editable, but the edited text is never sent; the backend renders its own template. The preview also showed a different subject and the interviewer's notes, and lost edits when a field changed.",
+   "where": "`frontend/components/(recruiter)/ScheduleModal.tsx`, `backend/src/services/email/templates/interview-scheduled.ts`",
    "done_when": "the edited body is what the candidate receives, or the preview is read-only.",
    "pr": "",
    "source": ""
@@ -729,6 +729,22 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
    "done_when": "queued emails carry their company through to `email_logs`, a recruiter can see failed and skipped emails (with the reason) somewhere in the app, and a run of failures is surfaced to the operator (ties in with the error tracker gap).",
    "pr": "",
    "source": "split out of SYN-004's original \"done when\"."
+  },
+  {
+   "id": "SYN-071",
+   "num": 71,
+   "title": "Notes for the interviewer are saved but never shown",
+   "priority": "P2",
+   "area": "Scheduling",
+   "type": "Bug",
+   "status": "open",
+   "found": "2026-11-20",
+   "updated": "2026-11-20",
+   "problem": "The \"Notes for interviewer\" text is saved on the interview but nothing shows it: not the interviewer's email and not the interview page.",
+   "where": "`frontend/components/(recruiter)/ScheduleModal.tsx`, `backend/src/services/email/templates/magic-link.ts`, `frontend/components/(interviewer)/InterviewConduct.tsx`",
+   "done_when": "The assigned interviewer sees the notes on the interview page; the candidate never does.",
+   "pr": "",
+   "source": "Found while fixing SYN-009"
   },
   {
    "id": "SYN-024",
@@ -1308,6 +1324,14 @@ aside { position: sticky; top: 16px; display: grid; gap: 16px; }
   }
  ],
  "changes": [
+  {
+   "at": "2026-11-20T06:40:00.000Z",
+   "text": "SYN-009 in progress: the recruiter now edits the invitation message only and that text is what the candidate receives; time, role and link are added by the server and shown read-only. Tested locally with a real send. New: SYN-071, notes for the interviewer are saved but never shown.",
+   "ids": [
+    "SYN-009",
+    "SYN-071"
+   ]
+  },
   {
    "at": "2026-11-16T08:25:00.000Z",
    "text": "SYN-008 done: PR #10 merged and deployed. On production a failed upload shows in its own strip with the reason, is not counted as a candidate, cannot change stage or get an interview, and can be removed.",

@@ -131,3 +131,118 @@ describe('POST /api/interviews — boundaries (SYN-027: no past times)', () => {
     expect((await schedule({ scheduled_at: new Date(now + 60_000).toISOString(), timezone: 'UTC' })).status).toBe(201)
   })
 })
+
+/**
+ * SYN-009 — the recruiter's edited invitation is what the candidate receives.
+ *
+ * Before: the schedule form let the recruiter edit the whole email, but the
+ * text never left the browser — the API had no field for it and the template
+ * always rendered its own wording. Now the wording travels as
+ * `candidate_message` inside the queued email's template data (so a retry
+ * sends the same text), while the facts — role, time, duration, link — are
+ * still rendered by the server and cannot be edited into something false.
+ */
+const scheduledEmail = async () => {
+  const [row] = (await queuedFor(candidateEmail)).filter((e) => e.email_type === 'interview_scheduled')
+  const data = JSON.parse(row.template_data) as TemplateData & { candidateMessage?: string }
+  return { data, ...renderTemplate('interview_scheduled', data) }
+}
+
+describe('POST /api/interviews — invitation message (SYN-009), happy path', () => {
+  it('sends the recruiter\'s message, line breaks kept, above the server-rendered details', async () => {
+    const res = await schedule({
+      scheduled_at: FUTURE, timezone: 'America/Los_Angeles',
+      candidate_message: 'Hello Dana,\n\nBring your portfolio.\nSee you soon — Priya',
+    })
+    expect(res.status).toBe(201)
+    const { data, html } = await scheduledEmail()
+    expect(data.candidateMessage).toBe('Hello Dana,\n\nBring your portfolio.\nSee you soon — Priya')
+    expect(html).toContain('Hello Dana,<br><br>Bring your portfolio.<br>See you soon — Priya')
+    expect(html).not.toContain('We look forward to meeting you')
+    expect(html.indexOf('Bring your portfolio')).toBeLessThan(html.indexOf('Wednesday, June 12, 2030 at 2:00 PM PDT'))
+  })
+
+  it('names the job in the subject, as the schedule form shows it', async () => {
+    await schedule({ scheduled_at: FUTURE })
+    expect((await scheduledEmail()).subject).toBe('Interview Confirmed — Data Engineer')
+  })
+})
+
+describe('POST /api/interviews — invitation message, positive variants and empty', () => {
+  it('sends the standard message when none is given (older clients, emails queued before the fix)', async () => {
+    await schedule({ scheduled_at: FUTURE })
+    const { data, html } = await scheduledEmail()
+    expect(data.candidateMessage).toBeUndefined()
+    // First name, as the schedule form's own default reads.
+    expect(html).toContain('Hi Dana,<br><br>We look forward to meeting you!')
+  })
+
+  it('greets with "Hi there" when the resume gave no name', async () => {
+    await schedule({ scheduled_at: FUTURE })
+    const { data } = await scheduledEmail()
+    for (const name of ['Unknown Candidate', 'not provided', 'Processing...', '  ']) {
+      expect(renderTemplate('interview_scheduled', { ...data, candidateName: name }).html, `"${name}" is not a name`)
+        .toContain('Hi there,<br><br>')
+    }
+  })
+
+  it('treats a blank message as none', async () => {
+    const res = await schedule({ scheduled_at: FUTURE, candidate_message: ' \n\t ' })
+    expect(res.status).toBe(201)
+    const { data, html } = await scheduledEmail()
+    expect(data.candidateMessage).toBeUndefined()
+    expect(html).toContain('We look forward to meeting you!')
+  })
+
+  it('keeps the 24-hour reminder standard — the message belongs to the invitation only', async () => {
+    await schedule({ scheduled_at: FUTURE, candidate_message: 'Bring your portfolio.' })
+    const [reminder] = (await queuedFor(candidateEmail)).filter((e) => e.email_type === 'interview_reminder')
+    expect(reminder.template_data).not.toContain('portfolio')
+  })
+})
+
+describe('POST /api/interviews — invitation message, boundaries and invalid input', () => {
+  it('accepts exactly 2000 characters', async () => {
+    const res = await schedule({ scheduled_at: FUTURE, candidate_message: 'a'.repeat(2000) })
+    expect(res.status).toBe(201)
+    expect((await scheduledEmail()).data.candidateMessage).toHaveLength(2000)
+  })
+
+  it('422s 2001 characters with Zod detail and creates no interview or email', async () => {
+    const res = await schedule({ scheduled_at: FUTURE, candidate_message: 'a'.repeat(2001) })
+    expect(res.status).toBe(422)
+    const body = (await res.json()) as { details: { fieldErrors: Record<string, string[]> } }
+    expect(body.details.fieldErrors.candidate_message?.[0]).toMatch(/2000 characters/)
+    expect(await interviewCount()).toBe(0)
+    expect(await queuedFor(candidateEmail)).toEqual([])
+  })
+
+  it('422s a message that is not text and writes nothing', async () => {
+    const res = await schedule({ scheduled_at: FUTURE, candidate_message: { html: '<b>hi</b>' } })
+    expect(res.status).toBe(422)
+    expect(await interviewCount()).toBe(0)
+  })
+})
+
+describe('POST /api/interviews — invitation message, hostile input', () => {
+  it('sends markup as text — never as HTML the candidate\'s mail client would run or follow', async () => {
+    await schedule({
+      scheduled_at: FUTURE,
+      candidate_message: '<script>alert(1)</script><a href="https://evil.example">Click</a><img src=x onerror=alert(2)>',
+    })
+    const { html } = await scheduledEmail()
+    for (const raw of ['<script>', '<a href="https://evil.example"', '<img src=x']) {
+      expect(html, `"${raw}" must be escaped`).not.toContain(raw)
+    }
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;&#x2F;script&gt;')
+  })
+
+  it('never puts the notes for the interviewer in the candidate\'s emails', async () => {
+    await schedule({ scheduled_at: FUTURE, meeting_notes: 'Probe the gap in 2021' })
+    const emails = await queuedFor(candidateEmail)
+    expect(emails).toHaveLength(2)
+    for (const e of emails) {
+      expect(renderTemplate(e.email_type, JSON.parse(e.template_data)).html, e.email_type).not.toContain('Probe the gap')
+    }
+  })
+})

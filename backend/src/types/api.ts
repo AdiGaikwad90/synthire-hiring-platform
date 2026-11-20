@@ -150,6 +150,9 @@ export const listCandidatesSchema = z.object({
 /** Same limit the schedule form shows (0/500). */
 export const MEETING_NOTES_MAX = 500
 
+/** Same limit the schedule form shows for the invitation message (0/2000). */
+export const CANDIDATE_MESSAGE_MAX = 2000
+
 /** The interview statuses the product writes and the UI understands. */
 export const INTERVIEW_STATUSES = ['scheduled', 'completed'] as const
 
@@ -181,6 +184,11 @@ export const createInterviewSchema = z.object({
   }).pipe(z.string().url()).optional(),
   meeting_notes: z.string().max(MEETING_NOTES_MAX).optional(),
   candidate_email_override: z.string().email().optional(),
+  // SYN-009: the recruiter's wording for the candidate's invitation. Plain
+  // text; blank counts as "use the standard message".
+  candidate_message: z.string().max(CANDIDATE_MESSAGE_MAX, {
+    message: `The message to the candidate must be ${CANDIDATE_MESSAGE_MAX} characters or fewer`,
+  }).transform((v) => v.trim() || undefined).optional(),
 })
 
 export const submitFeedbackSchema = z.object({

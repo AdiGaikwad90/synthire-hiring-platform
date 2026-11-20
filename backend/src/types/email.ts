@@ -45,6 +45,8 @@ export interface InterviewScheduledTemplateData {
   videoLink?: string
   interviewId: string
   frontendUrl: string
+  /** The recruiter's own wording (plain text). Absent → the standard message. */
+  candidateMessage?: string
 }
 
 export interface FeedbackReminderTemplateData {
